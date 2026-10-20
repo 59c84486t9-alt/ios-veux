@@ -2,6 +2,12 @@
 
 ## Agent handoff / active work (2026-10-15, latest)
 
+### >>> UPDATE 2026-10-20 (Android SurfaceFlinger display dump) <<<
+
+- User-provided Android `dumpsys SurfaceFlinger` shows panel 1080x2400 at 120 Hz. HWC/SDM reports active planes and framebuffer/client-target buffers as `RGBA_8888_UBWC`; imported 1080x2400 buffers show 4352-byte stride (1088 pixels x 4 bytes). This confirms Android currently uses UBWC-compressed buffers for display composition, not a simple linear buffer that XNU may safely write with CPU stores.
+- Android has no `/sys/kernel/debug/dri` exposed, and `su` is unavailable, so no DRM atomic plane state or framebuffer physical address was obtained. SurfaceFlinger HWC/SDM output describes Android's current rendering state; it does not prove the bootloader splash buffer at `0x85200000` is the active scanout. The dump's `fourcc/mod: 875708993/0` conflicts with its `compressed: true` and UBWC labels; do not treat that field alone as a verified linear channel order.
+- Next: retain display writes disabled. Need an early SDE handoff/active-register trace or a debug-enabled kernel that exposes the real active plane and address; Android `dumpsys` alone cannot establish physical base or the bootloader's splash layout.
+
 ### >>> UPDATE 2026-10-20 (VEUX live recovery + hardware source) <<<
 
 - Read-only ADB recovery collection: live DT root identifies `Qualcomm Technologies, Inc. VEUX QRD NOPMI`, board ID `0x1000b, 0`, matching selected `dtb_1.dtb`. No reboot, flash, or partition write.
