@@ -2,6 +2,14 @@
 
 ## Agent handoff / active work (2026-10-15, latest)
 
+### >>> UPDATE 2026-10-20 (VEUX live recovery + hardware source) <<<
+
+- Read-only ADB recovery collection: live DT root identifies `Qualcomm Technologies, Inc. VEUX QRD NOPMI`, board ID `0x1000b, 0`, matching selected `dtb_1.dtb`. No reboot, flash, or partition write.
+- Live display DT reserves splash memory at physical `0x85200000`, size 12 MiB, plus 1 MiB DFPS data. DRM reports 1080x2400, pitch 4352, 32 bpp/depth 24. The recovery cannot expose DRM plane FourCC (`GETFB2` EINVAL; debugfs disabled/tools absent). Panel DSI `rgb_swap_rgb` is not framebuffer memory channel order. Reference SDE source maps the reserved splash address one-to-one for handoff, but we have not proven active scanout uses it or learned its format. **Keep framebuffer writes disabled.**
+- Collected hardware map: UFS `0x04804000`, ICE `0x04808000`, ICE-HWKM `0x04810000`, PHY `0x04807000`, 1 lane/SPI356; Goodix GT9896 at I2C `0x5d` / QUP SE8 with IRQ/reset/power GPIOs 22/21/51/44; DWC3 wrapper `0x04e00000` / SPI255, QUSB2 PHY `0x0162b000`, QMP combo PHY `0x01630000`; PM6125/PMK8350/PMR735A platform bindings. See `VEUX-HW-RESEARCH.md` for details and limitations.
+- Read-only source checkout outside repo: `../research/kernel_xiaomi_sm6375`, community ref commit `f4b8a13a43a130a9ab83cc985ce4d4421291ae6`. DTS matches the live board, but is **not proven** to match installed Paimon recovery kernel build `1438fcba`; exact framebuffer FourCC and active scanout remain unknown. Raw DT archive is outside git and contains device identifiers.
+- Next: keep display writes disabled; obtain active plane/scanout details with DRM debug or a purpose-built diagnostic, locate exact recovery source if available, then prioritize headless boot/CPU/GIC/timer/interrupt/UFS bring-up. No XNU driver port or boot attempt was made in this collection step.
+
 ### >>> UPDATE 2026-10-20 (VEUX XNU build) <<<
 
 - First `veux-xnu-build` Actions run used macOS 14 / Xcode 15.0.1 and successfully built its staged libraries, then failed before compiling XNU: `MakeInc.kernel:22: Unsupported CURRENT_MACHINE_CONFIG VEUX`.
