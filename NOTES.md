@@ -6,8 +6,8 @@
 
 - First `veux-xnu-build` Actions run used macOS 14 / Xcode 15.0.1 and successfully built its staged libraries, then failed before compiling XNU: `MakeInc.kernel:22: Unsupported CURRENT_MACHINE_CONFIG VEUX`.
 - Root cause: `darwin-xnu-build` skipped `0082-veux-machine-config.patch` because its `pexpert/pexpert/arm64/Makefile` hunk did not match. The patch runner warns and continues on unapplied patches, so the failure surfaced later as an unsupported config.
-- Fixed the patch hunk in the local `ios-veux-build` checkout. Replaying the patch queue against xnu-8796.141.3 now passes `git apply --check` for 0082 and adds `VEUX` to `SUPPORTED_ARM64_MACHINE_CONFIGS` and the VEUX machine flags. This is patch-application validation only; the kernel has not yet been compiled, booted, or flashed.
-- **Next:** commit/push the corrected 0082 patch to branch `veux-xnu-build`, rerun the `xnu` workflow with `macos_version=13.5`, `kernel_config=DEVELOPMENT`, `machine_config=VEUX`, then inspect the next build result.
+- Fixed the patch hunk in local commit `9bb485f` and pushed it to `59c84486t9-alt/ios-veux:veux-xnu-build`. Replaying the patch queue against xnu-8796.141.3 passes `git apply --check` for 0082 and adds `VEUX` to `SUPPORTED_ARM64_MACHINE_CONFIGS` and the VEUX machine flags. This is patch-application validation only; the kernel has not yet been compiled, booted, or flashed.
+- **Next:** rerun the `xnu` workflow with `macos_version=13.5`, `kernel_config=DEVELOPMENT`, `machine_config=VEUX`, then inspect the next build result.
 
 ### >>> UPDATE 2026-10-18 (read first, then the 10-17 handoff below) <<<
 
