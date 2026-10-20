@@ -7,7 +7,9 @@
 - First `veux-xnu-build` Actions run used macOS 14 / Xcode 15.0.1 and successfully built its staged libraries, then failed before compiling XNU: `MakeInc.kernel:22: Unsupported CURRENT_MACHINE_CONFIG VEUX`.
 - Root cause: `darwin-xnu-build` skipped `0082-veux-machine-config.patch` because its `pexpert/pexpert/arm64/Makefile` hunk did not match. The patch runner warns and continues on unapplied patches, so the failure surfaced later as an unsupported config.
 - Fixed the patch hunk in local commit `9bb485f` and pushed it to `59c84486t9-alt/ios-veux:veux-xnu-build`. Replaying the patch queue against xnu-8796.141.3 passes `git apply --check` for 0082 and adds `VEUX` to `SUPPORTED_ARM64_MACHINE_CONFIGS` and the VEUX machine flags. This is patch-application validation only; the kernel has not yet been compiled, booted, or flashed.
-- **Next:** rerun the `xnu` workflow with `macos_version=13.5`, `kernel_config=DEVELOPMENT`, `machine_config=VEUX`, then inspect the next build result.
+- Second Actions run `39509961630` applied the VEUX config and entered XNU compilation, then failed: `osfmk/arm64/proc_reg.h` had no VEUX cache-line case (`processor not supported`), and `pexpert/arm/pe_fiq.c` found GICv3 register macros missing from VEUX.h. The uploaded buildtree confirms the VEUX config patch was applied.
+- Added a VEUX `proc_reg.h` cache-line case and the GICv3 register constants used by XNU's generic FIQ code to 0082. Replaying the patch queue against xnu-8796.141.3 applies 0082. This validates patch application only; the VEUX GIC interrupt group/timer routing remains unvalidated, and no kernel has been booted or flashed.
+- **Next:** commit/push this compile-profile update to `veux-xnu-build`, rerun the `xnu` workflow with `macos_version=13.5`, `kernel_config=DEVELOPMENT`, `machine_config=VEUX`, and inspect the next compiler result.
 
 ### >>> UPDATE 2026-10-18 (read first, then the 10-17 handoff below) <<<
 
