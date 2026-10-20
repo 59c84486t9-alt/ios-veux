@@ -2,6 +2,12 @@
 
 ## Agent handoff / active work (2026-10-15, latest)
 
+### >>> UPDATE 2026-10-20 (VEUX ROM/kernel debugfs research) <<<
+
+- Research report: `VEUX-DISPLAY-DEBUG-OPTIONS.md`. Best device-specific source candidate is Nebula Kernel r07 (VEUX/PEUX, 5.4.300, Android 11+, claims AOSP/MIUI/HyperOS compatibility), but the published VEUX QGKI defconfig has DRM and IKCONFIG_PROC without `CONFIG_DEBUG_FS`; no ready-made debug-enabled candidate was verified.
+- Current Paimon 5.4.292 kernel is confirmed debugfs-off on slot A; its build repo is archived and no source revision is verified against build hash `1438fcba`. Evolution-X VEUX device tree sets `PRODUCT_SET_DEBUGFS_RESTRICTIONS := true`; switching ROMs is not a reliable fix.
+- Next safe route is source/config matching then a temporary `fastboot boot` debug image with `CONFIG_DEBUG_FS=y`; no ROM or partition flash needed. This may show Android composition but may not expose early bootloader splash scanout. Keep framebuffer writes disabled.
+
 ### >>> UPDATE 2026-10-20 (Magisk A-slot root / debugfs check) <<<
 
 - Confirmed Android initially ran from slot B (`ro.boot.slot_suffix=_b`) and had no `su` command. Rebooted to fastboot, set active slot A (`fastboot set_active a`), rebooted; verified slot A and Magisk root (`uid=0(root)`). No image was flashed or erased.
