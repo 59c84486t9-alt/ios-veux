@@ -2,6 +2,12 @@
 
 ## Agent handoff / active work (2026-10-15, latest)
 
+### >>> UPDATE 2026-10-20 (Magisk A-slot root / debugfs check) <<<
+
+- Confirmed Android initially ran from slot B (`ro.boot.slot_suffix=_b`) and had no `su` command. Rebooted to fastboot, set active slot A (`fastboot set_active a`), rebooted; verified slot A and Magisk root (`uid=0(root)`). No image was flashed or erased.
+- In rooted slot A, `/proc/filesystems` does not list `debugfs`; `/proc/config.gz` has `CONFIG_DRM=y` but no `CONFIG_DEBUG_FS`. `/sys/kernel/debug` is absent. Therefore this Android kernel cannot expose DRM debugfs state; Magisk root alone cannot enable a filesystem omitted from the kernel build.
+- Remaining display path: use an early SDE handoff trace or boot a purpose-built debug-enabled kernel temporarily if that is later available. Keep XNU framebuffer writes disabled.
+
 ### >>> UPDATE 2026-10-20 (Android SurfaceFlinger display dump) <<<
 
 - User-provided Android `dumpsys SurfaceFlinger` shows panel 1080x2400 at 120 Hz. HWC/SDM reports active planes and framebuffer/client-target buffers as `RGBA_8888_UBWC`; imported 1080x2400 buffers show 4352-byte stride (1088 pixels x 4 bytes). This confirms Android currently uses UBWC-compressed buffers for display composition, not a simple linear buffer that XNU may safely write with CPU stores.
