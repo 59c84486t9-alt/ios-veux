@@ -548,3 +548,17 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
      cpu_init, before arm_vm_init.
   5. panic hook at top of panic_trap_to_debugger: va_copy + _doprnt(fmt, &copy, sweet_early_putc, 16).
   Verify with tools/xnu-cc.py (compile+symbols) and patch-order simulation before the single CI run.
+
+## Status 2026-10-21: pre-XNU ramoops handoff probe prepared
+- The prior `boot_b` pmsg probe returned no XNU marker in Android pstore. This did not distinguish an XNU
+  early stop from failure to reach the XNU logger.
+- Updated `shim/loader.c` to append `SHIM VEUX ramoops: XNU handoff` to the verified Linux ramoops pmsg
+  ring immediately before entering XNU. Built on the Ubuntu VPS with the VEUX `dtb_1.dtb` and the existing
+  `payload-veux-pmsg-probe.bin`.
+- Image: `shim/out/shim-boot-veux-pmsg-handoff.img` (16,957,440 bytes; SHA-256
+  `006ba309a26f990bd7cc8b7d77766c68fd11e50e45881f37179154b4c2a96a1c`). Offline unpack confirmed boot
+  header v2, kernel size 180,224 bytes, ramdisk hash identical to the pmsg payload, and DTB hash identical
+  to `dtb/vendor_boot_b_unpacked/dtb_1.dtb`. The shim marker is present in the compiled loader object.
+- This image is prepared only; it has not been flashed. If authorized and the marker appears after rebooting
+  to Android, shim access to pmsg is confirmed. The separate `XNU VEUX ramoops log start` marker would
+  confirm the XNU logger initialized. No marker still leaves the failure point unresolved.

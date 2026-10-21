@@ -76,6 +76,45 @@ static int magic_ok(const char *m)
 
 typedef void (*xnu_entry_t)(uint64_t boot_args_pa);
 
+#ifdef VEUX_NO_FB
+/*
+ * ABL enters the shim with the MMU and caches off. Write a pre-XNU breadcrumb
+ * into the same Linux ramoops pmsg ring described by the VEUX recovery DT.
+ * This proves the shim can touch the reserved region and gives Android a
+ * marker even if XNU stops before PE_init_kprintf runs.
+ */
+static void veux_pmsg_handoff_marker(void)
+{
+	#define PMSG_PA   0xd0100000UL
+	#define PMSG_SIG  0x43474244u
+	#define PMSG_SIZE 0x00100000u
+	#define PMSG_HDR  12u
+	volatile uint32_t *hdr = (volatile uint32_t *)PMSG_PA;
+	volatile uint8_t *data = (volatile uint8_t *)(PMSG_PA + PMSG_HDR);
+	const uint32_t capacity = PMSG_SIZE - PMSG_HDR;
+	static const char marker[] = "\n--- SHIM VEUX ramoops: XNU handoff ---\n";
+	uint32_t start, size;
+
+	if (hdr[0] != PMSG_SIG || hdr[1] >= capacity ||
+	    hdr[2] > capacity || hdr[1] > hdr[2]) {
+		hdr[0] = PMSG_SIG;
+		hdr[1] = 0;
+		hdr[2] = 0;
+	}
+	start = hdr[1];
+	size = hdr[2];
+	for (unsigned int i = 0; i < sizeof(marker) - 1; i++) {
+		data[start] = (uint8_t)marker[i];
+		start = (start + 1) % capacity;
+		if (size < capacity)
+			size++;
+	}
+	hdr[1] = start;
+	hdr[2] = size;
+	__asm__ volatile("dsb sy" ::: "memory");
+}
+#endif
+
 const char *loader_boot(uintptr_t dtb)
 {
 	uint64_t rd_start, rd_end;
@@ -141,6 +180,9 @@ const char *loader_boot(uintptr_t dtb)
 	uintptr_t entry_pa = p->entry_va + pa_of_va_base;
 	con_hex("JUMP", entry_pa);
 	con_str("XNU", "jumping (fbcon clears screen)");
+	#ifdef VEUX_NO_FB
+	veux_pmsg_handoff_marker();
+	#endif
 
 	/* Everything was written with the MMU and caches off; drop any stale I-cache lines too. */
 	__asm__ volatile("dsb sy; ic iallu; dsb sy; isb" ::: "memory");
