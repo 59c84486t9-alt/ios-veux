@@ -1,9 +1,10 @@
 From: ios-veux
-Subject: [PATCH] Defer VEUX pmsg mapping until after pmap bootstrap
+Subject: [PATCH] Defer VEUX pmsg mapping until early I/O tables are ready
 
-The kprintf startup hook runs before pmap_bootstrap, so mapping ramoops there
-can recurse into an unmapped VA and panic. Keep early kprintf silent, then map
-the verified pmsg range and flush buffered milestones once io_map is ready.
+The kprintf startup hook runs before pmap initialization. Even immediately
+after pmap_bootstrap, arm_vm_init has not yet allocated the early I/O page
+tables, so mapping ramoops still panics with a missing PTE. Keep early kprintf
+silent and map pmsg only after the early I/O tables are provisioned.
 
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
@@ -54,14 +55,27 @@ the verified pmsg range and flush buffered milestones once io_map is ready.
  /**
 --- a/osfmk/arm64/arm_vm_init.c
 +++ b/osfmk/arm64/arm_vm_init.c
-@@ -2298,9 +2298,7 @@
+@@ -2296,12 +2296,6 @@
+ #endif
+ 	sweet_early_mark(12, "calling pmap_bootstrap");
  	pmap_bootstrap(dynamic_memory_begin);
- #if defined(ARM64_BOARD_CONFIG_VEUX)
- 	/* pmap_bootstrap establishes the early VA allocator used by io_map(). */
+-#if defined(ARM64_BOARD_CONFIG_VEUX)
+-	/* pmap_bootstrap establishes the early VA allocator used by io_map(). */
 -	if (veux_pmsg_init()) {
 -		veux_early_flush();
 -	}
-+	PE_init_veux_pmsg();
- #endif
+-#endif
  	sweet_early_mark(13, "pmap_bootstrap done");
  
+ 	disable_preemption();
+@@ -2354,6 +2348,10 @@
+ 		cpu_l1_tte++;
+ 	}
+ 	sweet_early_mark(14, "early I/O page tables ready");
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	/* arm_vm_init has now provisioned the page tables used by io_map(). */
++	PE_init_veux_pmsg();
++#endif
+ 
+ #if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR)
+ 	/*
