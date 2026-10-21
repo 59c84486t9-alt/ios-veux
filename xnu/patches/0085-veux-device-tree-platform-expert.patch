@@ -38,7 +38,7 @@ new file mode 100644
 + */
 +#include <pexpert/arm64/board_config.h>
 +
-+#if defined(VEUX)
++#if defined(ARM64_BOARD_CONFIG_VEUX)
 +#include <IOKit/IOPlatformExpert.h>
 +#include <IOKit/IODeviceTreeSupport.h>
 +#include <IOKit/IOLib.h>
@@ -94,4 +94,4 @@ new file mode 100644
 +	}
 +	createNubs(this, IODTFindMatchingEntries(root, kIODTExclusive, excludeList()));
 +}
-+#endif /* VEUX */
++#endif /* ARM64_BOARD_CONFIG_VEUX */

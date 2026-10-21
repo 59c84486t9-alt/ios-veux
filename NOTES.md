@@ -1,3 +1,9 @@
+## >>> UPDATE 2026-10-21 (VEUX QEMU follow-up: board guards) <<<
+
+- Re-ran the 0090 kernel on the VPS with QEMU 8.2.2, a QEMU-specific ADT, one Cortex-A76 CPU and no root device. XNU entered the kernel, then took a data abort at `_crypto_random_kmem_ctx_size+0xc` (`FAR=0x150`) and hit the debugger trap. QEMU serial output was empty. Captured artifacts are in `shim/out/qemu-veux-0090/`; the Android boot image was not run in QEMU.
+- The QEMU log and kernel disassembly show `_kmem_crypto_init` still calling `crypto_random_kmem_ctx_size()`. The 0090 guards tested `VEUX`, but the workflow sets `ARM64_BOARD_CONFIG_VEUX`; `vm_kern.c` and several other generic sources do not include `board_config.h`, so the VEUX fallback branches were omitted. Updated the guards in patches 0008, 0085 and 0090 to use the build-defined `ARM64_BOARD_CONFIG_VEUX` macro. CI rebuild and QEMU rerun are pending.
+- No phone boot or flash was performed. Generic QEMU does not test VEUX UFS, display, UART or other Qualcomm hardware.
+
 ## >>> UPDATE 2026-10-21 (VEUX phone bring-up patch 0090) <<<
 
 - Added xnu/patches/0090-veux-phone-bringup.patch, derived from the saved VEUX XNU buildtree and the existing SWEET single-core driver/IRQ implementation. It registers a VEUX IOCPU for qcom,kryo, limited to cpus=1, with secondary CPU start and suspend still unsupported. The CPU-node reg width and MPIDRs match tools/mkadt.py and the selected board DTB.

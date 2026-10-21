@@ -330,7 +330,7 @@ index c803e4e..c90ec1a 100644
  	return dec;
  }
  
-+#if defined(SWEET) || defined(VEUX)
++#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
 +/*
 + * SWEET/VEUX: arm_vm_init() calls this unconditionally; Apple's definition
 + * enters the PPL/monitor and ships only in the closed per-SoC library. These
@@ -340,7 +340,7 @@ index c803e4e..c90ec1a 100644
 +ml_enable_monitor(void)
 +{
 +}
-+#endif /* SWEET || VEUX */
++#endif /* SWEET || ARM64_BOARD_CONFIG_VEUX */
 +
  boolean_t
  ml_get_timer_pending(void)
