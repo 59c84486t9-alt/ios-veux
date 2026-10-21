@@ -1,5 +1,12 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (VEUX userdata logger build and B boot attempt) <<<
+
+- Full XNU CI run `39618385680` succeeded for macOS 13.5 / DEVELOPMENT / VEUX after adding patch `0088`. Kernel SHA-256: `9f517d8984fbf86d6bf4ff5a5adcf3fca4bf673fab4d49e1cc72e45e0df63ff8`. Local syntax-only compile of the two changed XNU sources also passed.
+- Packaged `shim/out/shim-boot-veux-ufs-log.img` (16,957,440 bytes; SHA-256 `9032e05292ecbb498c6e92b931630198ab8e5118d397f1b2e6185a763a6f3a13`). Offline unpack verified Android boot header v2, byte-identical shim kernel, payload, and `dtb/vendor_boot_b_unpacked/dtb_1.dtb`. Payload cmdline is `debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 veuxlog=1`.
+- Before booting, recovery ADB saved the raw 4 MiB + 4 KiB userdata tail to `/Users/vivien/Documents/ChatGPT/iosxia/backup/veux-device/userdata-tail-pre-veuxlog.bin` (SHA-256 `06955cde7f98b9503653b906e9634732d59a17a6dc2cb1a0e453fbdd4adaab86`). The user requested the bounded userdata log write; this region may overwrite encrypted F2FS data. No userdata write has been read back yet.
+- Recovery was on slot A. `fastboot flash boot_b shim/out/shim-boot-veux-ufs-log.img` succeeded (`Sending` and `Writing` OKAY; `boot_b` is 128 MiB). Then selected slot B and rebooted. After 45 seconds, neither ADB nor fastboot enumerated the phone; XNU boot result and whether it flushed the logger are unknown. Phone currently needs to be manually returned to fastboot (Power + Volume Down). Once visible, select A and `fastboot reboot recovery`, read/decode the userdata tail with `tools/veux-log-pull.sh`, then restore the saved tail bytes so the Android F2FS area is returned to its original contents. Do not alter any partition besides the already-authorized `boot_b` and this bounded userdata tail.
+
 ## >>> UPDATE 2026-10-21 (VEUX bounded userdata log writer) <<<
 
 - Recovery ADB confirms `userdata` is `/dev/block/sda22` (UFS LUN 0), 4096-byte blocks; it is Android encrypted F2FS. A separate 64 MiB OEM `logdump` partition is `/dev/block/sde41` on LUN 4. The chosen implementation follows the user's explicit userdata request: it stores a 4 MiB ring plus one 4 KiB header in the final 4 MiB + 4 KiB of userdata. This is a raw reserved log window, not a normal Android directory; writing there can corrupt Android F2FS data in that tail. Recovery ADB reads only that window and decodes it into `research/veux-logs/*.txt` on the Mac.
