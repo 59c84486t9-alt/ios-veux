@@ -1,5 +1,11 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (VEUX platform expert source patch) <<<
+
+- Added `xnu/patches/0085-veux-device-tree-platform-expert.patch`. It adds a `VeuxPlatformExpert` config match for root compatible `xiaomi,veux`, compiles the class in the ARM64 source list, and publishes `/cpus` plus the real top-level device-tree nodes while excluding `chosen`, `defaults`, `cpus`, and the absent Apple `/options` NVRAM node.
+- The VEUX ADT keeps `D22AP` first in the root compatible list and `iPhone10,3` as `model`, preserving the iOS userland identity. XNU `IODTCompareNubName` checks the full compatible string list, so the VEUX expert can match the later `xiaomi,veux` compatible without changing those identity properties. Target/product name overrides are intentionally omitted so XNU keeps deriving the iPhone identity from the ADT.
+- The patch parses as a unified diff. It has not yet been applied in a full XNU CI build or booted; this is source work only. No device boot or flash occurred. Next: run the ordered patch series through the macOS XNU workflow and resolve any compile diagnostics before any boot attempt.
+
 ## >>> UPDATE 2026-10-20 (VEUX boot-image packaging probe) <<<
 
 - Built an unbooted, non-flashed Android header-v2 package at `shim/out/shim-boot-veux-probe.img` (current SHA-256 `e27689fec855aeb261cf2775f00be3d904fa46d912b5ee24851f71787e5d5c51`). Its ramdisk contains `payload-veux-probe.bin` (current SHA-256 `b0d4f860d57a8973595ab68caa896bc28d078994d25c68d0e0549a90a4fdc2ed`) and its appended DTB exactly matches `dtb_1.dtb` selected by board ID `0x1000b, 0`.
