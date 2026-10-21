@@ -1,5 +1,11 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-20 (VEUX Android DRM + XNU build retry) <<<
+
+- Rooted Android on slot B with Magisk and the temporary `CONFIG_DEBUG_FS=y` kernel exposed `/sys/kernel/debug/dri/0/state`. Active DSI-1 is 1080x2400@120; primary plane is `XB24` / `DRM_FORMAT_XBGR8888`, allocated 1088x2400 with 4352-byte pitch, modifier `0x500000000000001`, imported GEM object, and driver-reported `start=0`. Two active overlays use `AB24`. See `docs/VEUX-ANDROID-DRM-FINDINGS.md` and raw capture outside git at `../veux-debugfs-kernel/magisk-patch/android-drm-state.txt`.
+- This identifies Android's active DRM format and geometry, but no physical address; its modifier is nonzero, and this does not prove `0x85200000` is scanout. Keep framebuffer writes disabled. The DRM state was captured before `sys.boot_completed` became true, so it is not evidence of a fully completed Android boot.
+- Current `0082-veux-machine-config.patch` includes the VEUX processor cache-line case and GICv3 macros missing from earlier CI attempt `39518824437`. Workflow defaults now select VEUX; next, commit and push these notes, then dispatch XNU Actions with macOS 13.5 / DEVELOPMENT / VEUX. Build success would validate compilation only, not bootability.
+
 ## Agent handoff / active work (2026-10-15, latest)
 
 ### >>> UPDATE 2026-10-20 (VEUX ROM/kernel debugfs research) <<<
