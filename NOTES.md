@@ -1,5 +1,10 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (returned to Android slot A after VEUX probe) <<<
+
+- After the probe froze on a black screen, the user re-entered fastboot. It reported current slot B. Switched active slot to A and rebooted; ADB is back, `ro.boot.slot_suffix=_a`, `sys.boot_completed=1`, Android 16. Slot A and userdata were not written during the probe. `boot_b` still contains `shim-boot-veux-ufs-probe.img`; the byte-matched stock backup remains available but has not been restored.
+- Probe result is limited to a black-screen freeze with no ADB/fastboot enumeration while B was selected. Without a log path, the XNU stop point and UFS progress remain unknown. Do not retry on B or write userdata until logging is added and the user authorizes any partition writes.
+
 ## >>> UPDATE 2026-10-21 (VEUX read-only UFS probe boot attempt) <<<
 
 - User explicitly authorized flashing the prepared diagnostic to `boot_b` after `fastboot boot` was rejected by ABL. `fastboot flash boot_b shim/out/shim-boot-veux-ufs-probe.img` succeeded (`Sending` and `Writing` both `OKAY`). The written image SHA-256 was `32358acc81b5799281a2d3e00289f3fbe63d0cf5d3aaaa34acd16d63e4e0cb91`, 16,556 KiB; only `boot_b` was written. The phone was on slot A before the operation; `fastboot set_active b` and `fastboot reboot` both returned `OKAY`.
