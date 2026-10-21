@@ -569,3 +569,8 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   `pmsg_size=record_size=0x100000`, `ecc=0`; `/sys/fs/pstore` is mounted but empty, so there is no
   `pmsg-ramoops-0` to inspect and `logcat -L` has no retained log. The shim/XNU markers therefore remain
   unobserved; the forced return through fastboot may have cleared the RAM-backed pmsg buffer.
+- Follow-up per-device recovery check: rebooted Android A to fastboot, selected B and booted the probe,
+  then after the phone returned to fastboot selected A and used `fastboot reboot recovery` before Android.
+  Recovery ADB was root. Recovery dmesg again confirms ramoops registered at `0xd0000000`, size `0x200000`,
+  ECC 0, and `/dev/pmsg0` exists, but `/sys/fs/pstore` is empty. Neither marker was recoverable even when
+  checking recovery before Android; this still cannot distinguish no shim write from firmware clearing RAM.
