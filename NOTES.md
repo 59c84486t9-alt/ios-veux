@@ -1,5 +1,12 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (GENI console capture path investigation) <<<
+
+- Read-only ADB on healthy Android slot A confirms `ro.boot.console=ttyMSM0`, but `/sys/class/tty/ttyMSM0` and `/sys/bus/platform/drivers/qcom_geni_serial` are absent. This means Android does not expose a usable serial TTY to ADB; it does not establish whether ABL or the kernel used the UART earlier in boot.
+- Reference Xiaomi `holi-qupv3.dtsi` defines debug GENI UART SE9 at `0x04c8c000` (0x4000), IRQ SPI 510, with `se-clk`, `m-ahb`, `s-ahb`, wrapper `qupv3_1`; `blair.dtsi` enables `qupv3_se9_2uart`. `blair-pinctrl.dtsi` routes it through GPIO25/GPIO26 with `qup13_f2`, active 2 mA and bias disabled, sleep pull-down. This is source-tree evidence; it does not identify those GPIO pads' physical board locations or confirm the installed firmware's exact state.
+- Android common's Qualcomm GENI console driver confirms a complete console path depends on resource/clock/console setup. Current XNU has no GENI backend. Public device-specific “test point” results found in this pass describe EDL entry only, not UART breakout; do not treat those as UART pins. No verified host capture route is available, so do not add speculative MMIO initialization or boot another image yet.
+- Next useful prerequisite for a GENI log attempt is a confirmed physical TX/GND location and 1.8 V-compatible USB-TTL capture, or another documented host-visible early-console route. Once that exists, implement/compile a polled GENI TX backend with bounded waits, first test from a controlled image, and keep slot A/userdata untouched. `boot_b` remains the previous probe image; no partition writes were made during this investigation.
+
 ## >>> UPDATE 2026-10-21 (post-probe diagnostics checked) <<<
 
 - Android is healthy on slot A (`ro.boot.slot_suffix=_a`, `sys.boot_completed=1`); connected ADB device is `veux` (`2201116SG`). No partition operation was performed during this check.
