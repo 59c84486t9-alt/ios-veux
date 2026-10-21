@@ -1,5 +1,11 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (VEUX XNU QEMU probe) <<<
+
+- Installed QEMU 8.2.2 (`qemu-system-arm`) on the VPS and ran the VEUX kernel payload on generic AArch64 `virt` with a QEMU-specific ADT (`mkadt.py --qemu --veux`), one `cortex-a76` CPU, and no UFS-root arguments. This was a kernel payload test; the Android `shim-boot-veux-ufs-log.img` itself is not a QEMU boot image.
+- The guest entered XNU and executed far enough to hit a data abort at `_SHA1Init+0x34` (`FAR=0x28`), followed by an undefined instruction in `_DebuggerTrapWithState+0x84`; QEMU's final PC was in `_handle_debugger_trap`. Disassembly shows `_SHA1Init` dereferencing the crypto function table at offset `0x28`; this is consistent with `g_crypto_funcs == NULL`. SWEET patch `0032` installs the BearSSL SHA-1 provider only under `ARM64_BOARD_CONFIG_SWEET`, so the VEUX build does not take that workaround. The next kernel change is to enable the SHA-1 provider for VEUX and rebuild. The VPS run artifacts are `/root/veux-log-build/qemu-veux-run/{qemu.log,regs.txt,serial.txt,fb.png,result.json}`. `serial.txt` was empty, consistent with `virt` not emulating VEUX's UART. The framebuffer snapshot is not evidence of VEUX scanout or phone display behavior.
+- This confirms CPU entry and execution in QEMU, not VEUX hardware startup. The `virt` machine does not emulate VEUX UFS, Qualcomm display, or the board UART. No phone was accessed or flashed.
+
 ## >>> UPDATE 2026-10-21 (offline VEUX framebuffer source analysis) <<<
 
 - Compared the saved VEUX live device tree, board-matched panel DTS and the reference Qualcomm SDE source. The live tree's `/reserved-memory/splash_region@0x85200000/reg` is `<0x85200000 0x00c00000>` (12 MiB); adjacent DFPS memory is `<0x85e00000 0x00100000>`. This confirms the reserved region, not the bootloader's currently active scanout pointer.
