@@ -35,3 +35,16 @@ shared open-source sources. Their guards are being extended to VEUX.
 
 The `xnu-buildtree` artifact for this run is saved locally at
 `xnu/run-39532087795/buildtree.tgz` for replay; it is not committed.
+
+## Follow-up run 39532741922
+
+[xnu run 39532741922](https://github.com/59c84486t9-alt/ios-veux/actions/runs/39532741922)
+successfully staged HFS, libpthread, and BearSSL and compiled the expanded HFS
+sources. Compilation then failed because the HFS compatibility include flags in
+`bsd/conf/Makefile.template` were nested inside the SWEET-only condition from
+`0019-sweet-builtin-pthread.patch`. Updated that condition to include VEUX so
+the compatibility header is applied to the HFS objects too. The log's main
+errors were HFS compatibility declarations/macros missing without that header.
+
+The `xnu-buildtree` artifact for this run is saved locally at
+`xnu/run-39532741922/buildtree.tgz` for replay; it is not committed.
