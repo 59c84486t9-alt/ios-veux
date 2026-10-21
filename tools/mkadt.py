@@ -204,7 +204,7 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
         ('stride', u32(FB_STRIDE)),
     ])
 
-    # bsd/dev/sweet_ufs.c: the UFS host ABL leaves running (absolute physical reg).
+    # bsd/dev/sweet_ufs.c: SWEET/VEUX UFS host (absolute physical register window).
     ufs = node('veux-ufs' if veux else 'sweet-ufs', [
         ph(),
         ('compatible', cstr('qcom,ufshc')),

@@ -1,5 +1,13 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (VEUX UFS read-only port) <<<
+
+- Read-only Android ADB on slot A: Linux reports `/dev/block/sda` with 4096-byte logical blocks and maps `userdata` to `sda22` (sysfs start `23961920`, size `213196440`, in 512-byte sectors). Android currently mounts `/data` as F2FS from `/dev/block/dm-40`; raw `sda22` begins with non-plaintext bytes, so this is still Android’s encrypted userdata, not the iOS HFS+ image.
+- Raw reads of the first 8 KiB and last 512-byte sector of `sda` returned zeroes. No GPT signature/CRC was recoverable from those locations. Preserve this as an unresolved mismatch: sysfs has the Linux partition map, but the underlying GPT bytes were not visible through the same block node. Temporary read dumps are under `/tmp/veux-*` and are not in git.
+- Added `xnu/patches/0086-veux-readonly-ufs.patch`. VEUX `rd=ufsroot0` now selects the `/veux-ufs` ADT node and reuses the existing UFSHCI polled READ(10) block path. VEUX forcibly sets the device read-only, ignores `ufsrw=1`, and skips SWEET-only persistent log, sampler, keys, touch, and USB startup. No partition or phone data was written.
+- `patch --dry-run` against the locally staged XNU buildtree accepts 0086. This is patch-application validation only; VEUX UFS host state after ABL, READ CAPACITY, GPT access, DMA/cache behavior, and any XNU root mount remain untested. The raw zero GPT sectors are a blocker for claiming the partition parser works. No boot or flash occurred.
+- Next: investigate why Android’s sysfs partition map disagrees with raw LUN0 reads, then run the macOS XNU build workflow. Only after successful compile and a separate explicit boot decision should an XNU read-only UFS probe be attempted.
+
 ## >>> UPDATE 2026-10-21 (VEUX CPU / PSCI / timer research) <<<
 
 - Read-only Android ADB on slot A: online CPUs `0-7`; `/proc/interrupts` shows active `GICv3 19 Level arch_timer` counts on all eight cores. The selected `dtb_1.dtb` declares PSCI 1.0 via SMC, `enable-method = "psci"` on all CPU nodes, and a 19.2 MHz architected timer whose virtual timer is GIC INTID 19. These facts validate the Android/Linux path only; XNU has not yet exercised SMC, GIC delivery, or the timer.

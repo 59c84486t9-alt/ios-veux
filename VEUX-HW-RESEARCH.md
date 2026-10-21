@@ -35,6 +35,9 @@ Collected 2026-10-20 for `veux-xnu-build`. Device access was read-only ADB in re
 
 - Live UFS controller `0x04804000` (window 0x3000); ICE `0x04808000` (0x8000); ICE-HWKM `0x04810000` (0x9000); PHY `0x04807000` (0xddc). One lane, GIC SPI 356. DTS supplies clocks, resets, interconnect/bandwidth paths, and PHY bindings.
 - Recovery has Qualcomm UFS (`ufshcd-qcom`) and QMP v4 Yupik PHY bound. This gives XNU port targets and addresses; it does not mean SWEET’s UFS implementation can be reused unchanged.
+- Android ADB (slot A, read-only) reports `/dev/block/sda` as the user-data LUN with a 4096-byte logical block size. Linux exposes `sda22` as `userdata`, start `23961920` and length `213196440` in sysfs 512-byte sectors (about 12.27 GB start, 109.16 GB length). `/data` is currently mounted as F2FS from `/dev/block/dm-40`; the raw `sda22` first 8 KiB is non-plaintext data, consistent with Android’s encrypted device-mapper path. This is Android userdata, not an iOS HFS+ root volume.
+- Read-only raw reads of the first 8 KiB and final 512-byte sector of `/dev/block/sda` were all zero, so an `EFI PART` GPT header could not be parsed from those sectors. The Linux kernel’s current partition map is available through sysfs, but the raw GPT bytes and table CRC still need explanation before the XNU UFS driver can claim GPT support on this device.
+- Patch `0086-veux-readonly-ufs.patch` routes `rd=ufsroot0` through the existing polled UFSHCI/SCSI read path for `/veux-ufs`, ignores `ufsrw=1` on VEUX, and excludes SWEET-only persistent-log, sampler, input, and USB startup calls. The basic register handoff, UFS link state, DMA addressing, and GPT LBA interpretation remain unverified on VEUX; do not boot it as a root device yet.
 
 ## Touch / power
 
