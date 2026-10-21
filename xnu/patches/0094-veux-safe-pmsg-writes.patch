@@ -1,0 +1,86 @@
+From: ios-veux
+Subject: [PATCH] Use ordered writes for VEUX ramoops pmsg
+
+The pmsg area is mapped write-combining, matching Linux ramoops. Avoid
+cache-clean-by-VA operations through that I/O alias; order data before its
+persistent_ram header instead. Route pmsg-only kprintf output directly to the
+ring so it does not depend on VEUX's unverified UART.
+
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -26,7 +26,6 @@
+ #include <pexpert/arm/consistent_debug.h>
+ #include <pexpert/arm64/board_config.h>
+ #include <arm64/proc_reg.h>
+-#include <arm/caches_internal.h>
+ #include <arm64/sweet_early.h>
+ #include <pexpert/arm/protos.h>
+ #include <kern/sched_prim.h>
+@@ -773,10 +772,11 @@ veux_pmsg_init(void)
+ 		veux_pmsg_header[1] = 0;
+ 		veux_pmsg_header[2] = 0;
+ 	}
++	/* The region is mapped write-combining, like Linux's ramoops pmsg zone. */
++	__asm__ volatile("dsb sy" ::: "memory");
+ 	veux_pmsg_start = veux_pmsg_header[1];
+ 	veux_pmsg_size = veux_pmsg_header[2];
+ 	veux_pmsg_initialized = true;
+-	CleanPoC_DcacheRegion_Force((vm_offset_t)veux_pmsg_header, VEUX_PMSG_HDR_SIZE);
+ 	static const char start[] = "\n--- XNU VEUX ramoops log start ---\n";
+ 	for (unsigned int i = 0; i < sizeof(start) - 1; i++) {
+ 		veux_pmsg_putc(start[i]);
+@@ -797,10 +797,16 @@ veux_pmsg_putc(char c)
+ 	if (veux_pmsg_size < veux_pmsg_capacity) {
+ 		veux_pmsg_size++;
+ 	}
++
++	/*
++	 * pmsg is a Normal-NC/WCOMB mapping. Order the data store before its
++	 * persistent_ram cursor update; cache clean-by-VA is for cacheable RAM
++	 * and must not be applied through this I/O alias.
++	 */
++	__asm__ volatile("dsb sy" ::: "memory");
+ 	veux_pmsg_header[1] = veux_pmsg_start;
+ 	veux_pmsg_header[2] = veux_pmsg_size;
+-	CleanPoC_DcacheRegion_Force((vm_offset_t)&veux_pmsg_data[write_at], 1);
+-	CleanPoC_DcacheRegion_Force((vm_offset_t)veux_pmsg_header, VEUX_PMSG_HDR_SIZE);
++	__asm__ volatile("dsb sy" ::: "memory");
+ }
+ 
+ static void
+--- a/pexpert/arm/pe_kprintf.c
++++ b/pexpert/arm/pe_kprintf.c
+@@ -33,6 +33,7 @@
+ static void serial_putc_crlf(char c);
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ static void veux_discard_kprintf(char c);
++static void veux_pmsg_putc_crlf(char c);
+ #endif
+ 
+ __startup_func
+@@ -65,6 +66,15 @@ veux_discard_kprintf(char c)
+ {
+ 	(void)c;
+ }
++
++static void
++veux_pmsg_putc_crlf(char c)
++{
++	if (c == '\n') {
++		veux_pmsg_putc('\r');
++	}
++	veux_pmsg_putc(c);
++}
+ #endif
+ 
+ __startup_func
+@@ -95,7 +105,8 @@ PE_init_veux_pmsg(void)
+ {
+ 	if (veux_pmsg_init()) {
+ 		veux_early_flush();
+-		PE_kputc = serial_putc_crlf;
++		/* Keep the ramoops sink independent of VEUX's unknown UART. */
++		PE_kputc = veux_pmsg_putc_crlf;
+ 	}
+ }
+ #endif
