@@ -1,0 +1,24 @@
+From: ios-veux
+Subject: [PATCH] Use device I/O mapping for VEUX pmsg
+
+The phone's pmsg dump after the ordered-write change still contains corrupted
+XNU bytes. Use the conservative I/O memory mapping for the reserved pmsg RAM
+instead of write-combining, while retaining the store barriers from patch 0094.
+Give this logger a distinct start marker so the next dump identifies this build.
+
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -758,5 +758,6 @@ veux_pmsg_init(void)
+ 	paddr = (vm_offset_t)(reg[0] + reg[1] - *pmsg_size);
+-	vaddr = ml_io_map_wcomb(paddr, *pmsg_size);
++	/* Treat reserved persistent RAM as device I/O on the phone. */
++	vaddr = ml_io_map(paddr, *pmsg_size);
+ 	if (vaddr == 0) {
+ 		return false;
+ 	}
+@@ -778,4 +778,4 @@ veux_pmsg_init(void)
+-	static const char start[] = "\n--- XNU VEUX ramoops log start ---\n";
++	static const char start[] = "\n--- XNU VEUX pmsg device-map v2 ---\n";
+ 	for (unsigned int i = 0; i < sizeof(start) - 1; i++) {
+ 		veux_pmsg_putc(start[i]);
+ 	}

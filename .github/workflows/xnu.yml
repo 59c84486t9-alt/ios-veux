@@ -89,8 +89,10 @@ jobs:
             grep -Fq 'ifneq ($(filter SWEET VEUX,$(CURRENT_MACHINE_CONFIG)),)' xnu/libkern/conf/Makefile.template
             grep -Fq 'PE_init_veux_pmsg();' xnu/osfmk/arm64/arm_vm_init.c
             grep -Fq 'PE_init_veux_pmsg(void)' xnu/pexpert/arm/pe_kprintf.c
+            grep -Fq 'vaddr = ml_io_map(paddr, *pmsg_size);' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'XNU VEUX pmsg device-map v2' xnu/pexpert/arm/pe_serial.c
             python3 -c 'from pathlib import Path; source = Path("xnu/pexpert/arm/pe_kprintf.c").read_text(); startup = source.split("PE_init_kprintf(void)", 1)[1].split("STARTUP(KPRINTF", 1)[0].split("#else", 1)[0]; vm = Path("xnu/osfmk/arm64/arm_vm_init.c").read_text(); assert "veux_pmsg_init()" not in startup, "VEUX pmsg mapping still runs in early kprintf startup"; assert vm.index("early I/O page tables ready") < vm.index("PE_init_veux_pmsg();"), "VEUX pmsg must wait for early I/O page tables"'
-            echo "Verified VEUX CPU, kmem RNG fallback, and deferred pmsg initialization"
+            echo "Verified VEUX CPU, kmem RNG fallback, deferred pmsg initialization, and device-mapped logger"
           fi
 
       - name: Package build tree for local compiles
