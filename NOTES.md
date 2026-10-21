@@ -1,5 +1,12 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (VEUX read-only UFS kernel and probe image) <<<
+
+- Pushed commits through `d864eb8` to `59c84486t9-alt/ios-veux:veux-xnu-build` and ran GitHub Actions build `39581112792` with macOS 13.5 / DEVELOPMENT / VEUX. The workflow completed successfully. Downloaded `kernel.development.veux` is arm64 Mach-O, 16,989,624 bytes, SHA-256 `3541114f0b871eed6bdd531d4fa819e10e94d4909f015d06b836149c2e3a6245`; it includes patch 0086's read-only VEUX UFS root path.
+- Built `shim/out/veux-ufs-probe.adt`, `shim/out/payload-veux-ufs-probe.bin`, and `shim/out/shim-boot-veux-ufs-probe.img`. Probe args are single-core and read-only (`rd=ufsroot0`, no `ufsrw`/`rootrw`); the payload keeps display writes disabled and uses the previously selected `dtb_1.dtb`. Unpacking the Android v2 boot image and comparing its kernel, payload ramdisk, and DTB to their sources succeeded byte-for-byte. Boot image SHA-256 `32358acc81b5799281a2d3e00289f3fbe63d0cf5d3aaaa34acd16d63e4e0cb91`.
+- Phone is in fastboot with slot A active and bootloader unlocked. `fastboot boot shim/out/shim-boot-veux-ufs-probe.img` returned `FAILED (remote: 'unknown command')`; no boot or flash occurred. `boot_b` is a 128 MiB partition. The local original `boot_b` backups `/Users/vivien/Documents/ChatGPT/iosxia/backup/veux-device/boot_b.img` and `../veux-debugfs-kernel/repack-work/boot_b.stock.img` are both 128 MiB with matching SHA-256 `71425c2c3bfb124b40d62bb66bf18ea25a4f52879aa9784b3c56e2c18d36f2db`.
+- Early UART logging remains unresolved: the candidate GENI console has no XNU driver or verified clock/pinctrl handoff, and VEUX display writes remain disabled. Thus this boot image has no usable host-side kernel log capture yet. Do not repurpose Android ramoops. Next possible probe is to write this exact 16 MiB image to inactive `boot_b` and select B temporarily; this is a partition write, so obtain the user's confirmation first. Keep userdata untouched until the probe is understood and a separate confirmation is given.
+
 ## >>> UPDATE 2026-10-21 (local HFSX root image check) <<<
 
 - Found `/Users/vivien/Downloads/ios16-root-20H392.simg` (Android sparse, 16 GiB logical). Its HFS volume header identifies case-sensitive HFSX (`HX`), block size 4096, total 4,194,304 blocks, volume `iOSRoot`.
