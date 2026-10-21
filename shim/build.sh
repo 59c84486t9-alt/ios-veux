@@ -18,7 +18,7 @@ while [ $# -gt 0 ]; do
 	esac
 done
 CFLAGS="-O2 -ffreestanding -nostdlib -fno-pic -mgeneral-regs-only -mstrict-align -fno-stack-protector -Wall -Wextra"
-[ "$mode" != veux ] || CFLAGS="$CFLAGS -DVEUX_NO_FB"
+[ "$mode" != veux ] || CFLAGS="$CFLAGS -DVEUX_NO_FB -DDEVICE_VEUX"
 mkdir -p out
 for f in start.S shim.c console.c mmu.c fdt.c loader.c ufs.c; do
 	$CC $CFLAGS -c $f -o out/${f%.*}.o

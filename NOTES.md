@@ -1,5 +1,12 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (VEUX read-only UFS port review) <<<
+
+- The XNU source already contains the initial SWEET-derived VEUX port in `xnu/patches/0086-veux-readonly-ufs.patch`: it uses the `/veux-ufs` ADT node (`0x04804000`), polled UFSHCI/SCSI READ(10), LUN 0, and read-only root access. CI run `39581112792` previously compiled that port. VEUX DMA/UTRL takeover and XNU GPT parsing remain untested on hardware.
+- Recovery ADB confirmed host0 at `0x04804000`; UFS LUN 0 is `sda` with 4096-byte logical blocks; `userdata` is `sda22`. `boot_a` is `sde9` on LUN 4. Read-only reads show LUN0 LBA0 is zeroed and LBA1 begins `EFI PART`; the GPT header specifies 128 entries of 128 bytes beginning at LBA2. This matches the SWEET parser's LBA1 GPT lookup. Earlier note claiming the entire first 8 KiB was zero was incorrect.
+- Fixed the shim's UFS base selection: `shim/ufs.c` now uses `shim/target.h`, and `shim/build.sh --veux` defines `DEVICE_VEUX`, selecting `0x04804000` rather than SWEET's `0x01d84000`. Both VEUX and SWEET UFS translation units compile with local arm64 Clang. This affects the diagnostic shim only; the VEUX no-payload fail-stop still prevents its UFS probe from running without a deliberate diagnostic-mode change.
+- No image was built, flashed, or booted in this follow-up. The phone remains in slot A recovery; `boot_b` still contains the previously authorized pmsg handoff probe. No UFS writes were issued.
+
 ## >>> UPDATE 2026-10-21 (VEUX persistent pmsg logging path) <<<
 
 - Android slot A exposes an active `d0000000.ramoops`: runtime parameters read as base `0xd0000000`, size `0x200000`, record-size `0x100000`, console-size `0`, pmsg-size `0x100000`, ECC `0`. `/dev/pmsg0` is available. The live/reference Blair DT declares the same 2 MiB region with a 2 MiB pmsg allocation; runtime overrides it to split 1 MiB record + 1 MiB pmsg, which is the layout used below.
