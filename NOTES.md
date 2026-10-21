@@ -1,5 +1,12 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (userdata logger result and recovery return) <<<
+
+- The phone returned to USB fastboot. Set slot A active and `fastboot reboot recovery` succeeded. Recovery ADB is root again when using `/Users/vivien/Library/Android/sdk/platform-tools/adb`; `/usr/local/bin/adb` 37.0.1 did not start its daemon reliably in this state.
+- Ran `tools/veux-log-pull.sh`; it found no `VEUXLOG1` header. Independently read the expected final 4 MiB + 4 KiB of `userdata` and compared it with `userdata-tail-pre-veuxlog.bin`: both SHA-256 values are `06955cde7f98b9503653b906e9634732d59a17a6dc2cb1a0e453fbdd4adaab86`, with 0 changed bytes. The logger did not write to userdata, so no restoration was needed and the saved backup is retained.
+- The built XNU Mach-O contains `veux_log_append`, `veux_log_thread`, the logger messages, and UFS error strings. This confirms the code was linked; the missing disk marker only tells us that the logger never completed a flush. Whether XNU stopped before UFS initialization, the UFS setup failed, or the logger thread did not run is still unknown. Do not retry this same image: the current log path cannot capture the early failure.
+- Current state: slot A recovery with root ADB; `boot_b` still contains the VEUX UFS logger test image; userdata matches its pre-boot tail backup. Next work needs an earlier capture path that can report UFS initialization failures before any more B boot attempt.
+
 ## >>> UPDATE 2026-10-21 (VEUX userdata logger build and B boot attempt) <<<
 
 - Full XNU CI run `39618385680` succeeded for macOS 13.5 / DEVELOPMENT / VEUX after adding patch `0088`. Kernel SHA-256: `9f517d8984fbf86d6bf4ff5a5adcf3fca4bf673fab4d49e1cc72e45e0df63ff8`. Local syntax-only compile of the two changed XNU sources also passed.
