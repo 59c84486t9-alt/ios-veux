@@ -14,6 +14,15 @@ Collected 2026-10-20 for `veux-xnu-build`. Device access was read-only ADB in re
 - `/proc/iomem` reports that upper bank as System RAM and lists reserved intervals beginning at `0x1f8600000`; the earlier SWEET `--highmem` size `0xfcc00000` would overlap those reserved regions. The largest contiguous candidate from the 4 GiB base before the first such carveout is `base=0x100000000`, `size=0xf8600000` (4064 MiB), ending at `0x1f85fffff` inclusive.
 - This is observed from the connected VEUX recovery environment and used by `tools/mkadt.py --veux --highmem`. It is a device-specific candidate; before any boot attempt, verify the ABL handoff and XNU physical-memory mapper honor this same range and keep the listed carveouts excluded.
 
+## CPU, PSCI, GIC and timer evidence (read-only, 2026-10-21)
+
+- The selected board-matched `dtb_1.dtb` declares `/soc/psci` as `arm,psci-1.0` with `method = "smc"`. Each CPU node `cpu@0` through `cpu@700` uses `enable-method = "psci"`; the DT `reg` affinities are `0x0` through `0x700`.
+- The architected timer node is `arm,armv8-timer` with `clock-frequency = 0x0124f800` (19.2 MHz). Its GIC interrupt tuples declare timer PPIs 1, 2, 3 and 0; the virtual timer is PPI 3, therefore GIC INTID 19 (PPI IDs are offset by 16).
+- Read-only Android ADB on slot A reported CPUs `0-7` online and `/proc/interrupts` showed `GICv3 19 Level arch_timer` with active per-CPU counts. This demonstrates that Android/Linux runs all eight CPUs and receives the VEUX virtual timer. It does **not** validate XNU CPU setup, XNU's SMC call path, or XNU's GIC programming.
+- Android reports `ro.boot.console=ttyMSM0`. The same DTB has an enabled `qcom,msm-geni-console` node at `0x04c8c000` (0x4000 window; SPI 510). This is a candidate early log transport, but XNU has no VEUX GENI UART initialization yet; clocks, QUP mode and pin state must be confirmed before any register writes. Do not assume SWEET's framebuffer console is safe for VEUX.
+- The DTB reserves `ramoops` at `0xd0000000` (2 MiB; 1 MiB record and 1 MiB pmsg settings). Android owns this pstore region, so XNU must not reuse or overwrite it as an ad hoc log buffer.
+- **XNU runtime validation remains outstanding.** No VEUX PSCI CPU-on call, XNU GIC Group 1 delivery, XNU timer interrupt, or early XNU log has been observed. The current compile profile does not install the SWEET CPU/GIC runtime drivers, and the existing early framebuffer logger is unsafe to reuse. Keep the kernel unbooted until a VEUX CPU/GIC implementation and a usable log transport are available.
+
 ## Display / framebuffer
 
 - Live bootargs select `qcom,mdss_dsi_k6s_38_0c_0a_fhdp_dsc_vid`. Panel DTS describes 1080x2400, 120/60 Hz, 24-bit DSI input and DSC. `qcom,mdss-dsi-color-order = "rgb_swap_rgb"` describes the panel/DSI channel order; **it does not establish the DRM framebuffer memory format**.

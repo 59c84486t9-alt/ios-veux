@@ -1,5 +1,11 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (VEUX CPU / PSCI / timer research) <<<
+
+- Read-only Android ADB on slot A: online CPUs `0-7`; `/proc/interrupts` shows active `GICv3 19 Level arch_timer` counts on all eight cores. The selected `dtb_1.dtb` declares PSCI 1.0 via SMC, `enable-method = "psci"` on all CPU nodes, and a 19.2 MHz architected timer whose virtual timer is GIC INTID 19. These facts validate the Android/Linux path only; XNU has not yet exercised SMC, GIC delivery, or the timer.
+- The same DTB identifies the Android console as `ttyMSM0` (`qcom,msm-geni-console` at `0x04c8c000`, 0x4000 window, SPI 510). This is a candidate log path, but XNU has no VEUX GENI UART setup yet. The DTB's 2 MiB ramoops reservation at `0xd0000000` belongs to Android pstore and must not be repurposed. The SWEET screen console remains disabled for VEUX.
+- No XNU boot was attempted. Before runtime validation, add VEUX CPU/GIC/timer startup and a GENI console path, compile through CI, and then prepare a controlled boot test. Details and source evidence are in `VEUX-HW-RESEARCH.md`.
+
 ## >>> UPDATE 2026-10-21 (VEUX platform expert source patch) <<<
 
 - Added `xnu/patches/0085-veux-device-tree-platform-expert.patch`. It adds a `VeuxPlatformExpert` config match for root compatible `xiaomi,veux`, compiles the class in the ARM64 source list, and publishes `/cpus` plus the real top-level device-tree nodes while excluding `chosen`, `defaults`, `cpus`, and the absent Apple `/options` NVRAM node.
