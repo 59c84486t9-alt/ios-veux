@@ -1,5 +1,11 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (VEUX read-only UFS probe boot attempt) <<<
+
+- User explicitly authorized flashing the prepared diagnostic to `boot_b` after `fastboot boot` was rejected by ABL. `fastboot flash boot_b shim/out/shim-boot-veux-ufs-probe.img` succeeded (`Sending` and `Writing` both `OKAY`). The written image SHA-256 was `32358acc81b5799281a2d3e00289f3fbe63d0cf5d3aaaa34acd16d63e4e0cb91`, 16,556 KiB; only `boot_b` was written. The phone was on slot A before the operation; `fastboot set_active b` and `fastboot reboot` both returned `OKAY`.
+- After reboot, neither `adb devices` nor `fastboot devices` lists the phone. With no verified UART or framebuffer logging, this does not establish whether XNU started, where it stopped, or whether the phone reset. Screen state is unknown. No userdata writes were issued; the payload enforces read-only UFS and has no `ufsrw`/`rootrw` arguments.
+- Next: ask the user what the screen shows and, once fastboot is reachable, restore slot A as active before any further experiment. Preserve the probe image and the matching 128 MiB stock `boot_b` backup (SHA-256 `71425c2c3bfb124b40d62bb66bf18ea25a4f52879aa9784b3c56e2c18d36f2db`). Do not flash userdata until the UFS probe has a usable observation path and the user confirms that destructive write.
+
 ## >>> UPDATE 2026-10-21 (VEUX read-only UFS kernel and probe image) <<<
 
 - Pushed commits through `d864eb8` to `59c84486t9-alt/ios-veux:veux-xnu-build` and ran GitHub Actions build `39581112792` with macOS 13.5 / DEVELOPMENT / VEUX. The workflow completed successfully. Downloaded `kernel.development.veux` is arm64 Mach-O, 16,989,624 bytes, SHA-256 `3541114f0b871eed6bdd531d4fa819e10e94d4909f015d06b836149c2e3a6245`; it includes patch 0086's read-only VEUX UFS root path.
