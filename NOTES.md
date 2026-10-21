@@ -663,3 +663,9 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   Recovery ADB was root. Recovery dmesg again confirms ramoops registered at `0xd0000000`, size `0x200000`,
   ECC 0, and `/dev/pmsg0` exists, but `/sys/fs/pstore` is empty. Neither marker was recoverable even when
   checking recovery before Android; this still cannot distinguish no shim write from firmware clearing RAM.
+
+## >>> UPDATE 2026-10-21 (VEUX QEMU pmsg mapping fix) <<<
+
+- The corrected VEUX kernel from CI run `39639812065` passed the CPU-registration and kmem RNG source guards and disassembly no longer called the null corecrypto kmem RNG callback. Its QEMU run exposed a separate failure in our diagnostic logger: the first panic was `pmap_map_bd_with_options: no PTE` while `PE_init_kprintf` attempted to map the pmsg physical range `0xd0100000–0xd0200000` before `pmap_bootstrap`. The later debugger trap obscured this message on the blank virtual screen. This is an identified pre-pmap logger bug, not evidence that the physical VEUX device will fail the same way.
+- Added patch `0091-veux-defer-pmsg-init.patch`: the early kprintf hook no longer maps ramoops; after `pmap_bootstrap`, XNU initializes pmsg and flushes the buffered VEUX milestones. Added a CI source guard to reject an early pmsg mapping. Patch 0091 applies to the exact buildtree from run `39639812065`; `tools/validate-repo.py` passes with 91 contiguous patches.
+- Rebuild and repeat QEMU probe pending. No phone boot or flash was performed. Generic QEMU still lacks VEUX's Qualcomm UFS, UART and display hardware, so its outcome only diagnoses generic execution and patch-induced failures.
