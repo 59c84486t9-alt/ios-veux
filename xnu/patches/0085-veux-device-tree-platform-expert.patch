@@ -18,14 +18,11 @@ diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
 diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
 --- a/iokit/conf/files.arm64
 +++ b/iokit/conf/files.arm64
-@@ -5,4 +5,7 @@
- # SMP
- iokit/Kernel/arm/AppleARMSMP.cpp    					optional iokitcpp
+@@ -9,1 +9,4 @@
 +# VEUX device-tree platform expert (empty translation unit on other boards)
 +iokit/Kernel/arm/VeuxPlatformExpert.cpp                         optional iokitcpp
 +
  # SWEET device-tree platform (empty translation unit on other boards)
- iokit/Kernel/arm/SweetPlatformExpert.cpp                         optional iokitcpp
 diff --git a/iokit/Kernel/arm/VeuxPlatformExpert.cpp b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
 new file mode 100644
 --- /dev/null

@@ -72,7 +72,19 @@ jobs:
         env:
           # keep going after errors so one run reports every compile failure
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
-        run: bash build.sh
+        run: |
+          bash build.sh
+          if [[ "$MACHINE_CONFIG" == "VEUX" ]]; then
+            # The upstream builder can warn and skip an incompatible patch
+            # while still returning success. Require the VEUX bring-up edits
+            # in the actual tree before accepting the kernel artifact.
+            grep -Fq "IOClass'         = VeuxPlatformExpert" xnu/iokit/KernelConfigTables.cpp
+            grep -Fq "IOClass'         = VeuxCPU" xnu/iokit/KernelConfigTables.cpp
+            grep -Fq 'class VeuxCPU' xnu/iokit/Kernel/arm/VeuxCPU.cpp
+            grep -Fq "iokit/Kernel/arm/VeuxCPU.cpp" xnu/iokit/conf/files.arm64
+            grep -Fq '#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/osfmk/vm/vm_kern.c
+            echo "Verified VEUX CPU registration and kmem RNG fallback are present"
+          fi
 
       - name: Package build tree for local compiles
         if: always()
