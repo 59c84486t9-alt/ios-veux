@@ -48,3 +48,15 @@ errors were HFS compatibility declarations/macros missing without that header.
 
 The `xnu-buildtree` artifact for this run is saved locally at
 `xnu/run-39532741922/buildtree.tgz` for replay; it is not committed.
+
+## Follow-up run 39533529250
+
+[xnu run 39533529250](https://github.com/59c84486t9-alt/ios-veux/actions/runs/39533529250)
+applied the HFS compatibility header and compiled all sources. The final link
+was down to two missing symbols: `ml_enable_monitor` and `sweet_sample_task`.
+Both definitions were guarded as SWEET-only even though the VEUX config calls
+the no-monitor stub and includes the shared debug sampler. The XNU patches now
+extend those guards to VEUX (`0008` and new `0084`).
+
+The `xnu-buildtree` artifact for this run is saved locally at
+`xnu/run-39533529250/buildtree.tgz` for replay; it is not committed.
