@@ -1,5 +1,13 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (SWEET early-console comparison for VEUX) <<<
+
+- Read SWEET patches `0003`, `0010`, and `0012`. SWEET's first visible life marker is a direct framebuffer band in `start.s`, before page tables, followed by `sweet_early_mark()` milestones during `arm_init`/`arm_vm_init`. Its early console stays mapped across TTBR0 teardown, then the later ADT-driven framebuffer serial console takes over. These writes depend on SWEET's verified scanout at `0x9c000000`, 1080x2400, stride 4320, and matching bootstrap page-table mappings; they cannot be copied to VEUX's unverified scanout.
+- The existing VEUX handoff image already writes `SHIM VEUX ramoops: XNU handoff` into Android's pmsg ring immediately before the XNU jump. Its payload uses the `--highmem` range beginning at `0x100000000`, so the pmsg reservation at `0xd0000000` is outside XNU's managed RAM range. This is the safest current pre-kernel signal, but it has not been recovered after the prior forced return to fastboot/recovery. Because ramoops is RAM-backed and the reset method may clear it, that missing marker does not prove the shim failed to run.
+- Recovery ADB is currently connected as root on slot A. `/sys/fs/pstore` is empty in this recovery session. No userdata or other phone partition was touched in this investigation. A SIMG root image is not required for XNU's early startup; userdata matters only when XNU reaches UFS/root mounting, well after the early-console milestones.
+- Read-only recovery DRM/sysfs confirms DSI-1 is connected/enabled but does not expose a scanout address. Recovery dmesg reports `ramoops: found existing invalid buffer, size 1048028, start 1048540` and then registers/zaps the 2 MiB region. This shows the retained pmsg header was invalid before recovery initialized it, but does not identify which prior boot wrote it or prove how far XNU ran. The ADB recovery log cannot recover the old ring after the ramoops driver zaps it.
+- Next useful signal requires either (a) a repeatable warm-reset path that preserves ramoops so the pre-XNU marker can be read, or (b) a verified VEUX display scanout/UART path. Do not write a guessed framebuffer address or treat the old black-screen result as evidence that a SIMG is required.
+
 ## >>> UPDATE 2026-10-21 (userdata logger result and recovery return) <<<
 
 - The phone returned to USB fastboot. Set slot A active and `fastboot reboot recovery` succeeded. Recovery ADB is root again when using `/Users/vivien/Library/Android/sdk/platform-tools/adb`; `/usr/local/bin/adb` 37.0.1 did not start its daemon reliably in this state.
