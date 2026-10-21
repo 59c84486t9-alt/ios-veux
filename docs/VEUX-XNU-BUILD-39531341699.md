@@ -70,3 +70,19 @@ therefore had only `_sweet_sample_task` unresolved. Added the following include
 line as patch context and verified `git apply --check` against the downloaded
 source. The buildtree is saved locally at
 `xnu/run-39534235727/buildtree.tgz` for replay; it is not committed.
+
+## Successful build 39535011663
+
+[xnu run 39535011663](https://github.com/59c84486t9-alt/ios-veux/actions/runs/39535011663)
+used the same VEUX settings and included the corrected `0084` patch. The patch
+applied, the XNU build and link passed, and GitHub Actions completed artifact
+collection successfully. The `xnu-kernel` artifact was downloaded to `xnu/out/`.
+
+- Kernel: `xnu/out/kernel.development.veux`
+- Format: Mach-O 64-bit executable, arm64
+- Size: 16 MiB
+- SHA-256: `533b24000da94d343b3a876508625a43e529cca59eb748d1ceeaabe9e5c8fcd7`
+
+This confirms an XNU kernel was built for the VEUX machine config. It is not
+repacked as an Android boot image, has not been booted, and was not flashed.
+The build artifact and buildtree are local outputs and are not tracked in Git.
