@@ -9,7 +9,8 @@
 ## >>> UPDATE 2026-10-21 (VEUX BearSSL SHA-1 provider) <<<
 
 - Added `xnu/patches/0089-veux-bearssl-sha1.patch`. It enables the existing BearSSL SHA-1 implementation under `ARM64_BOARD_CONFIG_VEUX`, adds the VEUX BearSSL include/compile flags, and enables the SHA-1 source/codecs for VEUX. The pinned staging script already fetched BearSSL for VEUX; the missing pieces were the SWEET-only source guards and include flags.
-- Verified patch application against the VEUX XNU source in buildtree artifact `39589988254`, and `tools/validate-repo.py` passes. A fresh GitHub XNU build and QEMU rerun are pending; no phone boot or flash was performed.
+- Verified patch application against the VEUX XNU source in buildtree artifact `39589988254`; `tools/validate-repo.py` passed. GitHub XNU run `39628010706` succeeded with kernel SHA-256 `2031876e233799ab83c2c59d7449e9827d8b05a80089e0574d68e439d5fcf00f8` (`xnu/out-39628010706/kernel.development.veux`).
+- Re-ran QEMU using the new kernel and the same `virt` setup. The prior `_SHA1Init` fault is gone. The next fault is now a null crypto-table dereference in `_crypto_random_kmem_ctx_size+0xc` (`FAR=0x150`), followed by the debugger trap; `serial.txt` remains empty. VPS artifacts are `/root/veux-log-build/qemu-veux-sha1/{qemu.log,regs.txt,serial.txt,fb.png,result.json}`. No phone boot or flash was performed.
 
 ## >>> UPDATE 2026-10-21 (offline VEUX framebuffer source analysis) <<<
 
