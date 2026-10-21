@@ -1,0 +1,820 @@
+--- a/bsd/pthread/sweet_pthread_init.c
++++ b/bsd/pthread/sweet_pthread_init.c
+@@ -1,11 +1,11 @@
+ /* Built-in provider: Apple libpthread-514.100.2, paired with xnu-8796.141.3. */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include "sweet_pthread_compat.h"
+ #include "sweet_libpthread/kern/kern_init.c"
+ 
+ /* Keep the provider's full layout within the kernel's reserved storage. */
+ _Static_assert(sizeof(struct ksyn_waitq_element) == 56,
+-    "update SWEET ksyn storage in sys/pthread_internal.h");
++    "update SWEET/VEUX ksyn storage in sys/pthread_internal.h");
+ 
+ /* Restore the startup interface after compiling the provider's kext code. */
+ #define XNU_KERNEL_PRIVATE 1
+@@ -18,9 +18,9 @@
+ {
+     kern_return_t kr = sweet_pthread_start(NULL, NULL);
+     if (kr != KERN_SUCCESS || sweet_pthread_kern == NULL) {
+-        panic("SWEET: pthread provider registration failed: %d", kr);
++        panic("SWEET/VEUX: pthread provider registration failed: %d", kr);
+     }
+-    kprintf("SWEET pthread: libpthread-514.100.2 registered\n");
++    kprintf("SWEET/VEUX pthread: libpthread-514.100.2 registered\n");
+ }
+ STARTUP(EARLY_BOOT, STARTUP_RANK_SECOND, sweet_pthread_register);
+-#endif /* ARM64_BOARD_CONFIG_SWEET */
++#endif /* ARM64_BOARD_CONFIG_SWEET || ARM64_BOARD_CONFIG_VEUX */
+--- a/bsd/pthread/sweet_pthread_support.c
++++ b/bsd/pthread/sweet_pthread_support.c
+@@ -1,5 +1,5 @@
+ /* Built-in provider: Apple libpthread-514.100.2, paired with xnu-8796.141.3. */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include "sweet_pthread_compat.h"
+ #include "sweet_libpthread/kern/kern_support.c"
+-#endif /* ARM64_BOARD_CONFIG_SWEET */
++#endif /* ARM64_BOARD_CONFIG_SWEET || ARM64_BOARD_CONFIG_VEUX */
+--- a/bsd/pthread/sweet_pthread_synch.c
++++ b/bsd/pthread/sweet_pthread_synch.c
+@@ -1,5 +1,5 @@
+ /* Built-in provider: Apple libpthread-514.100.2, paired with xnu-8796.141.3. */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include "sweet_pthread_compat.h"
+ #include "sweet_libpthread/kern/kern_synch.c"
+-#endif /* ARM64_BOARD_CONFIG_SWEET */
++#endif /* ARM64_BOARD_CONFIG_SWEET || ARM64_BOARD_CONFIG_VEUX */
+--- a/bsd/sys/pthread_internal.h
++++ b/bsd/sys/pthread_internal.h
+@@ -34,7 +34,7 @@
+ 
+ struct ksyn_waitq_element {
+ #if __LP64__
+-	#if defined(ARM64_BOARD_CONFIG_SWEET)
++	#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 	/* libpthread-514.100.2 includes the trailing kwe_uth pointer. */
+ 	char opaque[56];
+ #else
+--- /dev/null
++++ b/iokit/Kernel/arm/VeuxCPU.cpp
+@@ -0,0 +1,172 @@
++/*
++ * Single-CPU bring-up for VEUX using XNU's legacy IOCPU interface.
++ * The paired pexpert/sleh changes configure the Qualcomm Group-1 timer and
++ * SGI1 path; delivery still needs confirmation from a phone boot log.
++ * Secondary CPU startup and system suspend require separate platform work.
++ */
++#include <pexpert/arm64/board_config.h>
++
++#if defined(VEUX)
++#include <IOKit/IOCPU.h>
++#include <IOKit/IOLib.h>
++#include <libkern/c++/OSData.h>
++#include <libkern/c++/OSNumber.h>
++#include <arm64/proc_reg.h>
++#include <machine/atomic.h>
++#include <kern/clock.h>
++#include <kern/processor.h>
++#include <mach/mach_time.h>
++
++class VeuxCPU : public IOCPU {
++	OSDeclareDefaultStructors(VeuxCPU);
++	const OSSymbol *cpuName = NULL;
++
++public:
++	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
++	void free(void) APPLE_KEXT_OVERRIDE;
++	void initCPU(bool boot) APPLE_KEXT_OVERRIDE;
++	void quiesceCPU(void) APPLE_KEXT_OVERRIDE;
++	kern_return_t startCPU(vm_offset_t start_paddr, vm_offset_t arg_paddr) APPLE_KEXT_OVERRIDE;
++	void haltCPU(void) APPLE_KEXT_OVERRIDE;
++	void signalCPU(IOCPU *target) APPLE_KEXT_OVERRIDE;
++	const OSSymbol *getCPUName(void) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(VeuxCPU, IOCPU);
++
++bool
++VeuxCPU::start(IOService *provider)
++{
++	const ml_topology_info_t *topology = ml_get_topology_info();
++	const ml_topology_cpu_t *cpu = topology->boot_cpu;
++	OSNumber *logical = OSDynamicCast(OSNumber, provider->getProperty("logical-cpu-id"));
++	OSData *reg = OSDynamicCast(OSData, provider->getProperty("reg"));
++
++	if (logical == NULL || reg == NULL || reg->getLength() != sizeof(uint32_t) ||
++	    logical->unsigned32BitValue() != cpu->cpu_id ||
++	    *(const uint32_t *)reg->getBytesNoCopy() != cpu->phys_id) {
++		return false;
++	}
++	if (topology->num_cpus != 1) {
++		panic("VEUX CPU: only single-CPU bring-up is supported");
++	}
++	if (!IOCPU::start(provider)) {
++		return false;
++	}
++	cpuName = OSSymbol::withCStringNoCopy("Kryo 660");
++	if (cpuName == NULL) {
++		return false;
++	}
++	setCPUNumber(cpu->cpu_id);
++
++	ml_processor_info_t info = {};
++	info.cpu_id = reinterpret_cast<cpu_id_t>(this);
++	info.phys_id = cpu->phys_id;
++	info.log_id = cpu->cpu_id;
++	info.cluster_id = cpu->cluster_id;
++	info.cluster_type = cpu->cluster_type;
++	info.l2_cache_id = cpu->l2_cache_id;
++	info.l2_cache_size = cpu->l2_cache_size;
++	info.l3_cache_id = cpu->l3_cache_id;
++	info.l3_cache_size = cpu->l3_cache_size;
++	perfmon_interrupt_handler_func pmi_handler = NULL;
++	kern_return_t result = ml_processor_register(&info, &machProcessor, &ipi_handler, &pmi_handler);
++	if (result != KERN_SUCCESS) {
++		panic("VEUX CPU: ml_processor_register failed: %d", result);
++	}
++	if (pmi_handler != NULL) {
++		panic("VEUX CPU: PMI routing is not implemented");
++	}
++
++	/* Re-enter the boot CPU through cpu_machine_init -> PE_cpu_machine_init. */
++	result = processor_start(machProcessor);
++	if (result != KERN_SUCCESS || getCPUState() != kIOCPUStateRunning) {
++		panic("VEUX CPU: processor_start failed: %d", result);
++	}
++	ml_cpu_init_completed();
++	cpusRunning();
++	registerService();
++	IOService::publishResource(gIOAllCPUInitializedKey, kOSBooleanTrue);
++
++	/* Announce completion only after registration, startup and SGI validation. */
++	ml_set_max_cpus(topology->max_cpu_id + 1);
++	IOLog("VEUX CPU: boot CPU %u registered, SGI1 verified, initialization complete\n",
++	    getCPUNumber());
++	return true;
++}
++
++void
++VeuxCPU::free(void)
++{
++	OSSafeReleaseNULL(cpuName);
++	IOCPU::free();
++}
++
++void
++VeuxCPU::initCPU(bool boot)
++{
++	if (!boot) {
++		panic("VEUX CPU: resume is not implemented");
++	}
++	assert(cpu_number() == (int)getCPUNumber());
++	assert(ml_get_interrupts_enabled());
++	ml_broadcast_cpu_event(CPU_BOOTED, getCPUNumber());
++
++	/* A real GIC interrupt clears SIGPdisabled in cpu_signal_handler. */
++	uint64_t deadline;
++	nanoseconds_to_deadline(NSEC_PER_SEC, &deadline);
++	signalCPU(this);
++	while (!ml_cpu_signal_is_enabled()) {
++		if (mach_absolute_time() > deadline) {
++			panic("VEUX CPU: SGI1 self-test timed out");
++		}
++		__asm__ volatile("yield");
++	}
++	setCPUState(kIOCPUStateRunning);
++}
++
++void
++VeuxCPU::signalCPU(IOCPU *target)
++{
++	/* Only the boot CPU is registered by this driver. */
++	if (target != this || cpu_number() != (int)getCPUNumber()) {
++		panic("VEUX CPU: secondary CPU signalling is not implemented");
++	}
++	uint64_t mpidr = __builtin_arm_rsr64("MPIDR_EL1");
++	unsigned int aff0 = mpidr & 0xff;
++	if (aff0 >= 16) {
++		panic("VEUX CPU: SGI target requires unsupported range selector");
++	}
++	uint64_t sgi = (((mpidr >> 32) & 0xff) << 48) |
++	    (((mpidr >> 16) & 0xff) << 32) |
++	    (((mpidr >> 8) & 0xff) << 16) |
++	    ((uint64_t)VEUX_IPI_SGI << 24) | (1ULL << aff0);
++	__builtin_arm_dsb(DSB_ISHST);
++	__builtin_arm_wsr64("ICC_SGI1R_EL1", sgi);
++	__builtin_arm_isb(ISB_SY);
++}
++
++kern_return_t
++VeuxCPU::startCPU(vm_offset_t start_paddr __unused, vm_offset_t arg_paddr __unused)
++{
++	return KERN_NOT_SUPPORTED;
++}
++
++void
++VeuxCPU::quiesceCPU(void)
++{
++	panic("VEUX CPU: CPU quiesce is not implemented");
++}
++
++void
++VeuxCPU::haltCPU(void)
++{
++	panic("VEUX CPU: CPU halt/suspend is not implemented");
++}
++
++const OSSymbol *
++VeuxCPU::getCPUName(void)
++{
++	return cpuName;
++}
++#endif /* VEUX */
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -39,6 +39,12 @@
+     "     'IOClass'         = VeuxPlatformExpert;"
+     "     'IOProviderClass' = IOPlatformExpertDevice;"
+     "     'IONameMatch'     = 'xiaomi,veux';"
++    "     'IOProbeScore'    = 10000:32;"
++    "   },"
++    "   {"
++    "     'IOClass'         = VeuxCPU;"
++    "     'IOProviderClass' = IOPlatformDevice;"
++    "     'IONameMatch'     = 'qcom,kryo';"
+     "     'IOProbeScore'    = 10000:32;"
+     "   },"
+ #endif
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -8,6 +8,7 @@
+ 
+ # VEUX device-tree platform expert (empty translation unit on other boards)
+ iokit/Kernel/arm/VeuxPlatformExpert.cpp                         optional iokitcpp
++iokit/Kernel/arm/VeuxCPU.cpp                                    optional iokitcpp
+ 
+ # SWEET device-tree platform (empty translation unit on other boards)
+ iokit/Kernel/arm/SweetPlatformExpert.cpp                         optional iokitcpp
+--- a/libkern/crypto/corecrypto_sha2.c
++++ b/libkern/crypto/corecrypto_sha2.c
+@@ -34,12 +34,13 @@
+ 
+ #if defined(CRYPTO_SHA2)
+ 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ /*
+- * SWEET has no corecrypto kext, so g_crypto_funcs stays NULL. SHA-256 uses
+- * XNU's built-in implementation directly, as the SWEET PRNG does; this also
+- * serves code-signing page hashes. SHA-384/512 use BearSSL's portable
+- * implementation (libkern/crypto/sweet_sha2big.c), its context stored in
++ * SWEET and VEUX have no corecrypto kext at this stage, so g_crypto_funcs
++ * stays NULL. SHA-256 uses XNU's built-in implementation directly, as their
++ * PRNG paths do; this also serves code-signing page hashes. SHA-384/512 use
++ * BearSSL's portable implementation (libkern/crypto/sweet_sha2big.c), with
++ * its context stored in
+  * the caller's SHA384_CTX/SHA512_CTX.
+  */
+ #include <corecrypto/ccsha2.h>
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -42,6 +42,7 @@
+ #include <arm64/proc_reg.h>
+ #include <arm64/lowglobals.h>
+ #include <arm64/sweet_early.h>
++#include <pexpert/arm/protos.h>
+ #include <arm/cpu_data_internal.h>
+ #include <arm/misc_protos.h>
+ #include <pexpert/arm64/boot.h>
+@@ -2295,6 +2296,12 @@
+ #endif
+ 	sweet_early_mark(12, "calling pmap_bootstrap");
+ 	pmap_bootstrap(dynamic_memory_begin);
++#if defined(VEUX)
++	/* pmap_bootstrap establishes the early VA allocator used by io_map(). */
++	if (veux_pmsg_init()) {
++		veux_early_flush();
++	}
++#endif
+ 	sweet_early_mark(13, "pmap_bootstrap done");
+ 
+ 	disable_preemption();
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -1856,10 +1856,10 @@
+ #endif
+ 
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ 	/*
+-	 * sweet: TrustZone owns GIC Group 0, so the timer and IPIs that other
+-	 * ARM64 targets take as FIQs arrive here as Group 1 IRQs.
++	 * On SWEET and VEUX, TrustZone owns GIC Group 0, so the timer and IPIs
++	 * that other ARM64 targets take as FIQs arrive here as Group 1 IRQs.
+ 	 */
+ 	uint64_t iar = __builtin_arm_rsr64("ICC_IAR1_EL1");
+ 	uint32_t intid = (uint32_t)(iar & 0xFFFFFF);
+@@ -1867,7 +1867,7 @@
+ 	if (intid >= 1020 && intid <= 1023) {
+ 		return; /* spurious */
+ 	}
+-	if (intid == sweet_vtimer_intid) {
++	if (intid == arm64_vtimer_intid) {
+ 		sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_TIMER);
+ 		cdp->cpu_decrementer = -1; /* Large */
+ 		INTERRUPT_MASKED_DEBUG_START(rtclock_intr, DBG_INTR_TYPE_TIMER);
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -837,11 +837,11 @@
+ 	MSR_SCTLR_EL1_X0
+ 	isb		sy
+ 
+-#if !VMAPPLE && !defined(SWEET)
++#if !VMAPPLE && !defined(SWEET) && !defined(VEUX)
+ 	MOV64   x1, SCTLR_EL1_DEFAULT
+ 	cmp		x0, x1
+ 	bne		.
+-#endif /* !VMAPPLE && !SWEET */
++#endif /* !VMAPPLE && !SWEET && !VEUX */
+ 
+ #if (!CONFIG_KERNEL_INTEGRITY || (CONFIG_KERNEL_INTEGRITY && !defined(KERNEL_INTEGRITY_WT)))
+ 	/* Watchtower
+--- a/osfmk/arm64/sweet_early.h
++++ b/osfmk/arm64/sweet_early.h
+@@ -1,4 +1,4 @@
+-/* Screen diagnostics through bootstrap TTBR0 and the final kernel TTBR1. */
++/* SWEET screen diagnostics and VEUX buffered-to-pmsg early diagnostics. */
+ #ifndef _ARM64_SWEET_EARLY_H_
+ #define _ARM64_SWEET_EARLY_H_
+ 
+@@ -12,6 +12,11 @@
+ void sweet_early_panic(const char *fmt, va_list *args);
+ void sweet_early_relocate(uint64_t base);
+ void sweet_early_disable(void);
++#elif defined(VEUX)
++void sweet_early_mark(unsigned int stage, const char *label);
++void sweet_early_panic(const char *fmt, va_list *args);
++void veux_early_flush(void);
++static inline void sweet_early_disable(void) {}
+ #else
+ static inline void sweet_early_mark(unsigned int stage, const char *label)
+ {
+--- /dev/null
++++ b/osfmk/arm64/veux_early.c
+@@ -0,0 +1,90 @@
++/* Early VEUX milestones go to the reserved ramoops pmsg ring, never scanout. */
++#include <arm64/sweet_early.h>
++
++#if defined(VEUX)
++#include <stdint.h>
++#include <kern/misc_protos.h>
++#include <pexpert/arm/protos.h>
++
++#define VEUX_EARLY_PENDING_SIZE 2048u
++static char veux_early_pending[VEUX_EARLY_PENDING_SIZE];
++static unsigned int veux_early_pending_size;
++static bool veux_early_ready;
++static bool veux_early_overflow;
++static bool veux_early_panicking;
++
++static void
++veux_early_putc(char c)
++{
++	if (veux_early_ready) {
++		veux_pmsg_putc(c);
++		return;
++	}
++	if (veux_early_pending_size < sizeof(veux_early_pending)) {
++		veux_early_pending[veux_early_pending_size++] = c;
++	} else {
++		veux_early_overflow = true;
++	}
++}
++
++static void
++veux_early_string(const char *s)
++{
++	while (*s != '\0') {
++		veux_early_putc(*s++);
++	}
++}
++
++static void
++veux_early_uint(unsigned int value)
++{
++	char digits[10];
++	unsigned int count = 0;
++	do {
++		digits[count++] = (char)('0' + value % 10);
++		value /= 10;
++	} while (value != 0 && count < sizeof(digits));
++	while (count != 0) {
++		veux_early_putc(digits[--count]);
++	}
++}
++
++void
++sweet_early_mark(unsigned int stage, const char *label)
++{
++	veux_early_string("VEUX EARLY ");
++	veux_early_uint(stage);
++	veux_early_string(": ");
++	veux_early_string(label);
++	veux_early_putc('\n');
++}
++
++void
++sweet_early_panic(const char *fmt, va_list *args)
++{
++	if (veux_early_panicking) {
++		return;
++	}
++	veux_early_panicking = true;
++	veux_early_string("\nVEUX EARLY PANIC: ");
++	va_list copy;
++	va_copy(copy, *args);
++	_doprnt(fmt, &copy, veux_early_putc, 16);
++	va_end(copy);
++	veux_early_putc('\n');
++}
++
++void
++veux_early_flush(void)
++{
++	veux_early_ready = true;
++	for (unsigned int i = 0; i < veux_early_pending_size; i++) {
++		veux_pmsg_putc(veux_early_pending[i]);
++	}
++	veux_early_pending_size = 0;
++	if (veux_early_overflow) {
++		veux_early_string("VEUX EARLY: pending log truncated\n");
++		veux_early_overflow = false;
++	}
++}
++#endif /* VEUX */
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -41,6 +41,7 @@
+ osfmk/arm/arm_init.c	optional config_pmap_ppl
+ osfmk/arm64/arm_vm_init.c	optional config_pmap_ppl
+ osfmk/arm64/sweet_early.c	standard
++osfmk/arm64/veux_early.c	standard
+ osfmk/arm64/arm64_hypercall.c	standard
+ osfmk/arm/io_map.c		standard
+ osfmk/arm64/loose_ends.c	standard
+--- a/osfmk/kern/debug.c
++++ b/osfmk/kern/debug.c
+@@ -1072,7 +1072,7 @@
+ {
+ #pragma clang diagnostic pop
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ 	/* No CPU/thread/debugger state is required for this first panic copy. */
+ 	sweet_early_panic(panic_format_str, panic_args);
+ #endif
+--- a/osfmk/prng/prng_random.c
++++ b/osfmk/prng/prng_random.c
+@@ -145,10 +145,10 @@
+ 		     .strictFIPS = 0,
+ 	     }};
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ /*
+- * The corecrypto kext normally installs the kernel PRNG. SWEET has no such
+- * kext: use the built-in HMAC-SHA256 DRBG, just as early_random does. A
++ * The corecrypto kext normally installs the kernel PRNG. SWEET and VEUX
++ * have no such kext: use the built-in HMAC-SHA256 DRBG, just as early_random does. A
+  * single mutex serializes generation and reseeding across all CPUs. This
+  * favors a small, auditable bring-up implementation over per-CPU scaling.
+  * This registers only the PRNG, not the unrelated g_crypto_funcs table.
+@@ -277,7 +277,7 @@
+ 	kprintf("SWEET PRNG: HMAC-SHA256 registered\n");
+ }
+ STARTUP(EARLY_BOOT, STARTUP_RANK_FIRST, sweet_prng_startup);
+-#endif /* SWEET */
++#endif /* SWEET || VEUX */
+ 
+ static void read_erandom(void * buf, size_t nbytes);
+ 
+@@ -473,7 +473,7 @@
+ write_random(void * buffer, u_int numbytes)
+ {
+ 	uint8_t seed[SHA256_DIGEST_LENGTH];
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ 	/* Hash without depending on the absent corecrypto kext's dispatch table. */
+ 	const struct ccdigest_info *di = &ccsha256_ltc_di;
+ 	ccdigest_di_decl(di, ctx);
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -2439,9 +2439,9 @@
+ 	}
+ }
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ /*
+- * No corecrypto kext is loaded on SWEET yet. The kmem RNG contract permits
++ * No corecrypto kext is loaded on SWEET or VEUX yet. The kmem RNG contract permits
+  * a non-cryptographic generator and requires lock-free generation. Keep
+  * allocator RNG state per CPU/sizeclass; seed it from XNU's built-in early
+  * HMAC-SHA256 DRBG during single-CPU initialization.
+@@ -2475,7 +2475,7 @@
+ 	} while (value < threshold);
+ 	return value % bound;
+ }
+-#endif /* SWEET */
++#endif /* SWEET || VEUX */
+ 
+ /*
+  * This is done during EARLY_BOOT as it needs the corecrypto module to be
+@@ -2485,7 +2485,7 @@
+ static void
+ kmem_crypto_init(void)
+ {
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ 	vm_size_t ctx_size = sizeof(struct sweet_kmem_rng);
+ #else
+ 	vm_size_t ctx_size = crypto_random_kmem_ctx_size();
+@@ -2496,7 +2496,7 @@
+ 
+ 		ks->ks_rng_ctx = zalloc_percpu_permanent(ctx_size, ZALIGN_PTR);
+ 		zpercpu_foreach(ctx, ks->ks_rng_ctx) {
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ 			((struct sweet_kmem_rng *)ctx)->state = early_random();
+ #else
+ 			crypto_random_kmem_init(ctx);
+@@ -2765,7 +2765,7 @@
+ 		 */
+ 		slot_idx = kmem_get_random16((uint16_t)num_slots - 1);
+ 	} else {
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ 		slot_idx = sweet_kmem_uniform(zpercpu_get(sizeclass.ks_rng_ctx), num_slots);
+ #else
+ 		crypto_random_uniform(zpercpu_get(sizeclass.ks_rng_ctx), num_slots,
+--- a/pexpert/arm/pe_fiq.c
++++ b/pexpert/arm/pe_fiq.c
+@@ -17,9 +17,9 @@
+ #define GICR_WAKE_TIMEOUT_NS (1000000000ULL) // timeout for redistributor wakeup (default 1s)
+ MACHINE_TIMEOUT(gicr_wake_timeout_ns, "gicr-wake-timeout", GICR_WAKE_TIMEOUT_NS, MACHINE_TIMEOUT_UNIT_NSEC, NULL);
+ 
+-#if defined(SWEET)
+-/* Phone default; QEMU virt wires the architected virtual timer to INTID 27. */
+-SECURITY_READ_ONLY_LATE(uint32_t) sweet_vtimer_intid = SWEET_VTIMER_INTID;
++#if defined(SWEET) || defined(VEUX)
++/* VEUX DT supplies the timer PPI; Android IRQ counters support Group 1. */
++SECURITY_READ_ONLY_LATE(uint32_t) arm64_vtimer_intid = ARM64_GIC_VTIMER_INTID;
+ #endif
+ 
+ static vm_offset_t gicd_base;
+@@ -102,7 +102,7 @@
+ 			panic("%s: incorrect reg property size in GIC DT node; expecting 32 bytes but got %u bytes", __func__, prop_size);
+ 		}
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ 		/* Read only on the boot CPU, before the GIC and RO-late lockdown. */
+ 		void const *timer_prop;
+ 		unsigned int timer_size;
+@@ -114,9 +114,9 @@
+ 			if (intid < 16 || intid >= 32) {
+ 				panic("%s: virtual timer INTID %u is not a PPI", __func__, intid);
+ 			}
+-			sweet_vtimer_intid = intid;
+-		}
+-		kprintf("SWEET GIC: virtual timer INTID %u\n", sweet_vtimer_intid);
++			arm64_vtimer_intid = intid;
++		}
++		kprintf("GIC: virtual timer INTID %u\n", arm64_vtimer_intid);
+ #endif
+ 
+ 		vm_offset_t soc_base_phys = pe_arm_get_soc_base_phys();
+@@ -164,10 +164,10 @@
+ 		}
+ 	}
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ 	/*
+-	 * Real hardware with two security states: Group 0 is TrustZone's and
+-	 * non-secure writes to it are ignored. Everything we own is Group 1 NS
++	 * Qualcomm GIC security state: Group 0 is TrustZone's and
++	 * non-secure writes to it are ignored. Everything XNU owns is Group 1 NS
+ 	 * and arrives as an IRQ (see sleh_irq). GICR_IGROUPR0 reads as zero
+ 	 * from the non-secure side even after this write; delivery still works.
+ 	 */
+@@ -175,14 +175,14 @@
+ 	for (unsigned int i = 0; i < 32; i += 4) {
+ 		gicr_write32(GICR_IPRIORITYR0 + i, 0xA0A0A0A0);
+ 	}
+-	gicr_write32(GICR_ISENABLER0, (1U << sweet_vtimer_intid) | (1U << SWEET_IPI_SGI));
++	gicr_write32(GICR_ISENABLER0, (1U << arm64_vtimer_intid) | (1U << ARM64_GIC_IPI_SGI));
+ #else
+ 	// Configure timers and legacy FIQ to be group 0
+ 	gicr_write32(GICR_IGROUPR0, 0x81FFFFFF);
+ 
+ 	// Enable PPI 27
+ 	gicr_write32(GICR_ISENABLER0, (1 << 27));
+-#endif /* SWEET */
++#endif /* SWEET || VEUX */
+ 
+ 	// Enable system register access
+ 	uint64_t icc_sre = __builtin_arm_rsr64("ICC_SRE_EL1");
+@@ -190,12 +190,12 @@
+ 	__builtin_arm_wsr64("ICC_SRE_EL1", icc_sre);
+ 	__builtin_arm_isb(ISB_SY);
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ 	__builtin_arm_wsr64("ICC_BPR1_EL1", 0);
+ #else
+ 	// Set priority masks and binary point for group 0
+ 	__builtin_arm_wsr64("ICC_BPR0_EL1", 0);
+-#endif /* SWEET */
++#endif /* SWEET || VEUX */
+ 	__builtin_arm_wsr64("ICC_PMR_EL1", 0xFF);
+ 
+ 	// Set EOI mode of this processor
+@@ -203,7 +203,7 @@
+ 	icc_ctlr &= ~ICC_CTLR_EOIMODE;
+ 	__builtin_arm_wsr64("ICC_CTLR_EL1", icc_ctlr);
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(VEUX)
+ 	// ABL leaves only ARE_NS set; Linux writes ARE_NS | EnableGrp1A | EnableGrp1
+ 	uint32_t gicd_ctlr = gicd_read32(GICD_CTLR);
+ 	gicd_ctlr |= GICD_CTLR_ARE_NS | GICD_CTLR_ENABLEGRP1A | GICD_CTLR_ENABLEGRP1;
+@@ -220,7 +220,7 @@
+ 	gicd_write32(GICD_CTLR, gicd_ctlr);
+ 	__builtin_arm_wsr64("ICC_IGRPEN0_EL1", 1);
+ 	__builtin_arm_isb(ISB_SY);
+-#endif /* SWEET */
++#endif /* SWEET || VEUX */
+ }
+ #else
+ void
+--- a/pexpert/arm/pe_kprintf.c
++++ b/pexpert/arm/pe_kprintf.c
+@@ -13,6 +13,7 @@
+ #include <os/log_private.h>
+ #include <libkern/section_keywords.h>
+ #include <pexpert/arm/protos.h>
++#include <arm64/sweet_early.h>
+ 
+ /* Globals */
+ typedef void (*PE_kputc_t)(char);
+@@ -30,6 +31,9 @@
+ static SIMPLE_LOCK_DECLARE(kprintf_lock, 0);
+ 
+ static void serial_putc_crlf(char c);
++#if defined(VEUX)
++static void veux_discard_kprintf(char c);
++#endif
+ 
+ __startup_func
+ static void
+@@ -55,20 +59,38 @@
+ // Do this early, so other code can depend on whether kprintf is enabled.
+ STARTUP(TUNABLES, STARTUP_RANK_LAST, PE_init_kprintf_config);
+ 
++#if defined(VEUX)
++static void
++veux_discard_kprintf(char c)
++{
++	(void)c;
++}
++#endif
++
+ __startup_func
+ static void
+ PE_init_kprintf(void)
+ {
+ 	bool pmsg_ready = veux_pmsg_init();
++#if defined(VEUX)
++	if (pmsg_ready) {
++		veux_early_flush();
++	}
++#endif
+ 	if (serial_init() || pmsg_ready) {
+ 		PE_kputc = serial_putc_crlf;
+ 	} else {
++#if defined(VEUX)
++		/* Never draw on Qualcomm scanout until its handoff format is known. */
++		PE_kputc = veux_discard_kprintf;
++#else
+ 		/**
+ 		 * If serial failed to initialize then fall back to using the console,
+ 		 * and assume the console is using the video console (because clearly
+ 		 * serial doesn't work).
+ 		 */
+ 		PE_kputc = console_write_unbuffered;
++#endif
+ 	}
+ }
+ STARTUP(KPRINTF, STARTUP_RANK_FIRST, PE_init_kprintf);
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -728,14 +728,18 @@
+ static uint32_t veux_pmsg_capacity;
+ static uint32_t veux_pmsg_start;
+ static uint32_t veux_pmsg_size;
+-
+-#define VEUX_PMSG_SIG       0x43474244u /* Linux ramoops_pmsg passes signature 0 */
++static bool veux_pmsg_initialized;
++
++#define VEUX_PMSG_SIG       0x43474244u /* persistent_ram "DBGC" signature */
+ #define VEUX_PMSG_ZONE_SIZE 0x00100000u
+ #define VEUX_PMSG_HDR_SIZE  12u
+ 
+ bool
+ veux_pmsg_init(void)
+ {
++	if (veux_pmsg_initialized) {
++		return true;
++	}
+ 	DTEntry entry;
+ 	uint64_t const *reg;
+ 	uint32_t const *pmsg_size;
+@@ -745,7 +749,7 @@
+ 
+ 	if (SecureDTFindEntry("name", "veux-ramoops", &entry) != kSuccess ||
+ 	    SecureDTGetProperty(entry, "reg", (void const **)&reg, &size) != kSuccess || size < 16 ||
+-	    SecureDTGetProperty(entry, "pmsg-size", (void const **)&pmsg_size, &size) != kSuccess ||
++	    SecureDTGetProperty(entry, "pmsg-size", (void const **)&pmsg_size, &size) != kSuccess || size != sizeof(*pmsg_size) ||
+ 	    reg[0] != 0xd0000000ULL || reg[1] != 0x00200000ULL ||
+ 	    *pmsg_size != VEUX_PMSG_ZONE_SIZE || *pmsg_size <= VEUX_PMSG_HDR_SIZE) {
+ 		return false;
+@@ -771,6 +775,7 @@
+ 	}
+ 	veux_pmsg_start = veux_pmsg_header[1];
+ 	veux_pmsg_size = veux_pmsg_header[2];
++	veux_pmsg_initialized = true;
+ 	CleanPoC_DcacheRegion_Force((vm_offset_t)veux_pmsg_header, VEUX_PMSG_HDR_SIZE);
+ 	static const char start[] = "\n--- XNU VEUX ramoops log start ---\n";
+ 	for (unsigned int i = 0; i < sizeof(start) - 1; i++) {
+--- a/pexpert/pexpert/arm/protos.h
++++ b/pexpert/pexpert/arm/protos.h
+@@ -38,8 +38,8 @@
+ int uart_getc(void);
+ 
+ void pe_init_fiq(void);
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
+-extern uint32_t sweet_vtimer_intid;
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
++extern uint32_t arm64_vtimer_intid;
+ #endif
+ 
+ #ifdef PRIVATE
+--- a/pexpert/pexpert/arm64/SWEET.h
++++ b/pexpert/pexpert/arm64/SWEET.h
+@@ -49,6 +49,8 @@
+  */
+ #define SWEET_VTIMER_INTID        19
+ #define SWEET_IPI_SGI             1       // SGI used for cross-CPU signals
++#define ARM64_GIC_VTIMER_INTID      SWEET_VTIMER_INTID
++#define ARM64_GIC_IPI_SGI           SWEET_IPI_SGI
+ 
+ #define GIC_SPURIOUS_IRQ          1023    // IRQ no. for GIC spurious interrupt
+ 
+--- a/pexpert/pexpert/arm64/VEUX.h
++++ b/pexpert/pexpert/arm64/VEUX.h
+@@ -32,18 +32,29 @@
+  */
+ #define GICD_CTLR                 0x0
+ #define GICD_CTLR_ENABLEGRP0      0x1
++#define GICD_CTLR_ENABLEGRP1      0x1
++#define GICD_CTLR_ENABLEGRP1A     0x2
++#define GICD_CTLR_ARE_NS          0x10
++#define GICD_CTLR_RWP             0x80000000
+ #define GICR_TYPER                0x08
+ #define GICR_WAKER                0x14
+ #define GICR_IGROUPR0             0x10080
+ #define GICR_ISENABLER0           0x10100
++#define GICR_IPRIORITYR0          0x10400
+ #define GICR_TYPER_AFFINITY_VALUE_SHIFT 32
+ #define GICR_TYPER_LAST           0x10
+ #define GICR_WAKER_PROCESSORSLEEP 0x2
+ #define GICR_WAKER_CHILDRENASLEEP 0x4
+-#define ICC_CTLR_EOIMODE          0x1
++#define ICC_CTLR_EOIMODE          0x2
+ #define ICC_SRE_SRE               0x1
+ 
+ /* Physical register bases verified in the selected VEUX FDT. */
++/* VEUX DT and Android IRQ counters identify virtual timer INTID 19. */
++#define VEUX_VTIMER_INTID         19
++#define VEUX_IPI_SGI              1
++#define ARM64_GIC_VTIMER_INTID    VEUX_VTIMER_INTID
++#define ARM64_GIC_IPI_SGI         VEUX_IPI_SGI
++
+ #define VEUX_GICD_BASE            0x0f200000ULL
+ #define VEUX_GICR_BASE            0x0f240000ULL
+ #define VEUX_UFS_BASE             0x04804000ULL

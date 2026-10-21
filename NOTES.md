@@ -1,3 +1,12 @@
+## >>> UPDATE 2026-10-21 (VEUX phone bring-up patch 0090) <<<
+
+- Added xnu/patches/0090-veux-phone-bringup.patch, derived from the saved VEUX XNU buildtree and the existing SWEET single-core driver/IRQ implementation. It registers a VEUX IOCPU for qcom,kryo, limited to cpus=1, with secondary CPU start and suspend still unsupported. The CPU-node reg width and MPIDRs match tools/mkadt.py and the selected board DTB.
+- Extends the Qualcomm Group-1 timer/IRQ path to VEUX, using virtual timer INTID 19 from both the board-matched DTB and Android's active GICv3 IRQ counters. This supports the hypothesis that VEUX routes non-secure timer/IPI interrupts through Group 1; XNU delivery is not yet demonstrated on the phone.
+- Adds buffered early boot milestones and panic text, flushed to the verified 1 MiB pmsg region inside the 2 MiB ramoops reservation after pmap_bootstrap makes ml_io_map_wcomb() usable. Failures before that mapping succeeds remain unpersisted. VEUX kprintf falls back to a discard sink if neither pmsg nor a serial device is available, so it does not draw on the unverified display.
+- Enables the null-corecrypto startup fallbacks already used by SWEET for VEUX, including kmem RNG, the built-in PRNG and SHA-256. Also enables the already-staged libpthread provider and its required 56-byte ksyn_waitq_element storage for VEUX. These cover observed/identified shared bring-up gaps, not board-specific hardware support.
+- Existing patches 0085-0088 already provide the VEUX device-tree expert, read-only UFS probe, pmsg log mapping, and UFS persistent-log work. The UFS path remains unvalidated on XNU and has no write enablement in this change. No framebuffer, touch, power, USB, or PSCI SMP code was enabled.
+- This patch is source-only at this point: no kernel build, phone boot, or flash was performed, and patch-queue application has not been checked. Next: inspect the patch, run the repo's XNU build workflow after it is committed/pushed when requested, then use ramoops pmsg from recovery to see whether execution reaches the CPU/IRQ milestones.
+
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
 ## >>> UPDATE 2026-10-21 (VEUX XNU QEMU probe) <<<
