@@ -676,3 +676,10 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - Re-ran that kernel on generic QEMU 8.2.2 `virt` / Cortex-A76, one CPU, no root volume, for 45 seconds. The pmsg header became `DBGC` and the persisted log reached VEUX early stages 1–20, through `arm_vm_init returned` and `kprintf startup complete`. The old missing-PTE panic is gone. The next panic is `image4 interface not available @kern_trustcache.c:268`; captured outputs are in `shim/out/qemu-veux-39646338761/vps-out/`.
 - This trust-cache path is a known SWEET-only bring-up fallback: patch 0015 marks caches unavailable when Image4/AMFI are absent, but its guards do not include VEUX. Added patch 0092 to enable that same unavailable-service behavior for VEUX without granting trust. CI run `39648190769` is pending. Later AMFI/entitlement behavior remains a separate question.
 - This QEMU run confirms early XNU execution and the pmsg logger under the generic virtual machine. It does not validate Qualcomm hardware, UFS, display or physical-phone boot. No phone boot or flash was performed.
+
+## >>> UPDATE 2026-10-21 (VEUX trust-cache fallback; AES provider next) <<<
+
+- CI run `39648190769` succeeded after patch 0092 broadened the unavailable trust-cache guards to VEUX. Kernel SHA-256: `6ad3773796cb32cd13e6b4c5ebf42afdf108c4785e0c610321bb339d63e0a428`.
+- QEMU 8.2.2 `virt` / Cortex-A76, one CPU and no root volume passed the previous `image4 interface not available` panic. The persisted VEUX log then reported a data abort at `FAR=0x78`; symbol resolution identifies `_aes_encrypt_key128`, whose legacy wrapper still read null `g_crypto_funcs` (`x8 == 0`). Saved run output is in `shim/out/qemu-veux-39648190769/vps-out/`.
+- Added patch 0093 to enable SWEET's already-staged BearSSL portable AES CBC/ECB implementation for VEUX, including the source guards and Makefile flags. It does not populate the broader corecrypto function table. Patch 0093 applies cleanly to the saved source tree; CI/QEMU are pending.
+- No phone boot or flash was performed.
