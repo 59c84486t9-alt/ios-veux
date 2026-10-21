@@ -1,0 +1,181 @@
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -49,6 +49,10 @@
+ extern void thread_deallocate(thread_t);
+ extern int hz;
+ static void sweet_log_start(void);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++static void veux_log_start(void);
++void veux_log_append(const char *c, int size);
++#endif
+ extern void sweet_sample_start(void);
+ extern void sweet_keys_init(void);
+ extern void sweet_touch_init(void);
+@@ -112,6 +116,10 @@
+ 	int bmajor, cmajor;
+ 	dev_t bdev;
+ 	bool ready;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	bool log_write_enabled;
++	uint64_t log_first_block, log_nblocks;
++#endif
+ } su;
+ 
+ static LCK_GRP_DECLARE(sweet_ufs_grp, "sweet_ufs");
+@@ -278,9 +286,16 @@
+ static int
+ ufs_write_blocks(uint64_t lba, uint32_t count)
+ {
+-	if (!su.writable || !su.nblocks || count == 0 || count > BOUNCE_SIZE / UFS_BLOCK ||
+-	    lba < su.first_block || lba - su.first_block >= su.nblocks ||
+-	    count > su.nblocks - (lba - su.first_block) || lba + count - 1 > UINT32_MAX) {
++	bool log_range = false;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	log_range = su.log_write_enabled && lba >= su.log_first_block &&
++	    lba - su.log_first_block < su.log_nblocks &&
++	    count <= su.log_nblocks - (lba - su.log_first_block);
++#endif
++	if ((!su.writable && !log_range) || !su.nblocks || count == 0 ||
++	    count > BOUNCE_SIZE / UFS_BLOCK || lba < su.first_block ||
++	    lba - su.first_block >= su.nblocks || count > su.nblocks - (lba - su.first_block) ||
++	    lba + count - 1 > UINT32_MAX) {
+ 		printf("SWEET UFS: refusing write of %u blocks at 0x%llx\n", count, lba);
+ 		return EPERM;
+ 	}
+@@ -664,6 +679,9 @@
+ 	printf("SWEET UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, %s, DMA at 0x%llx\n",
+ 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20,
+ 	    su.writable ? "read-write" : "read-only", su.dma_pa);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_log_start();
++#endif
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	/* SWEET-only writers, samplers, and peripheral probes. */
+ 	sweet_log_start();
+@@ -816,6 +834,106 @@
+ 		thread_deallocate(thread);
+ 	}
+ }
++
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++/*
++ * VEUX early console ring. The ring is filled from the first console call,
++ * then flushed only to a fixed 4 MiB + header window at the end of userdata.
++ * Android's encrypted F2FS cannot expose this as a live file; recovery can
++ * read the bounded raw window and tools/veux-log.py turns it into a host file.
++ */
++#define VEUX_LOG_SIZE          (4u << 20)
++#define VEUX_LOG_BLOCKS        (1 + VEUX_LOG_SIZE / UFS_BLOCK)
++
++static char veux_log_ring[VEUX_LOG_SIZE];
++static uint64_t _Atomic veux_log_total;
++static int veux_log_chan;
++static bool veux_log_started;
++
++struct veux_log_header {
++	char magic[8];
++	uint32_t version, size;
++	uint64_t total, seq;
++};
++
++void
++veux_log_append(const char *c, int size)
++{
++	if (size <= 0) {
++		return;
++	}
++	uint64_t at = os_atomic_add_orig(&veux_log_total, (uint64_t)size, relaxed);
++	for (int i = 0; i < size; i++) {
++		veux_log_ring[(at + (uint64_t)i) % VEUX_LOG_SIZE] = c[i];
++	}
++}
++
++static void
++veux_log_thread(__unused void *arg, __unused wait_result_t wr)
++{
++	uint64_t base = su.log_first_block;
++	uint64_t flushed = 0, seq = 0;
++	void *bounce = (void *)(su.dma + DMA_BOUNCE);
++	printf("VEUX LOG: bounded userdata tail at block 0x%llx (%u KiB)\n",
++	    base, VEUX_LOG_BLOCKS * UFS_BLOCK >> 10);
++	for (;;) {
++		uint64_t total = os_atomic_load(&veux_log_total, relaxed);
++		if (total != flushed) {
++			uint64_t pos = total - flushed >= VEUX_LOG_SIZE ? total - VEUX_LOG_SIZE : flushed;
++			int error = 0;
++			lck_mtx_lock(&sweet_ufs_lock);
++			while (pos < total && !error) {
++				uint32_t off = (uint32_t)(pos % VEUX_LOG_SIZE);
++				uint32_t blk = off / UFS_BLOCK;
++				uint64_t need = ((uint64_t)off % UFS_BLOCK + (total - pos) + UFS_BLOCK - 1) / UFS_BLOCK;
++				uint32_t n = (uint32_t)MIN(MIN(need, (uint64_t)(VEUX_LOG_SIZE / UFS_BLOCK - blk)),
++				    (uint64_t)(BOUNCE_SIZE / UFS_BLOCK));
++				memcpy(bounce, veux_log_ring + (uint64_t)blk * UFS_BLOCK, n * UFS_BLOCK);
++				error = ufs_write_blocks(base + 1 + blk, n);
++				pos += (uint64_t)(blk + n) * UFS_BLOCK - off;
++			}
++			if (!error) {
++				struct veux_log_header h = {
++					.magic = { 'V', 'E', 'U', 'X', 'L', 'O', 'G', '1' },
++					.version = 1, .size = VEUX_LOG_SIZE,
++					.total = total, .seq = ++seq,
++				};
++				bzero(bounce, UFS_BLOCK);
++				memcpy(bounce, &h, sizeof(h));
++				error = ufs_write_blocks(base, 1);
++			}
++			if (!error) {
++				error = ufs_sync_cache();
++			}
++			lck_mtx_unlock(&sweet_ufs_lock);
++			if (error) {
++				printf("VEUX LOG: write failed (%d), stopping\n", error);
++				return;
++			}
++			flushed = total;
++		}
++		(void)tsleep(&veux_log_chan, PZERO, "veuxlog", hz);
++	}
++}
++
++static void
++veux_log_start(void)
++{
++	uint32_t on = 1;
++	thread_t thread;
++	PE_parse_boot_argn("veuxlog", &on, sizeof(on));
++	if (!on || su.nblocks < 2 * VEUX_LOG_BLOCKS) {
++		return;
++	}
++	su.log_first_block = su.first_block + su.nblocks - VEUX_LOG_BLOCKS;
++	su.log_nblocks = VEUX_LOG_BLOCKS;
++	su.log_write_enabled = true;
++	if (!veux_log_started && kernel_thread_start(veux_log_thread, NULL, &thread) == KERN_SUCCESS) {
++		veux_log_started = true;
++		thread_deallocate(thread);
++	}
++}
++#endif
+ 
+ /* Root device for rd=ufsroot0 (IOFindBSDRoot). */
+ int sweet_ufs_rootdev(dev_t *dev);
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -268,6 +268,8 @@
+  */
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ extern void sweet_log_append(const char *c, int size);  /* bsd/dev/sweet_ufs.c */
++#elif defined(ARM64_BOARD_CONFIG_VEUX)
++extern void veux_log_append(const char *c, int size);   /* bsd/dev/sweet_ufs.c */
+ /*
+  * Set by AppleCLCD (boot-arg sweetfb_noconsole=1) once the GUI presents:
+  * console text still goes to the persistent log, but is not drawn over
+@@ -286,6 +288,8 @@
+ 	if (sweet_console_muted && !panic_active()) {
+ 		return;
+ 	}
++#elif defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_log_append(c, size);
+ #endif
+ 
+ 	if (disableConsoleOutput) {

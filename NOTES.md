@@ -1,5 +1,11 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (VEUX bounded userdata log writer) <<<
+
+- Recovery ADB confirms `userdata` is `/dev/block/sda22` (UFS LUN 0), 4096-byte blocks; it is Android encrypted F2FS. A separate 64 MiB OEM `logdump` partition is `/dev/block/sde41` on LUN 4. The chosen implementation follows the user's explicit userdata request: it stores a 4 MiB ring plus one 4 KiB header in the final 4 MiB + 4 KiB of userdata. This is a raw reserved log window, not a normal Android directory; writing there can corrupt Android F2FS data in that tail. Recovery ADB reads only that window and decodes it into `research/veux-logs/*.txt` on the Mac.
+- Added `xnu/patches/0088-veux-ufs-persistent-log.patch`. It buffers early console output in RAM, starts flushing after VEUX UFS identifies `userdata`, and permits WRITE(10) only inside that exact tail window. VEUX's regular UFS block device remains read-only and `ufsrw=1` remains ignored. The log can only capture messages after a successful UFS initialization flush; no file or raw userdata write has yet been attempted.
+- Added `tools/veux-log-pull.sh` and `tools/veux-log.py` to read/decode the log through recovery ADB into a host-side text file. Patch dry-run against the staged XNU source succeeded, and local Xcode clang syntax-only compiles of `sweet_ufs.c` and `serial_console.c` both passed. Full CI build, boot-image packaging, flashing, and runtime logging remain pending. The phone is still in slot A recovery; do not change the slot until the new image is built and checked.
+
 ## >>> UPDATE 2026-10-21 (VEUX read-only UFS port review) <<<
 
 - The XNU source already contains the initial SWEET-derived VEUX port in `xnu/patches/0086-veux-readonly-ufs.patch`: it uses the `/veux-ufs` ADT node (`0x04804000`), polled UFSHCI/SCSI READ(10), LUN 0, and read-only root access. CI run `39581112792` previously compiled that port. VEUX DMA/UTRL takeover and XNU GPT parsing remain untested on hardware.
