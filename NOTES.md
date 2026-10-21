@@ -1,5 +1,11 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (local HFSX root image check) <<<
+
+- Found `/Users/vivien/Downloads/ios16-root-20H392.simg` (Android sparse, 16 GiB logical). Its HFS volume header identifies case-sensitive HFSX (`HX`), block size 4096, total 4,194,304 blocks, volume `iOSRoot`.
+- macOS `fsck_hfs -fn` found two catalog folder-count metadata errors. I made a temporary expanded clone, repaired that clone, and verified it with a second `fsck_hfs -fn`; the original sparse image was left untouched. macOS recognizes the clone as case-sensitive Journaled HFS+ but still refuses to mount it (`no mountable file systems` / `mount_hfs: Invalid argument`), so launchd paths have not yet been inspected. Temporary expanded files were removed.
+- The previous successful VEUX XNU build includes the built-in HFS sources, but it predates patch 0086 and has not been booted. The phone still runs Android from encrypted F2FS userdata. No phone data was written.
+
 ## >>> UPDATE 2026-10-21 (VEUX UFS read-only port) <<<
 
 - Read-only Android ADB on slot A: Linux reports `/dev/block/sda` with 4096-byte logical blocks and maps `userdata` to `sda22` (sysfs start `23961920`, size `213196440`, in 512-byte sectors). Android currently mounts `/data` as F2FS from `/dev/block/dm-40`; raw `sda22` begins with non-plaintext bytes, so this is still Android’s encrypted userdata, not the iOS HFS+ image.
