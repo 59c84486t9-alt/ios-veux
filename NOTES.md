@@ -559,6 +559,13 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   `006ba309a26f990bd7cc8b7d77766c68fd11e50e45881f37179154b4c2a96a1c`). Offline unpack confirmed boot
   header v2, kernel size 180,224 bytes, ramdisk hash identical to the pmsg payload, and DTB hash identical
   to `dtb/vendor_boot_b_unpacked/dtb_1.dtb`. The shim marker is present in the compiled loader object.
-- This image is prepared only; it has not been flashed. If authorized and the marker appears after rebooting
-  to Android, shim access to pmsg is confirmed. The separate `XNU VEUX ramoops log start` marker would
-  confirm the XNU logger initialized. No marker still leaves the failure point unresolved.
+- Interpretation: a retained shim marker would confirm shim access to pmsg; the separate
+  `XNU VEUX ramoops log start` marker would confirm the XNU logger initialized. Missing markers alone do
+  not locate the failure, especially if the RAM-backed pmsg buffer is cleared before it can be read.
+- Test result: user authorized this exact image only on `boot_b`. Fastboot wrote `boot_b` successfully,
+  slot B was selected for the attempt, and after about 50 seconds neither ADB nor fastboot enumerated the
+  phone. The user returned it to fastboot; we selected slot A (no partition write) and Android booted
+  successfully. Android reports ramoops `mem_address=0xd0000000`, `mem_size=0x200000`,
+  `pmsg_size=record_size=0x100000`, `ecc=0`; `/sys/fs/pstore` is mounted but empty, so there is no
+  `pmsg-ramoops-0` to inspect and `logcat -L` has no retained log. The shim/XNU markers therefore remain
+  unobserved; the forced return through fastboot may have cleared the RAM-backed pmsg buffer.
