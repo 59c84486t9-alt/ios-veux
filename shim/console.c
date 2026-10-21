@@ -11,6 +11,21 @@
 #define MARGIN		24
 #define LABEL_COLS	8
 
+#ifdef VEUX_NO_FB
+/* VEUX splash address is reserved, but active scanout and pixel layout are
+ * unverified. Keep every shim display write disabled on this target. */
+volatile uint32_t *con_fb;
+
+void con_clear(uint32_t bg) { (void)bg; }
+void con_skip(void) { }
+void con_str(const char *label, const char *s) { (void)label; (void)s; }
+void con_hex(const char *label, uint64_t v) { (void)label; (void)v; }
+void con_hex2(const char *label, const char *a, uint32_t va,
+              const char *b, uint32_t vb)
+{
+	(void)label; (void)a; (void)va; (void)b; (void)vb;
+}
+#else
 volatile uint32_t *con_fb = (volatile uint32_t *)FB_BASE;
 static uint32_t con_bg;
 static int row;
@@ -95,3 +110,4 @@ void con_hex2(const char *label, const char *a, uint32_t va, const char *b, uint
 	}
 	row++;
 }
+#endif

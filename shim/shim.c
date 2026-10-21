@@ -382,6 +382,12 @@ void shim_main(uint64_t dtb)
 	const char *why = loader_boot(dtb);
 	con_str("LOADER", why);
 	con_skip();
+	/* A VEUX payload failure must not fall through to SWEET's UFS/GIC/MMU
+	 * hardware probes. Those addresses and register sequences are unrelated. */
+#ifdef VEUX_NO_FB
+	for (;;)
+		__asm__ volatile("wfe");
+#endif
 
 	/* No payload: probe the internal UFS while the MMU is still off. */
 	stage = "ufs";

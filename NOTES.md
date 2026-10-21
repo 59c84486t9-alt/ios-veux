@@ -1,5 +1,12 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-20 (VEUX boot-image packaging probe) <<<
+
+- Built an unbooted, non-flashed Android header-v2 package at `shim/out/shim-boot-veux-probe.img` (SHA-256 `1ab6f26b987c845e6d8e32a8b677b4effd3a875cf50f2654b3362782e2845ad6`). Its ramdisk contains `payload-veux-probe.bin` (SHA-256 `6746dbd259cad30aeac0dc7cd3e7ff10d85eddd28ecc1239706ad9741f83d2`) and its appended DTB exactly matches `dtb_1.dtb` selected by board ID `0x1000b, 0`.
+- Added a `--veux` ADT mode with VEUX-compatible identity, verified GIC/UFS bases, and no framebuffer node; CPU starts with `cpus=1`. The shim `--veux` build disables framebuffer writes, leaves boot video fields zero, and halts if payload loading fails instead of running SWEET-specific UFS/GIC probes. The boot arguments omit `rd=ufsroot0`, writable-root and SWEET framebuffer settings because VEUX XNU UFS/display support is not ported.
+- **This is a packaging probe, not a boot-ready image.** `dram-base=0x100000000` and `dram-size=0xfcc00000` are inherited from SWEET's `--highmem` map and are not verified for VEUX; the VEUX XNU profile remains compile-only and lacks a VEUX IODT platform expert, validated CPU/PSCI/timer setup, and UFS/root support. Do not `fastboot boot` or flash it until those blockers are addressed. No phone operation occurred.
+- Cross-compiled on the Ubuntu VPS with `gcc-aarch64-linux-gnu`; the AOSP/Ubuntu `mkbootimg` v2 output was unpacked locally and byte-compared against both the payload and selected DTB. `mkbootimg`'s optional GKI v4 helper was unavailable in Ubuntu's package, so this v2-only build used a local stub that errors if v4 signature code is called; v2 did not call it.
+
 ## >>> UPDATE 2026-10-20 (VEUX Android DRM + XNU build retry) <<<
 
 - Rooted Android on slot B with Magisk and the temporary `CONFIG_DEBUG_FS=y` kernel exposed `/sys/kernel/debug/dri/0/state`. Active DSI-1 is 1080x2400@120; primary plane is `XB24` / `DRM_FORMAT_XBGR8888`, allocated 1088x2400 with 4352-byte pitch, modifier `0x500000000000001`, imported GEM object, and driver-reported `start=0`. Two active overlays use `AB24`. See `docs/VEUX-ANDROID-DRM-FINDINGS.md` and raw capture outside git at `../veux-debugfs-kernel/magisk-patch/android-drm-state.txt`.
