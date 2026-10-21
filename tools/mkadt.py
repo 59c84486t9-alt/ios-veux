@@ -204,6 +204,17 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
         ('stride', u32(FB_STRIDE)),
     ])
 
+    # Qualcomm's live VEUX DTB reserves 2 MiB at 0xd0000000 for ramoops,
+    # with the final 1 MiB assigned to Android's pmsg persistent log. XNU's
+    # diagnostic logger can append to this region so Android pstore can expose
+    # XNU's last boot after returning to Android. Keep the 1 MiB dmesg record
+    # area at the front untouched.
+    veux_ramoops = node('veux-ramoops', [
+        ph(),
+        ('reg', u64(0xd0000000, 0x200000)),
+        ('pmsg-size', u32(0x100000)),
+    ])
+
     # bsd/dev/sweet_ufs.c: SWEET/VEUX UFS host (absolute physical register window).
     ufs = node('veux-ufs' if veux else 'sweet-ufs', [
         ph(),
@@ -242,7 +253,8 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
         ('manufacturer', cstr('Apple Inc.')),
         ('#address-cells', u32(2)),
         ('#size-cells', u32(2)),
-    ], [chosen, defaults, cpus, arm_io] + ([] if veux else [fbcon]) + [buttons] + product + ([] if qemu else [ufs]))
+    ], [chosen, defaults, cpus, arm_io] + ([] if veux else [fbcon]) +
+       ([veux_ramoops] if veux else []) + [buttons] + product + ([] if qemu else [ufs]))
 
 
 if __name__ == '__main__':

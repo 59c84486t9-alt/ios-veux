@@ -1,5 +1,12 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (VEUX persistent pmsg logging path) <<<
+
+- Android slot A exposes an active `d0000000.ramoops`: runtime parameters read as base `0xd0000000`, size `0x200000`, record-size `0x100000`, console-size `0`, pmsg-size `0x100000`, ECC `0`. `/dev/pmsg0` is available. The live/reference Blair DT declares the same 2 MiB region with a 2 MiB pmsg allocation; runtime overrides it to split 1 MiB record + 1 MiB pmsg, which is the layout used below.
+- Tested the host-readable retention path without touching partitions: wrote marker `XNU_RAMOOPS_COMPAT_TEST_20261021` to `/dev/pmsg0`, rebooted normally, returned to Android slot A, and found the marker in `/sys/fs/pstore/pmsg-ramoops-0` (also readable through `logcat -L`). This confirms pmsg survives a normal warm reboot and Android exposes it after reboot. The marker is an Android pmsg entry; it is not an XNU boot result.
+- Added source patch `xnu/patches/0087-veux-pstore-pmsg-log.patch` plus a `veux-ramoops` node in `tools/mkadt.py --veux`. The XNU logger validates the exact observed region, appends chars using Linux persistent_ram's no-ECC PMSG header/ring layout, and routes kprintf output to that region even when no serial console exists. It leaves the first 1 MiB panic-record area alone. Patch dry-run against the staged XNU source succeeds; generated VEUX ADT shows `reg=<0xd0000000 0x200000>` and `pmsg-size=0x100000`.
+- This implementation has not yet been compiled or booted. Next: commit/push and run `xnu.yml`; if CI succeeds, package a new diagnostic boot image. Flashing that image to `boot_b` requires separate confirmation. Keep slot A active and userdata untouched meanwhile.
+
 ## >>> UPDATE 2026-10-21 (GENI console capture path investigation) <<<
 
 - Read-only ADB on healthy Android slot A confirms `ro.boot.console=ttyMSM0`, but `/sys/class/tty/ttyMSM0` and `/sys/bus/platform/drivers/qcom_geni_serial` are absent. This means Android does not expose a usable serial TTY to ADB; it does not establish whether ABL or the kernel used the UART earlier in boot.

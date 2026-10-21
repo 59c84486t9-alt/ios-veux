@@ -1,0 +1,134 @@
+From: ios-veux
+Subject: [PATCH] Add VEUX ramoops pmsg boot logging
+
+Use the reserved 1 MiB Android pmsg zone for a persistent XNU kprintf trail.
+The logger is enabled only when the VEUX ADT contains the verified ramoops
+region. It appends using Linux persistent_ram's no-ECC pmsg header format.
+
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -721,6 +721,82 @@
+ static uint32_t fbcon_width, fbcon_height, fbcon_stride;
+ static uint32_t fbcon_cols, fbcon_rows, fbcon_col, fbcon_row;
+ 
++/* The VEUX ADT exposes the Android pmsg region from reserved ramoops memory. */
++static volatile uint32_t *veux_pmsg_header;
++static volatile uint8_t *veux_pmsg_data;
++static uint32_t veux_pmsg_capacity;
++static uint32_t veux_pmsg_start;
++static uint32_t veux_pmsg_size;
++
++#define VEUX_PMSG_SIG       0x43474244u /* Linux ramoops_pmsg passes signature 0 */
++#define VEUX_PMSG_ZONE_SIZE 0x00100000u
++#define VEUX_PMSG_HDR_SIZE  12u
++
++bool
++veux_pmsg_init(void)
++{
++	DTEntry entry;
++	uint64_t const *reg;
++	uint32_t const *pmsg_size;
++	unsigned int size;
++	vm_offset_t paddr;
++	vm_offset_t vaddr;
++
++	if (SecureDTFindEntry("name", "veux-ramoops", &entry) != kSuccess ||
++	    SecureDTGetProperty(entry, "reg", (void const **)&reg, &size) != kSuccess || size < 16 ||
++	    SecureDTGetProperty(entry, "pmsg-size", (void const **)&pmsg_size, &size) != kSuccess ||
++	    reg[0] != 0xd0000000ULL || reg[1] != 0x00200000ULL ||
++	    *pmsg_size != VEUX_PMSG_ZONE_SIZE || *pmsg_size <= VEUX_PMSG_HDR_SIZE) {
++		return false;
++	}
++
++	paddr = (vm_offset_t)(reg[0] + reg[1] - *pmsg_size);
++	vaddr = ml_io_map_wcomb(paddr, *pmsg_size);
++	if (vaddr == 0) {
++		return false;
++	}
++
++	veux_pmsg_header = (volatile uint32_t *)vaddr;
++	veux_pmsg_data = (volatile uint8_t *)(vaddr + VEUX_PMSG_HDR_SIZE);
++	veux_pmsg_capacity = *pmsg_size - VEUX_PMSG_HDR_SIZE;
++	if (veux_pmsg_header[0] != VEUX_PMSG_SIG ||
++	    veux_pmsg_header[1] >= veux_pmsg_capacity ||
++	    veux_pmsg_header[2] > veux_pmsg_capacity ||
++	    veux_pmsg_header[1] > veux_pmsg_header[2]) {
++		/* Match Linux persistent_ram's no-ECC pmsg header, then append. */
++		veux_pmsg_header[0] = VEUX_PMSG_SIG;
++		veux_pmsg_header[1] = 0;
++		veux_pmsg_header[2] = 0;
++	}
++	veux_pmsg_start = veux_pmsg_header[1];
++	veux_pmsg_size = veux_pmsg_header[2];
++	CleanPoC_DcacheRegion_Force((vm_offset_t)veux_pmsg_header, VEUX_PMSG_HDR_SIZE);
++	static const char start[] = "\n--- XNU VEUX ramoops log start ---\n";
++	for (unsigned int i = 0; i < sizeof(start) - 1; i++) {
++		veux_pmsg_putc(start[i]);
++	}
++	return true;
++}
++
++void
++veux_pmsg_putc(char c)
++{
++	if (veux_pmsg_header == NULL || veux_pmsg_capacity == 0) {
++		return;
++	}
++
++	uint32_t write_at = veux_pmsg_start;
++	veux_pmsg_data[write_at] = (uint8_t)c;
++	veux_pmsg_start = (write_at + 1) % veux_pmsg_capacity;
++	if (veux_pmsg_size < veux_pmsg_capacity) {
++		veux_pmsg_size++;
++	}
++	veux_pmsg_header[1] = veux_pmsg_start;
++	veux_pmsg_header[2] = veux_pmsg_size;
++	CleanPoC_DcacheRegion_Force((vm_offset_t)&veux_pmsg_data[write_at], 1);
++	CleanPoC_DcacheRegion_Force((vm_offset_t)veux_pmsg_header, VEUX_PMSG_HDR_SIZE);
++}
++
+ static void
+ fbcon_clear_row(uint32_t row)
+ {
+--- a/pexpert/arm/pe_kprintf.c
++++ b/pexpert/arm/pe_kprintf.c
+@@ -12,6 +12,7 @@
+ #include <kern/simple_lock.h>
+ #include <os/log_private.h>
+ #include <libkern/section_keywords.h>
++#include <pexpert/arm/protos.h>
+ 
+ /* Globals */
+ typedef void (*PE_kputc_t)(char);
+@@ -58,7 +59,8 @@
+ static void
+ PE_init_kprintf(void)
+ {
+-	if (serial_init()) {
++	bool pmsg_ready = veux_pmsg_init();
++	if (serial_init() || pmsg_ready) {
+ 		PE_kputc = serial_putc_crlf;
+ 	} else {
+ 		/**
+@@ -157,8 +159,10 @@
+ serial_putc_crlf(char c)
+ {
+ 	if (c == '\n') {
++		veux_pmsg_putc('\r');
+ 		uart_putc('\r');
+ 	}
++	veux_pmsg_putc(c);
+ 	uart_putc(c);
+ }
+ 
+--- a/pexpert/pexpert/arm/protos.h
++++ b/pexpert/pexpert/arm/protos.h
+@@ -16,6 +16,8 @@
+ extern void console_write_unbuffered(char);
+ #endif
+ int serial_init(void);
++bool veux_pmsg_init(void);
++void veux_pmsg_putc(char c);
+ 
+ /**
+  * Forbid or allow transmission over each serial until they receive data.
