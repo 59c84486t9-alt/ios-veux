@@ -22,3 +22,16 @@ Workflow: [xnu run 39531341699](https://github.com/59c84486t9-alt/ios-veux/actio
 The earlier missing VEUX processor cache-line and GIC macro errors no longer
 appear in this run. This is still build work only; no kernel was produced, booted,
 or flashed.
+
+## Follow-up run 39532087795
+
+[xnu run 39532087795](https://github.com/59c84486t9-alt/ios-veux/actions/runs/39532087795)
+used the same settings and the new config. The unresolved-symbol link failure
+was cleared. Compilation then stopped at
+`bsd/sweet_hfs/sweet_hfs_iokit.c:21: fatal error: 'hfs.h' file not found`.
+The pinned HFS, libpthread, and BearSSL staging scripts only ran when
+`MACHINE_CONFIG=SWEET`, even though the VEUX compile profile also uses these
+shared open-source sources. Their guards are being extended to VEUX.
+
+The `xnu-buildtree` artifact for this run is saved locally at
+`xnu/run-39532087795/buildtree.tgz` for replay; it is not committed.
