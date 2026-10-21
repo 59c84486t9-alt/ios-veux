@@ -1,0 +1,89 @@
+diff --git a/libkern/conf/Makefile.template b/libkern/conf/Makefile.template
+index aca295c..19e06db 100644
+--- a/libkern/conf/Makefile.template
++++ b/libkern/conf/Makefile.template
+@@ -19,6 +19,20 @@ include $(MakeInc_def)
+ CFLAGS+= -include meta_features.h -DLIBKERN_KERNEL_PRIVATE -DOSALLOCDEBUG=1
+ SFLAGS+= -include meta_features.h
+ 
++# The VEUX profile uses the same staged BearSSL sources for SHA-1.
++ifeq ($(CURRENT_MACHINE_CONFIG),VEUX)
++SWEET_AES_ROOT = $(SRCROOT)/libkern/crypto/sweet_bearssl
++SWEET_AES_INC = -I$(SWEET_AES_ROOT)/inc -I$(SWEET_AES_ROOT)/src
++sweet_sha1.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_dec32be.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_enc32be.o_INCFLAGS = $(SWEET_AES_INC)
++corecrypto_sha1.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_sha1.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_dec32be.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_enc32be.o_CFLAGS_ADD += -mgeneral-regs-only
++corecrypto_sha1.o_CFLAGS_ADD += -mgeneral-regs-only
++endif
++
+ ifeq ($(CURRENT_MACHINE_CONFIG),SWEET)
+ SWEET_AES_ROOT = $(SRCROOT)/libkern/crypto/sweet_bearssl
+ SWEET_AES_INC = -I$(SWEET_AES_ROOT)/inc -I$(SWEET_AES_ROOT)/src
+diff --git a/libkern/crypto/corecrypto_sha1.c b/libkern/crypto/corecrypto_sha1.c
+index 409533d..ed63c8e 100644
+--- a/libkern/crypto/corecrypto_sha1.c
++++ b/libkern/crypto/corecrypto_sha1.c
+@@ -16,9 +16,9 @@ setCount(SHA1_CTX *ctx, uint64_t count)
+ 	ctx->c.b64[0] = count;
+ }
+ 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ /*
+- * SWEET has no corecrypto kext (g_crypto_funcs stays NULL). SHA-1 uses
++ * SWEET and VEUX have no corecrypto kext (g_crypto_funcs stays NULL). SHA-1 uses
+  * BearSSL's portable implementation (libkern/crypto/sweet_sha1.c), with
+  * SHA1_CTX carrying exactly its state: chaining value, byte count and the
+  * partial block, converted around each call like the corecrypto path does.
+@@ -70,7 +70,7 @@ SHA1Final(void *digest, SHA1_CTX *ctx)
+ 	br_sha1_out(&br_ctx, digest);
+ }
+ 
+-#else /* !ARM64_BOARD_CONFIG_SWEET */
++#else /* neither SWEET nor VEUX */
+ 
+ /* Copy a ccdigest ctx into a legacy SHA1 context */
+ static void
+@@ -125,7 +125,7 @@ SHA1Final(void *digest, SHA1_CTX *ctx)
+ 	ccdigest_final(di, di_ctx, digest);
+ }
+ 
+-#endif /* !ARM64_BOARD_CONFIG_SWEET */
++#endif /* neither SWEET nor VEUX */
+ 
+ /* This is not publicised in header, but exported in libkern.exports */
+ void SHA1Final_r(SHA1_CTX *context, void *digest);
+diff --git a/libkern/crypto/sweet_dec32be.c b/libkern/crypto/sweet_dec32be.c
+index 7415ae8..846023d 100644
+--- a/libkern/crypto/sweet_dec32be.c
++++ b/libkern/crypto/sweet_dec32be.c
+@@ -1,4 +1,4 @@
+ /* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include "sweet_bearssl/src/codec/dec32be.c"
+ #endif
+diff --git a/libkern/crypto/sweet_enc32be.c b/libkern/crypto/sweet_enc32be.c
+index 179919b..8b887ed 100644
+--- a/libkern/crypto/sweet_enc32be.c
++++ b/libkern/crypto/sweet_enc32be.c
+@@ -1,4 +1,4 @@
+ /* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include "sweet_bearssl/src/codec/enc32be.c"
+ #endif
+diff --git a/libkern/crypto/sweet_sha1.c b/libkern/crypto/sweet_sha1.c
+index 77365ed..8875099 100644
+--- a/libkern/crypto/sweet_sha1.c
++++ b/libkern/crypto/sweet_sha1.c
+@@ -1,4 +1,4 @@
+ /* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include "sweet_bearssl/src/hash/sha1.c"
+ #endif

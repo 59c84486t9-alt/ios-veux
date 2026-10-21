@@ -6,6 +6,11 @@
 - The guest entered XNU and executed far enough to hit a data abort at `_SHA1Init+0x34` (`FAR=0x28`), followed by an undefined instruction in `_DebuggerTrapWithState+0x84`; QEMU's final PC was in `_handle_debugger_trap`. Disassembly shows `_SHA1Init` dereferencing the crypto function table at offset `0x28`; this is consistent with `g_crypto_funcs == NULL`. SWEET patch `0032` installs the BearSSL SHA-1 provider only under `ARM64_BOARD_CONFIG_SWEET`, so the VEUX build does not take that workaround. The next kernel change is to enable the SHA-1 provider for VEUX and rebuild. The VPS run artifacts are `/root/veux-log-build/qemu-veux-run/{qemu.log,regs.txt,serial.txt,fb.png,result.json}`. `serial.txt` was empty, consistent with `virt` not emulating VEUX's UART. The framebuffer snapshot is not evidence of VEUX scanout or phone display behavior.
 - This confirms CPU entry and execution in QEMU, not VEUX hardware startup. The `virt` machine does not emulate VEUX UFS, Qualcomm display, or the board UART. No phone was accessed or flashed.
 
+## >>> UPDATE 2026-10-21 (VEUX BearSSL SHA-1 provider) <<<
+
+- Added `xnu/patches/0089-veux-bearssl-sha1.patch`. It enables the existing BearSSL SHA-1 implementation under `ARM64_BOARD_CONFIG_VEUX`, adds the VEUX BearSSL include/compile flags, and enables the SHA-1 source/codecs for VEUX. The pinned staging script already fetched BearSSL for VEUX; the missing pieces were the SWEET-only source guards and include flags.
+- Verified patch application against the VEUX XNU source in buildtree artifact `39589988254`, and `tools/validate-repo.py` passes. A fresh GitHub XNU build and QEMU rerun are pending; no phone boot or flash was performed.
+
 ## >>> UPDATE 2026-10-21 (offline VEUX framebuffer source analysis) <<<
 
 - Compared the saved VEUX live device tree, board-matched panel DTS and the reference Qualcomm SDE source. The live tree's `/reserved-memory/splash_region@0x85200000/reg` is `<0x85200000 0x00c00000>` (12 MiB); adjacent DFPS memory is `<0x85e00000 0x00100000>`. This confirms the reserved region, not the bootloader's currently active scanout pointer.
