@@ -683,3 +683,10 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - QEMU 8.2.2 `virt` / Cortex-A76, one CPU and no root volume passed the previous `image4 interface not available` panic. The persisted VEUX log then reported a data abort at `FAR=0x78`; symbol resolution identifies `_aes_encrypt_key128`, whose legacy wrapper still read null `g_crypto_funcs` (`x8 == 0`). Saved run output is in `shim/out/qemu-veux-39648190769/vps-out/`.
 - Added patch 0093 to enable SWEET's already-staged BearSSL portable AES CBC/ECB implementation for VEUX, including the source guards and Makefile flags. It does not populate the broader corecrypto function table. Patch 0093 applies cleanly to the saved source tree; CI/QEMU are pending.
 - No phone boot or flash was performed.
+
+## >>> UPDATE 2026-10-21 (VEUX QEMU reaches CPU idle) <<<
+
+- CI run `39649899996` succeeded with the portable AES fallback. Kernel SHA-256: `33cb960893c7c27caaeb76a54f84874d62fd2eec7355812f6318f55b46327f9b`.
+- Re-ran on QEMU 8.2.2 generic `virt`, Cortex-A76, one CPU, no root volume, for 45 seconds. The captured pmsg log has no panic after the early startup milestones. QEMU logged one data abort at `_skmem_sysctl_init+0x18` for `0xfffffe300a9a8000`, then returned to the faulting instruction; the final PC was `_cpu_idle+0x1ec`. This is consistent with a handled page fault and XNU reaching its idle loop. QEMU reports `blank_screen`, and this run does not demonstrate a mounted root, `launchd`, userspace or VEUX hardware behavior. Artifacts are in `shim/out/qemu-veux-39649899996/vps-out/`.
+- The QEMU-specific pmsg mapping fault, VEUX trust-cache startup panic and legacy AES null-table abort are resolved in the build tested here. The generic QEMU result cannot establish whether the same kernel will boot on the phone.
+- No phone boot or flash was performed.
