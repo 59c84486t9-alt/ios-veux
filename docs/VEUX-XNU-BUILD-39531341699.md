@@ -60,3 +60,13 @@ extend those guards to VEUX (`0008` and new `0084`).
 
 The `xnu-buildtree` artifact for this run is saved locally at
 `xnu/run-39533529250/buildtree.tgz` for replay; it is not committed.
+
+## Follow-up run 39534235727
+
+[xnu run 39534235727](https://github.com/59c84486t9-alt/ios-veux/actions/runs/39534235727)
+applied the `ml_enable_monitor` extension but skipped `0084` because its hunk
+did not have enough context to match `osfmk/kern/exception.c`. The final link
+therefore had only `_sweet_sample_task` unresolved. Added the following include
+line as patch context and verified `git apply --check` against the downloaded
+source. The buildtree is saved locally at
+`xnu/run-39534235727/buildtree.tgz` for replay; it is not committed.
