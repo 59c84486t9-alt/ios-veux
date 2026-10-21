@@ -1,5 +1,12 @@
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (post-probe diagnostics checked) <<<
+
+- Android is healthy on slot A (`ro.boot.slot_suffix=_a`, `sys.boot_completed=1`); connected ADB device is `veux` (`2201116SG`). No partition operation was performed during this check.
+- Checked Android's post-probe logging surfaces read-only. `/sys/fs/pstore` is empty when accessible as root, `/proc/last_kmsg` is absent, `/sys/kernel/debug/pstore` is absent, and `dmesg` is denied (`klogctl: Permission denied`). Android properties report `bootloader` for both boot-reason keys, which does not identify the preceding XNU failure. The failed XNU attempt therefore left no recoverable stop-point log in the available Android environment.
+- Re-verified local stock `boot_b` backups: `/Users/vivien/Documents/ChatGPT/iosxia/backup/veux-device/boot_b.img` and `../veux-debugfs-kernel/repack-work/boot_b.stock.img` are each 128 MiB and share SHA-256 `71425c2c3bfb124b40d62bb66bf18ea25a4f52879aa9784b3c56e2c18d36f2db`. The 16 MiB probe image matches SHA-256 `32358acc81b5799281a2d3e00289f3fbe63d0cf5d3aaaa34acd16d63e4e0cb91`. No restore has been performed; `boot_b` remains the probe image and slot A remains active.
+- Next blocker remains a capture path before another XNU boot. Candidate GENI console at `0x04c8c000` is DT-identified, but no live serial node, verified pad mapping/capture, or XNU GENI implementation is available. Avoid speculative UART writes, framebuffer writes, or reuse of Android's ramoops reservation. Restore `boot_b` from the verified backup only with the user's explicit confirmation because it writes a partition.
+
 ## >>> UPDATE 2026-10-21 (returned to Android slot A after VEUX probe) <<<
 
 - After the probe froze on a black screen, the user re-entered fastboot. It reported current slot B. Switched active slot to A and rebooted; ADB is back, `ro.boot.slot_suffix=_a`, `sys.boot_completed=1`, Android 16. Slot A and userdata were not written during the probe. `boot_b` still contains `shim-boot-veux-ufs-probe.img`; the byte-matched stock backup remains available but has not been restored.
