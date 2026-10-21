@@ -17,6 +17,9 @@ MEM_SIZE = 0x4d000000
 # carve-out is in the low bank and the dynamic pools are limited below 4G.
 HIGH_PHYS_BASE = 0x100000000
 HIGH_MEM_SIZE = 0xfcc00000
+# VEUX recovery /proc/iomem showed a contiguous System RAM window from 4 GiB
+# up to the first high-bank reserved carveout at 0x1f8600000.
+VEUX_HIGH_MEM_SIZE = 0xf8600000
 # /arm-io children are relative to this; it must not be 0 (serial_init bails)
 SOC_BASE = 0x01000000
 
@@ -73,10 +76,15 @@ def node(name, props=(), children=()):
 def build(seed=None, qemu=False, highmem=False, veux=False):
     """Build the iOS-facing ADT; --veux selects VEUX identity and known MMIO.
 
-    The --highmem physical-memory range remains inherited from the SWEET
-    profile and is not validated for VEUX; this mode is for packaging probes.
+    For VEUX, --highmem uses the contiguous high-bank range observed in the
+    live recovery memory map; the resulting ADT is still a packaging probe
+    until XNU's VEUX startup and memory-management paths are validated.
     """
-    phys_base, mem_size = (HIGH_PHYS_BASE, HIGH_MEM_SIZE) if highmem else (PHYS_BASE, MEM_SIZE)
+    if highmem:
+        phys_base = HIGH_PHYS_BASE
+        mem_size = VEUX_HIGH_MEM_SIZE if veux else HIGH_MEM_SIZE
+    else:
+        phys_base, mem_size = PHYS_BASE, MEM_SIZE
     gicd, gicr, timebase = (QEMU_GICD, QEMU_GICR, QEMU_TIMEBASE) if qemu else (
         (VEUX_GICD, VEUX_GICR, TIMEBASE) if veux else (GICD, GICR, TIMEBASE))
     seed = seed if seed is not None else os.urandom(64)

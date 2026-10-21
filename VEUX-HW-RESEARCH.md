@@ -8,6 +8,12 @@ Collected 2026-10-20 for `veux-xnu-build`. Device access was read-only ADB in re
 - Reference Linux source: [`dereference23/kernel_xiaomi_sm6375`](https://github.com/dereference23/kernel_xiaomi_sm6375/tree/f4b8a13a43a130a9ab83cc985ce4d4421291ae6), commit `f4b8a13a43a130a9ab83cc985ce4d4421291ae6`. Its VEUX DTS matches model/board/panel details in the live tree. It is a community reference tree, **not proven to be the exact source for the installed Paimon recovery kernel** (`5.4.292-Paimon`, build hash `1438fcba`). Treat source-code behavior below as reference until matched against the exact binary source.
 - Relevant source paths in that checkout: `arch/arm64/boot/dts/vendor/xiaomi/veux*.dts*`, `dsi-panel-k6s-38-0c-0a-fhdp-dsc-video.dtsi`, `arch/arm64/boot/dts/vendor/qcom/blair.dtsi`, `techpack/display/msm/sde/sde_kms.c`, `drivers/scsi/ufs/ufs-qcom.c`, `drivers/input/touchscreen/goodix_gtx8/goodix_ts_i2c.c`, and `drivers/usb/dwc3/dwc3-msm.c`.
 
+## Live recovery memory map (read-only, 2026-10-20)
+
+- `/proc/meminfo` reports `MemTotal: 5577100 kB`. The live `memory/reg` encodes three ranges: `<0x80000000 0x3cc00000>`, `<0x100000000 0x100000000>`, and `<0xc0000000 0x40000000>` (two 32-bit big-endian cells each for address and size). The first and third ranges are separated by a 52 MiB gap; the second is the 4 GiB bank starting at 4 GiB.
+- `/proc/iomem` reports that upper bank as System RAM and lists reserved intervals beginning at `0x1f8600000`; the earlier SWEET `--highmem` size `0xfcc00000` would overlap those reserved regions. The largest contiguous candidate from the 4 GiB base before the first such carveout is `base=0x100000000`, `size=0xf8600000` (4064 MiB), ending at `0x1f85fffff` inclusive.
+- This is observed from the connected VEUX recovery environment and used by `tools/mkadt.py --veux --highmem`. It is a device-specific candidate; before any boot attempt, verify the ABL handoff and XNU physical-memory mapper honor this same range and keep the listed carveouts excluded.
+
 ## Display / framebuffer
 
 - Live bootargs select `qcom,mdss_dsi_k6s_38_0c_0a_fhdp_dsc_vid`. Panel DTS describes 1080x2400, 120/60 Hz, 24-bit DSI input and DSC. `qcom,mdss-dsi-color-order = "rgb_swap_rgb"` describes the panel/DSI channel order; **it does not establish the DRM framebuffer memory format**.
