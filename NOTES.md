@@ -1068,3 +1068,8 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - Run `39789142904` ended `cancelled` after 15 minutes with an empty step list. The workflow never reached checkout, XNU compilation, or artifact upload. There is no new kernel artifact or boot image from this run, and no device/partition action was taken during this dispatch.
 - The workflow uses the free standard `macos-14` image to obtain Xcode 15 `iig`. GitHub announced reduced macOS 14 runner capacity ahead of retirement; all three recent dispatches on this branch ended without build steps. `macos-15` standard runners have Xcode 16, whose `iig` output references `IORPC.kernelContent` absent from XNU 8796's `IORPC` struct; moving the build requires resolving that toolchain compatibility or obtaining a macOS 14 runner. Larger macOS runners are paid and were not selected.
 - Next: resume with a free macOS 14 runner when available, or separately adapt and verify the Xcode 16 `iig` compatibility before switching the workflow. Do not flash a stale image as a substitute for the missing fresh kernel.
+
+## >>> UPDATE 2026-10-22 (VEUX workflow rerun after hosted-runner acquisition error) <<<
+
+- In response to the user's request to retry GitHub's internal runner-acquisition error, reran workflow `39789142904` (attempt 2), preserving its head `1aab246be4a361392f1c7683ca799a6b11e76f64` and original `DEVELOPMENT` / `VEUX` / macOS 13.5 inputs.
+- At 14:13 UTC, job `119872313567` remained queued after about 7 minutes, with no steps executed. No kernel artifact has been produced by this retry so far. The phone and its partitions were not accessed or changed.
