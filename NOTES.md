@@ -1,3 +1,31 @@
+## >>> UPDATE 2026-10-21 (ios-spes RAM-only XNU diagnostic) <<<
+
+- Reviewed `AdyaGMD/ios-spes`. Its portable diagnostic idea is a tiny static
+  init as PID 1 on an injected RAM disk (`rd=md0`), printing a heartbeat to
+  `/dev/console`; its README reports this reached PID 1 on spes. Its FDT,
+  memory map, framebuffer address, and SM6225 drivers are device-specific and
+  are not evidence for VEUX/SM6375.
+- Prepared `shim/out/veux-diagnostic-39706120497/shim-boot-veux-ramdiag-39706120497.img`
+  (17,080,320 bytes; SHA-256
+  `9c035b6e4d7b59bc2939d4f2aaf74cae19dfe4d1154367cc8244f4d3a4d4db33`). It
+  reuses the VEUX XNU payload from CI run 39706120497, adds the existing static
+  `tools/sweet-init.S` as a 32 KiB RAMDisk at `0x10289c000`, and regenerates
+  the VEUX ADT with the iPhone X logical canvas (1125x2436 at 3x). Its
+  boot-args use `rd=md0`, `ufsrw=0`, `rootrw=0`, and `sweetlog=0`; `veuxlog=1`
+  is absent, so this diagnostic does not request the userdata log writer.
+- The opt-in XNU console is enabled with `veuxfbconsole=1`; `veuxsde=1` records
+  the guarded SDE state. `veuxfb=1` is omitted, so the separate white marker
+  is disabled. Text and the PID-1 heartbeat should appear only if XNU's live
+  SDE/address/geometry/format/stride checks accept the existing scanout. The
+  prior boot reached kprintf startup but did not establish that the display
+  guard passed, so visibility is still uncertain.
+- The boot-v2 image was unpacked after packaging: kernel, ramdisk, and outer
+  DTB match their inputs, and the Android image ID validates. No phone boot or
+  flash occurred. Because `fastboot boot` is unsupported on this device, using
+  this candidate requires a separate explicit approval to write `boot_b`.
+- The new local `tools/mkadt.py` display-node edit and untracked XNU patch 0103
+  remain outside this candidate's kernel build; patch 0103 has not been built.
+
 ## >>> UPDATE 2026-10-21 (VEUX display, userdata logging, and SWEET ports) <<<
 
 - Added patches 0097–0102. Patch 0097 connects the VEUX pmsg printk path to the
