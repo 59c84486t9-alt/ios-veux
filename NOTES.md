@@ -1,3 +1,25 @@
+## >>> UPDATE 2026-10-21 (Evolution-X display source check and screen-marker candidate) <<<
+
+- Inspected Evolution-X-Devices `device_xiaomi_veux` (`bka`, `7172cb5`),
+  `vendor_xiaomi_veux` (`bka`, `0323407`), and `kernel_xiaomi_veux` (`bka`,
+  `1add311`). The kernel DTS reserves `0x85200000..0x85e00000` as the 12 MiB
+  continuous-splash region, matching the existing XNU guard's base and size.
+- The VEUX panel DTS specifies 1080x2400, 24-bit DSI output, and
+  `rgb_swap_rgb`; those describe the panel link, not CPU framebuffer byte order.
+  The SDE catalog identifies Blair as SDE 6.9.0, matching revision guard
+  `0x60090000`. These sources strengthen the reservation/controller match but
+  do not prove the live scanout address or CPU pixel layout at XNU handoff.
+- Prepared
+  `shim/out/veux-diagnostic-39706120497/shim-boot-veux-screen-marker-39706120497.img`
+  by adding `-v veuxfb=1` to the existing RAM-only diagnostic payload. The
+  built kernel already contains the guarded 32x32 white marker and transparent
+  text console; the command-line now requests both. Kernel, outer DTB, and all
+  other payload bytes were verified unchanged; the Android boot-v2 ID was
+  recomputed. Image size is 17,080,320 bytes; SHA-256 is
+  `64e021774ef9cb228a9ecbbdfc039252704aeb8901dfe9d06b90aa6087280125`.
+- This candidate has not been flashed. Phone last showed the MI logo, while
+  both ADB and fastboot currently enumerate no device. Do not switch from B.
+
 ## >>> UPDATE 2026-10-21 (ios-spes RAM-only XNU diagnostic) <<<
 
 - Reviewed `AdyaGMD/ios-spes`. Its portable diagnostic idea is a tiny static
