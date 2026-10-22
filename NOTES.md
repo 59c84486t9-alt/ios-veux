@@ -35,6 +35,21 @@
   tail includes repeated missing `ipa_fws.mdt` firmware warnings, which do not
   explain the XNU stop. The raw pmsg capture is kept in `/tmp`, not the repo.
 
+## >>> UPDATE 2026-10-21 (iOS userspace image flash) <<<
+
+- From recovery, rebooted to fastboot and selected slot B; `fastboot getvar
+  current-slot` reported `b` before the write. The userdata partition reports
+  `0x196A3D3000` bytes.
+- Flashed `/Users/vivien/Downloads/ios16-root-20H392.simg` to `userdata` only.
+  It is a valid Android sparse image (4,194,304 blocks of 4,096 bytes; 16 GiB
+  expanded), SHA-256 `9d20904cf584270fbb47ca968141cc33508e10ac7f649c03b0dd3581020cbf77`.
+  Fastboot sent and wrote all 16 chunks successfully and exited 0. It warned
+  that it skipped copying an AVB footer because the input is sparse; the flash
+  still completed successfully.
+- No reboot command was issued after the flash. On the final check the device
+  no longer enumerated in fastboot or ADB, so its current USB/boot state is
+  unknown. Slot B was selected; no boot partition was written in this step.
+
 ## >>> UPDATE 2026-10-21 (VEUX XNU QEMU probe) <<<
 
 - Installed QEMU 8.2.2 (`qemu-system-arm`) on the VPS and ran the VEUX kernel payload on generic AArch64 `virt` with a QEMU-specific ADT (`mkadt.py --qemu --veux`), one `cortex-a76` CPU, and no UFS-root arguments. This was a kernel payload test; the Android `shim-boot-veux-ufs-log.img` itself is not a QEMU boot image.
