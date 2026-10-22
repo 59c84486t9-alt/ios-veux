@@ -95,8 +95,18 @@ jobs:
             grep -Fq 'VEUX SDE probe v1 begin base=0x05e00000 size=0x00090000' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'PE_parse_boot_argn("veuxsde"' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'PE_parse_boot_argn("veuxfb"' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'PE_parse_boot_argn("veuxfbconsole"' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'ml_io_map_wcomb((vm_offset_t)VEUX_FB_BASE, VEUX_FB_SIZE)' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'VEUX framebuffer marker v1 wrote white 32x32 at 0x85200000' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'veux_log_append(&c, 1)' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'static void veux_log_start(bool userdata_partition)' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'on != 1' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'veux_fb_console_putc(c)' xnu/pexpert/arm/pe_kprintf.c
+            grep -Fq 'PE_parse_boot_argn("veuxsandbox"' xnu/bsd/kern/sweet_amfi.c
+            grep -Fq 'veuxiolog' xnu/iokit/Kernel/IOUserClient.cpp
+            grep -Fq 'veuxnull' xnu/bsd/dev/mem.c
+            grep -Fq 'PE_parse_boot_argn("veuxscan"' xnu/osfmk/kern/exception.c
+            grep -Fq 'ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/bsd/vfs/kpi_vfs.c
             python3 - <<'PY'
           import re
           from pathlib import Path
@@ -104,8 +114,14 @@ jobs:
           serial = Path("xnu/pexpert/arm/pe_serial.c").read_text()
           region = serial.split("#if defined(ARM64_BOARD_CONFIG_VEUX)\n/*\n * Read the VEUX SDE handoff", 1)[1].split("#endif /* ARM64_BOARD_CONFIG_VEUX */", 1)[0]
           probe = region.split("veux_sde_probe(void)", 1)[1]
-          fb = region.split("static bool\nveux_sde_pipe_can_mark", 1)[1].split("\nvoid\nveux_sde_probe", 1)[0]
+          fb = region.split("static bool\nveux_sde_pipe_enable", 1)[1].split("\nvoid\nveux_sde_probe", 1)[0]
+          fbcon = region.split("void\nveux_fb_console_putc(char c)", 1)[1].split("\nstatic void\nveux_sde_log_text", 1)[0]
           kprintf = Path("xnu/pexpert/arm/pe_kprintf.c").read_text()
+          ufs = Path("xnu/bsd/dev/sweet_ufs.c").read_text()
+          amfi = Path("xnu/bsd/kern/sweet_amfi.c").read_text()
+          bsd_init = Path("xnu/bsd/kern/bsd_init.c").read_text()
+          iokit_user_client = Path("xnu/iokit/Kernel/IOUserClient.cpp").read_text()
+          memdev = Path("xnu/bsd/dev/mem.c").read_text()
           startup = kprintf.split("PE_init_kprintf(void)", 1)[1].split("STARTUP(KPRINTF", 1)[0].split("#else", 1)[0]
           pmsg_init = kprintf.split("PE_init_veux_pmsg(void)", 1)[1].split("\n#endif", 1)[0]
           vm = Path("xnu/osfmk/arm64/arm_vm_init.c").read_text()
@@ -113,7 +129,7 @@ jobs:
           assert vm.index("early I/O page tables ready") < vm.index("PE_init_veux_pmsg();"), "VEUX pmsg must wait for early I/O page tables"
           assert "veux_sde_probe();" in pmsg_init, "SDE probe must run inside successful VEUX pmsg initialization"
           assert "ml_io_map(VEUX_SDE_BASE, VEUX_SDE_MAP_SIZE)" in probe, "SDE must use the guarded device mapping"
-          assert "PE_parse_boot_argn(\"veuxsde\"" in probe and "PE_parse_boot_argn(\"veuxfb\"" in probe, "SDE reads and framebuffer writes must be opt-in"
+          assert "PE_parse_boot_argn(\"veuxsde\"" in probe and "PE_parse_boot_argn(\"veuxfb\"" in probe and "PE_parse_boot_argn(\"veuxfbconsole\"" in probe, "SDE reads, marker writes, and console writes must be opt-in"
           assert "VEUX_SDE_EXPECTED_REV" in probe and "unsupported revision" in probe, "unexpected SDE revisions must stop the register dump"
           assert probe.index("if (revision != VEUX_SDE_EXPECTED_REV)") < probe.index("veux_sde_log_pipe(\"VIG0\""), "read pipe state only after revision validation"
           assert "volatile const uint32_t *mdp" in region, "SDE registers must be accessed read-only"
@@ -126,9 +142,24 @@ jobs:
           assert "VEUX_FB_STRIDE_PACKED" in fb and "VEUX_FB_STRIDE_PADDED" in fb and "VEUX_FB_SIZE" in fb, "bound framebuffer pitch and memory span"
           assert fb.index("if (route == 0") < fb.index("ml_io_map_wcomb") < fb.index("row[x] = 0xffffffffu"), "write only after all guards and mapping succeed"
           assert "VEUX framebuffer marker v1 wrote white 32x32 at 0x85200000" in fb, "successful screen marker must remain uniquely identifiable"
+          assert "veux_fb_console_base = fb" in fb and "veux_fb_console_ready = true" in fb, "enable console only after the framebuffer map and guards pass"
+          assert "Transparent overlay: preserve the existing splash." in fbcon and "VEUX_FB_CONSOLE_FG" in fbcon, "console must write only white foreground glyph pixels"
+          assert "veux_fb_console_putc(c)" in kprintf, "route VEUX printk to guarded framebuffer console"
+          assert "veux_log_append(&c, 1)" in serial, "mirror the active VEUX pmsg printk path into the UFS log ring"
+          assert "os_atomic_store(&veux_log_total, at + 1, release)" in ufs, "publish log bytes only after storing them"
+          assert "!PE_parse_boot_argn(\"veuxlog\", &on, sizeof(on)) || on != 1" in ufs, "userdata writes must require veuxlog=1 explicitly"
+          assert "!userdata_partition || su.lun != 0" in ufs, "persistent logs are limited to userdata on LUN 0"
+          assert "su.log_first_block = su.first_block + su.nblocks - VEUX_LOG_BLOCKS" in ufs, "persistent log writes remain bounded to the reserved partition tail"
+          assert "defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in bsd_init, "register the built-in AMFI compatibility policy on VEUX"
+          assert "defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in amfi, "compile the AMFI provider for VEUX"
+          assert "PE_parse_boot_argn(\"veuxsandbox\"" in amfi and "enable_sandbox != 1" in amfi, "the permissive Sandbox stand-in must stay explicitly opt-in"
+          assert "PE_parse_boot_argn(\"veuxiolog\"" in iokit_user_client and "defined(ARM64_BOARD_CONFIG_VEUX)" in iokit_user_client, "compile the opt-in IOKit trace for VEUX"
+          assert "PE_parse_boot_argn(\"veuxnull\"" in memdev, "compile the opt-in /dev/null tee for VEUX"
+          assert "defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in Path("xnu/bsd/kern/kern_exit.c").read_text(), "record user-process crash details on VEUX"
+          assert "veuxscan" in Path("xnu/osfmk/kern/exception.c").read_text(), "gate heap-string scans by a VEUX boot argument"
           assert "intf_active & (1u << 1)" in probe and "lm0_out_size == expected_size" in probe, "require active DSI and matching LM0 geometry"
           PY
-            echo "Verified VEUX CPU, deferred pmsg, read-only SDE access, and guarded opt-in framebuffer marker"
+            echo "Verified VEUX CPU, bounded opt-in userdata logging, guarded framebuffer console, AMFI, and opt-in userspace diagnostics"
           fi
 
       - name: Package build tree for local compiles

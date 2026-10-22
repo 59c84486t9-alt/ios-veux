@@ -1,0 +1,195 @@
+From: ios-veux
+Subject: [PATCH] Add an opt-in transparent VEUX framebuffer console
+
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1449,6 +1449,59 @@
+ #define VEUX_FB_STRIDE_PACKED      4320u
+ #define VEUX_FB_STRIDE_PADDED      4352u
+ #define VEUX_FB_MARKER_EDGE        32u
++#define VEUX_FB_CONSOLE_SCALE      2u
++#define VEUX_FB_CONSOLE_TOP        64u
++#define VEUX_FB_CONSOLE_FG         0xffffffffu
++
++extern unsigned char iso_font[256 * 16];
++static volatile uint32_t *veux_fb_console_base;
++static uint32_t veux_fb_console_stride;
++static uint32_t veux_fb_console_col, veux_fb_console_row;
++static bool veux_fb_console_ready;
++
++void
++veux_fb_console_putc(char c)
++{
++	if (!veux_fb_console_ready || veux_fb_console_base == NULL) {
++		return;
++	}
++	const uint32_t cols = VEUX_FB_WIDTH / (8u * VEUX_FB_CONSOLE_SCALE);
++	const uint32_t rows = (VEUX_FB_HEIGHT - VEUX_FB_CONSOLE_TOP) / (16u * VEUX_FB_CONSOLE_SCALE);
++	if (c == '\r') {
++		veux_fb_console_col = 0;
++		return;
++	}
++	if (c == '\n' || veux_fb_console_col >= cols) {
++		veux_fb_console_col = 0;
++		veux_fb_console_row = (veux_fb_console_row + 1) % rows;
++		if (c == '\n') {
++			return;
++		}
++	}
++	unsigned char ch = (unsigned char)c;
++	if (ch < 0x20 || ch > 0x7e) {
++		ch = '?';
++	}
++	const unsigned char *glyph = iso_font + (uint32_t)ch * 16u;
++	uint32_t x0 = veux_fb_console_col * 8u * VEUX_FB_CONSOLE_SCALE;
++	uint32_t y0 = VEUX_FB_CONSOLE_TOP + veux_fb_console_row * 16u * VEUX_FB_CONSOLE_SCALE;
++	for (uint32_t gy = 0; gy < 16; gy++) {
++		for (uint32_t sy = 0; sy < VEUX_FB_CONSOLE_SCALE; sy++) {
++			volatile uint32_t *line = veux_fb_console_base +
++			    (y0 + gy * VEUX_FB_CONSOLE_SCALE + sy) * (veux_fb_console_stride / 4u) + x0;
++			for (uint32_t gx = 0; gx < 8; gx++) {
++				if ((glyph[gy] & (1u << gx)) == 0) {
++					continue; /* Transparent overlay: preserve the existing splash. */
++				}
++				for (uint32_t sx = 0; sx < VEUX_FB_CONSOLE_SCALE; sx++) {
++					line[gx * VEUX_FB_CONSOLE_SCALE + sx] = VEUX_FB_CONSOLE_FG;
++				}
++			}
++		}
++	}
++	__asm__ volatile("dsb sy" ::: "memory");
++	veux_fb_console_col++;
++}
+ 
+ static void
+ veux_sde_log_text(const char *text)
+@@ -1519,8 +1572,8 @@
+ }
+ 
+ static bool
+-veux_sde_pipe_can_mark(volatile const uint32_t *mdp, uint32_t base,
+-		uint32_t route, const char *name)
++veux_sde_pipe_enable(volatile const uint32_t *mdp, uint32_t base,
++		uint32_t route, const char *name, bool write_marker, bool enable_console)
+ {
+ 	uint32_t src_size = veux_sde_read(mdp, base + 0x00);
+ 	uint32_t src_xy = veux_sde_read(mdp, base + 0x08);
+@@ -1543,7 +1596,7 @@
+ 	    (stride_reg >> 16) != 0 ||
+ 	    (stride != VEUX_FB_STRIDE_PACKED && stride != VEUX_FB_STRIDE_PADDED) ||
+ 	    (uint64_t)stride * VEUX_FB_HEIGHT > VEUX_FB_SIZE) {
+-		veux_sde_log_text("VEUX FB marker skipped pipe=");
++		veux_sde_log_text("VEUX FB marker/console skipped pipe=");
+ 		veux_sde_log_text(name);
+ 		veux_sde_log_text(" route/address/geometry/format/stride guard failed\n");
+ 		return false;
+@@ -1551,21 +1604,32 @@
+ 
+ 	vm_offset_t fb_vaddr = ml_io_map_wcomb((vm_offset_t)VEUX_FB_BASE, VEUX_FB_SIZE);
+ 	if (fb_vaddr == 0) {
+-		veux_sde_log_text("VEUX FB marker skipped: framebuffer map failed\n");
++		veux_sde_log_text("VEUX FB marker/console skipped: framebuffer map failed\n");
+ 		return false;
+ 	}
+ 
+ 	volatile uint32_t *fb = (volatile uint32_t *)fb_vaddr;
+-	for (uint32_t y = 16; y < 16 + VEUX_FB_MARKER_EDGE; y++) {
+-		volatile uint32_t *row = fb + y * (stride / sizeof(uint32_t));
+-		for (uint32_t x = 16; x < 16 + VEUX_FB_MARKER_EDGE; x++) {
+-			row[x] = 0xffffffffu;
++	if (enable_console) {
++		veux_fb_console_base = fb;
++		veux_fb_console_stride = stride;
++		veux_fb_console_col = veux_fb_console_row = 0;
++		veux_fb_console_ready = true;
++		veux_sde_log_text("VEUX framebuffer console v1 enabled pipe=");
++		veux_sde_log_text(name);
++		veux_pmsg_putc('\n');
++	}
++	if (write_marker) {
++		for (uint32_t y = 16; y < 16 + VEUX_FB_MARKER_EDGE; y++) {
++			volatile uint32_t *row = fb + y * (stride / sizeof(uint32_t));
++			for (uint32_t x = 16; x < 16 + VEUX_FB_MARKER_EDGE; x++) {
++				row[x] = 0xffffffffu;
++			}
+ 		}
++		__asm__ volatile("dsb sy" ::: "memory");
++		veux_sde_log_text("VEUX framebuffer marker v1 wrote white 32x32 at 0x85200000 pipe=");
++		veux_sde_log_text(name);
++		veux_pmsg_putc('\n');
+ 	}
+-	__asm__ volatile("dsb sy" ::: "memory");
+-	veux_sde_log_text("VEUX framebuffer marker v1 wrote white 32x32 at 0x85200000 pipe=");
+-	veux_sde_log_text(name);
+-	veux_pmsg_putc('\n');
+ 	return true;
+ }
+ 
+@@ -1574,9 +1638,11 @@
+ {
+ 	int dump_regs = 0;
+ 	int write_marker = 0;
++	int enable_console = 0;
+ 	(void)PE_parse_boot_argn("veuxsde", &dump_regs, sizeof(dump_regs));
+ 	(void)PE_parse_boot_argn("veuxfb", &write_marker, sizeof(write_marker));
+-	if (dump_regs == 0 && write_marker == 0) {
++	(void)PE_parse_boot_argn("veuxfbconsole", &enable_console, sizeof(enable_console));
++	if (dump_regs == 0 && write_marker == 0 && enable_console == 0) {
+ 		return;
+ 	}
+ 
+@@ -1615,24 +1681,26 @@
+ 	veux_sde_log_reg("VEUX SDE v1 lm0_blend3", mdp, VEUX_SDE_LM0 + 0x68);
+ 	veux_sde_log_pipe("VIG0", mdp, VEUX_SDE_VIG0);
+ 	veux_sde_log_pipe("DMA0", mdp, VEUX_SDE_DMA0);
+-	if (write_marker != 0) {
++	if (write_marker != 0 || enable_console != 0) {
+ 		uint32_t lm0_out_size = veux_sde_read(mdp, VEUX_SDE_LM0 + 0x04);
+ 		bool dsi_active = (intf_active & (1u << 1)) != 0;
+ 		bool vig0_routed = (ctl_layer & 0x7u) != 0 || (ctl_layer_ext3 & 0xfu) != 0;
+ 		bool dma0_routed = (ctl_layer & 0x001c0000u) != 0 ||
+ 			((ctl_layer_ext2 >> 8) & 0xfu) != 0;
+ 		const uint32_t expected_size = (VEUX_FB_HEIGHT << 16) | VEUX_FB_WIDTH;
+-		bool marked = false;
++		bool usable = false;
+ 
+ 		if (dsi_active && lm0_out_size == expected_size && vig0_routed) {
+-			marked = veux_sde_pipe_can_mark(mdp, VEUX_SDE_VIG0, 1, "VIG0");
++			usable = veux_sde_pipe_enable(mdp, VEUX_SDE_VIG0, 1, "VIG0",
++			    write_marker != 0, enable_console != 0);
+ 		}
+-		if (!marked && dsi_active && lm0_out_size == expected_size && dma0_routed) {
+-			marked = veux_sde_pipe_can_mark(mdp, VEUX_SDE_DMA0, 1, "DMA0");
++		if (!usable && dsi_active && lm0_out_size == expected_size && dma0_routed) {
++			usable = veux_sde_pipe_enable(mdp, VEUX_SDE_DMA0, 1, "DMA0",
++			    write_marker != 0, enable_console != 0);
+ 		}
+-		if (!marked && (!dsi_active || lm0_out_size != expected_size ||
++		if (!usable && (!dsi_active || lm0_out_size != expected_size ||
+ 		    (!vig0_routed && !dma0_routed))) {
+-			veux_sde_log_text("VEUX FB marker skipped: active DSI, LM0 geometry, or routed-pipe guard failed\n");
++			veux_sde_log_text("VEUX FB marker/console skipped: active DSI, LM0 geometry, or routed-pipe guard failed\n");
+ 		}
+ 	}
+ 	__asm__ volatile("dsb sy" ::: "memory");
+--- a/pexpert/arm/pe_kprintf.c
++++ b/pexpert/arm/pe_kprintf.c
+@@ -34,6 +34,7 @@
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ static void veux_discard_kprintf(char c);
+ static void veux_pmsg_putc_crlf(char c);
++extern void veux_fb_console_putc(char c);
+ #endif
+ 
+ __startup_func
+@@ -72,8 +73,10 @@
+ {
+ 	if (c == '\n') {
+ 		veux_pmsg_putc('\r');
++		veux_fb_console_putc('\r');
+ 	}
+ 	veux_pmsg_putc(c);
++	veux_fb_console_putc(c);
+ }
+ #endif
+ 

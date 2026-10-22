@@ -1,3 +1,39 @@
+## >>> UPDATE 2026-10-21 (VEUX display, userdata logging, and SWEET ports) <<<
+
+- Added patches 0097–0102. Patch 0097 connects the VEUX pmsg printk path to the
+  existing 4 MiB UFS ring, publishes ring bytes after storing them, bounds
+  writes to the final 4 MiB + 4 KiB of the exact `userdata` partition on LUN 0,
+  and requires `veuxlog=1`. Normal UFS/root writes remain read-only. Recovery
+  reads the raw tail with `tools/veux-log-pull.sh`; it is not a file in the HFS+
+  root. The image written earlier occupies 16 GiB of a much larger userdata
+  partition, so this log window is outside that HFS+ image but overlaps the
+  remaining old Android F2FS area. The old tail backup remains the restore
+  point if needed.
+- Patch 0098 adds an opt-in transparent framebuffer text overlay. It shares
+  the marker's live SDE revision, DSI route, buffer address, geometry, linear
+  8888 format, stride, and 12 MiB reservation checks. It draws white glyph
+  foreground pixels only after all checks and mapping succeed; it does not
+  clear rows or paint a background. `veuxfb=1` requests the guarded marker and
+  SDE probe; `veuxfbconsole=1` separately requests the console.
+- Patch 0099 enables the SWEET AMFI/entitlements provider on VEUX. Its
+  permissive `Sandbox` stand-in remains off unless `veuxsandbox=1` is present.
+  Patch 0100 ports `/dev/null` tee and bounded IOKit matching traces behind
+  `veuxnull=` and `veuxiolog=`; patch 0101 enables the HFS rename-swap fallback;
+  patch 0102 routes user-process crash details and optional heap strings into
+  the console log (`veuxscan=`).
+- Hardware-specific SWEET framebuffer bootstrap/IOMFB, touch, keys, power,
+  USB, Goodix protocol, panel refresh, and secondary-CPU PSCI paths remain
+  unported because their VEUX addresses or handoff behavior are not established.
+  The VEUX console uses the existing guarded SDE handoff instead of SWEET's
+  fixed scanout mapping. The existing VEUX patches already cover the board
+  expert, single-core CPU/timer bring-up, PRNG/crypto compatibility, pthread,
+  read-only UFS root, and DMA mapping.
+- All 102 patches pass `tools/validate-repo.py`. Patches 0097–0102 apply
+  cleanly in order to the saved XNU tree from build 39699826454, and the new
+  workflow's post-build source guards pass against that patched tree. CI build,
+  payload packaging, and any phone boot/flash are pending; no phone partition
+  was changed in this step.
+
 ## >>> UPDATE 2026-10-21 (VEUX QEMU follow-up: board guards) <<<
 
 - Re-ran the 0090 kernel on the VPS with QEMU 8.2.2, a QEMU-specific ADT, one Cortex-A76 CPU and no root device. XNU entered the kernel, then took a data abort at `_crypto_random_kmem_ctx_size+0xc` (`FAR=0x150`) and hit the debugger trap. QEMU serial output was empty. Captured artifacts are in `shim/out/qemu-veux-0090/`; the Android boot image was not run in QEMU.

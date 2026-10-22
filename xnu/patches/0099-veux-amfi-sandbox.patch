@@ -1,0 +1,54 @@
+From: ios-veux
+Subject: [PATCH] Enable VEUX AMFI and opt-in sandbox bring-up policies
+
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -691,8 +691,8 @@
+ 	bsd_init_kprintf("calling vfsinit\n");
+ 	vfsinit();
+ 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
+-	/* AMFI's MAC policy is built in on SWEET (bsd/kern/sweet_amfi.c). */
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
++	/* The built-in SWEET/VEUX AMFI compatibility policy lives in sweet_amfi.c. */
+ 	extern void sweet_amfi_policy_register(void);
+ 	sweet_amfi_policy_register();
+ #endif
+--- a/bsd/kern/sweet_amfi.c
++++ b/bsd/kern/sweet_amfi.c
+@@ -22,7 +22,7 @@
+  * Interfaces no kernel path uses on SWEET (they serve other Apple kexts)
+  * panic with a clear message instead of being NULL.
+  */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include <kern/debug.h>
+ #include <kern/startup.h>
+ #include <libkern/amfi/amfi.h>
+@@ -35,6 +35,7 @@
+ #include <sys/ubc_internal.h>
+ #include <sys/vnode.h>
+ #include <security/mac_policy.h>
++#include <pexpert/pexpert.h>
+ 
+ /* iokit/Kernel/arm/SweetEntitlements.cpp */
+ void *sweet_entitlements_create(const CS_GenericBlob *blob, size_t blob_len);
+@@ -376,8 +377,16 @@
+ 	int error = mac_policy_register(&sweet_amfi_mac_conf, &sweet_amfi_mac_handle, NULL);
+ 	printf("SWEET AMFI: platform binary policy %s (%d)\n",
+ 	    error ? "NOT registered" : "registered", error);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	uint32_t enable_sandbox = 0;
++	if (!PE_parse_boot_argn("veuxsandbox", &enable_sandbox, sizeof(enable_sandbox)) ||
++	    enable_sandbox != 1) {
++		printf("VEUX Sandbox: permissive stand-in disabled; set veuxsandbox=1 to enable\n");
++		return;
++	}
++#endif
+ 	error = mac_policy_register(&sweet_sandbox_mac_conf, &sweet_sandbox_mac_handle, NULL);
+-	printf("SWEET Sandbox: permissive policy %s (%d)\n",
++	printf("SWEET/VEUX Sandbox: permissive policy %s (%d)\n",
+ 	    error ? "NOT registered" : "registered", error);
+ }
+-#endif /* ARM64_BOARD_CONFIG_SWEET */
++#endif /* ARM64_BOARD_CONFIG_SWEET || ARM64_BOARD_CONFIG_VEUX */

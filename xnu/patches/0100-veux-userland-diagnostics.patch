@@ -1,0 +1,120 @@
+From: ios-veux
+Subject: [PATCH] Add opt-in VEUX userspace console and IOKit diagnostics
+
+--- a/bsd/dev/mem.c
++++ b/bsd/dev/mem.c
+@@ -153,7 +153,7 @@
+ 	return 0;
+ }
+ 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ /*
+  * SWEET: daemons started by launchd write stdout/stderr to /dev/null, and
+  * pointing a launchd job at /dev/console stops it from launching at all
+@@ -169,9 +169,15 @@
+ sweet_null_tee(char *name, size_t len)
+ {
+ 	if (!sweet_null_parsed) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		if (!PE_parse_boot_argn("veuxnull", sweet_null_names, sizeof(sweet_null_names))) {
++			strlcpy(sweet_null_names, "-", sizeof(sweet_null_names));
++		}
++#else
+ 		if (!PE_parse_boot_argn("sweetnull", sweet_null_names, sizeof(sweet_null_names))) {
+ 			strlcpy(sweet_null_names, "backboardd,SpringBoard", sizeof(sweet_null_names));
+ 		}
++#endif
+ 		sweet_null_parsed = 1;
+ 	}
+ 	proc_selfname(name, (int)len);
+@@ -254,7 +260,7 @@
+ 			if (rw == UIO_READ) {
+ 				return 0;
+ 			}
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 			{
+ 				char name[32];
+ 				if (sweet_null_tee(name, sizeof(name))) {
+--- a/iokit/Kernel/IOUserClient.cpp
++++ b/iokit/Kernel/IOUserClient.cpp
+@@ -2600,7 +2600,7 @@
+ }
+ 
+ static 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ /*
+  * SWEET IOKit trace: registry and matching calls made by the processes
+  * named in boot-arg sweetiolog (comma separated, default "backboardd,SpringBoard";
+@@ -2615,9 +2615,15 @@
+ sweet_iolog(char *name, size_t len)
+ {
+ 	if (!sweet_iolog_parsed) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		if (!PE_parse_boot_argn("veuxiolog", sweet_iolog_names, sizeof(sweet_iolog_names))) {
++			strlcpy(sweet_iolog_names, "-", sizeof(sweet_iolog_names));
++		}
++#else
+ 		if (!PE_parse_boot_argn("sweetiolog", sweet_iolog_names, sizeof(sweet_iolog_names))) {
+ 			strlcpy(sweet_iolog_names, "backboardd,SpringBoard", sizeof(sweet_iolog_names));
+ 		}
++#endif
+ 		sweet_iolog_parsed = 1;
+ 	}
+ 	if (sweet_iolog_lines >= 400) {
+@@ -2675,7 +2681,7 @@
+ 	if ((dict = OSDynamicCast( OSDictionary, obj))) {
+ 		IOTaskRegistryCompatibilityMatching(current_task(), dict);
+ 		OSIterator *found = IOService::getMatchingServices( dict );
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 		char sname[32];
+ 		if (sweet_iolog(sname, sizeof(sname))) {
+ 			unsigned int count = 0;
+@@ -2775,7 +2781,7 @@
+ 		IOTaskRegistryCompatibilityMatching(current_task(), dict);
+ 		*service = IOService::copyMatchingService( dict );
+ 		kr = *service ? kIOReturnSuccess : kIOReturnNotFound;
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 		char sname[32];
+ 		if (sweet_iolog(sname, sizeof(sname))) {
+ 			sweet_iolog_dict(sname, "matching1", dict,
+@@ -2885,7 +2891,7 @@
+ 			continue;
+ 		}
+ 		IOTaskRegistryCompatibilityMatching(current_task(), dict);
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 		{
+ 			char sname[32];
+ 			if (sweet_iolog(sname, sizeof(sname))) {
+@@ -3360,7 +3366,7 @@
+ 	}
+ 
+ 	entry = IORegistryEntry::fromPath( path );
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 	{
+ 		char sname[32];
+ 		if (sweet_iolog(sname, sizeof(sname))) {
+@@ -4178,7 +4184,7 @@
+ 
+ 	*iterator = IOUserIterator::withIterator(entry->getChildIterator(
+ 		    IORegistryEntry::getPlane( plane )));
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 	{
+ 		char sname[32];
+ 		if (sweet_iolog(sname, sizeof(sname))) {
+@@ -4401,7 +4407,7 @@
+ #endif
+ 		res = service->newUserClient( owningTask, (void *) owningTask,
+ 		    connect_type, propertiesDict, &client );
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 		{
+ 			char sname[32];
+ 			if (sweet_iolog(sname, sizeof(sname))) {

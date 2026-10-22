@@ -1,0 +1,32 @@
+From: ios-veux
+Subject: [PATCH] Enable VEUX user-process crash diagnostics
+
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -1884,7 +1884,7 @@
+ 		subcode = ut->uu_subcode;
+ 		etype = ut->uu_exception;
+ 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 		if (p == current_proc()) {
+ 			extern void sweet_crash_log(const char *, int, int, uint64_t, uint64_t);
+ 			sweet_crash_log(p->p_comm, proc_getpid(p), WTERMSIG(rv),
+--- a/osfmk/kern/exception.c
++++ b/osfmk/kern/exception.c
+@@ -916,9 +916,15 @@
+ 	int lines = 0;
+ 	char last[96] = "";
+ 
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (!PE_parse_boot_argn("veuxscan", names, sizeof(names))) {
++		strlcpy(names, "-", sizeof(names));
++	}
++#else
+ 	if (!PE_parse_boot_argn("sweetscan", names, sizeof(names))) {
+ 		strlcpy(names, "backboardd,SpringBoard", sizeof(names));
+ 	}
++#endif
+ 	size_t n = strlen(name), found = 0;
+ 	for (const char *t = names; *t;) {
+ 		const char *end = strchr(t, ',');
