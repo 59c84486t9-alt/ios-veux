@@ -162,6 +162,15 @@ static const char *fs_type(uint32_t lba)
 	return "other";
 }
 
+static int name_equal(const char *a, const char *b)
+{
+	while (*a && *a == *b) {
+		a++;
+		b++;
+	}
+	return (uint8_t)*a == (uint8_t)*b;
+}
+
 /* One line per GPT entry of at least 64 MiB: name, first LBA, size in MiB (4K blocks). */
 static void list_partitions(uint32_t entry_lba, uint32_t nent)
 {
@@ -185,8 +194,8 @@ static void list_partitions(uint32_t entry_lba, uint32_t nent)
 		if (((last - first + 1) >> 8) < 64)	/* keep the screen to the big ones */
 			continue;
 		con_hex2(name, "lba=", (uint32_t)first, "MiB=", (uint32_t)((last - first + 1) >> 8));
-		if (!__builtin_strcmp(name, "userdata") || !__builtin_strcmp(name, "cust") ||
-		    !__builtin_strcmp(name, "cache"))
+		if (name_equal(name, "userdata") || name_equal(name, "cust") ||
+		    name_equal(name, "cache"))
 			con_str(" fs", fs_type((uint32_t)first));
 	}
 }

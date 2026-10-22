@@ -1,3 +1,19 @@
+## >>> UPDATE 2026-10-22 (local VEUX shim packaging check) <<<
+
+- Replaced the shim's `__builtin_strcmp` uses with a freestanding `name_equal`
+  helper. A local Clang/AArch64 compile exposed an unresolved libc `strcmp`
+  reference at link time; the shim has no libc. The source now stays self-
+  contained for freestanding toolchains.
+- Local shim build check passed with the VEUX target, zero `ABS64` relocations,
+  the host console renderer, and AArch64 ELF output (184,320-byte image).
+  Packaged a smoke image with AOSP's `mkbootimg.py` and the selected VEUX DTB;
+  unpacking verified the kernel and DTB byte-for-byte. That smoke image used
+  the previously built kernel only to verify packaging and is not a new boot
+  candidate.
+- GitHub XNU run `39781378209` was cancelled before any steps ran; a rerun of
+  the same dispatch is queued. The phone remains in slot-A recovery. No image
+  has been flashed during this check.
+
 ## >>> UPDATE 2026-10-22 (CoreAnimation surface pitch audit) <<<
 
 - SWEET's IOSurface provider advertises 64-byte row alignment. When
