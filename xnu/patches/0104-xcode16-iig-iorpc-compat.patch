@@ -1,0 +1,29 @@
+From: ios-veux
+Subject: [PATCH] Add the Xcode 16 IIG kernelContent field to IORPC
+
+Xcode 16's IIG output references IORPC.kernelContent in kernel builds.
+Backport the kernel-only field present in newer open-source XNU so the
+generated XNU 8796 sources compile with the macOS 15 runner's toolchain.
+
+--- a/iokit/IOKit/IORPC.h
++++ b/iokit/IOKit/IORPC.h
+@@ -224,5 +224,8 @@ struct IORPC {
+ 	IORPCMessageMach * reply;
+ 	uint32_t           sendSize;
+ 	uint32_t           replySize;
++#ifdef KERNEL
++	IORPCMessage *     kernelContent;
++#endif /* KERNEL */
+ };
+ typedef struct IORPC IORPC;
+--- a/iokit/DriverKit/IORPC.h
++++ b/iokit/DriverKit/IORPC.h
+@@ -224,5 +224,8 @@ struct IORPC {
+ 	IORPCMessageMach * reply;
+ 	uint32_t           sendSize;
+ 	uint32_t           replySize;
++#ifdef KERNEL
++	IORPCMessage *     kernelContent;
++#endif /* KERNEL */
+ };
+ typedef struct IORPC IORPC;

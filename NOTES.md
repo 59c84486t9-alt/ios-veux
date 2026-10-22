@@ -1073,3 +1073,9 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 
 - In response to the user's request to retry GitHub's internal runner-acquisition error, reran workflow `39789142904` (attempt 2), preserving its head `1aab246be4a361392f1c7683ca799a6b11e76f64` and original `DEVELOPMENT` / `VEUX` / macOS 13.5 inputs.
 - At 14:13 UTC, job `119872313567` remained queued after about 7 minutes, with no steps executed. No kernel artifact has been produced by this retry so far. The phone and its partitions were not accessed or changed.
+
+## >>> UPDATE 2026-10-22 (macOS 15 / Xcode 16 build path) <<<
+
+- To avoid the repeated hosted-runner acquisition failures on `macos-14`, prepared a VEUX-only workflow update for the standard `macos-15` runner and pinned selection of Xcode 16. The Xcode 16 `iig` ABI difference is addressed by new patch `0104-xcode16-iig-iorpc-compat.patch`, which adds the kernel-conditional `IORPCMessage * kernelContent` field to both XNU 8796 IORPC header copies, matching newer open-source XNU.
+- Patch 0104 dry-runs successfully against the saved XNU 8796 tree from `/tmp/veux-local-xnu`; `tools/validate-repo.py` passes with 104 contiguous patches and `git diff --check` is clean. This is source/patch validation only, not a kernel compile or runtime validation.
+- The previous macOS 14 rerun (run `39789142904`, attempt 2) was still queued at the time of this change. A new manual dispatch on `ios-veux` will supersede that queued attempt through the workflow's existing concurrency group. No phone or partition has been accessed or changed.

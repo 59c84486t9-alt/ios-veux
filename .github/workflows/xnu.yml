@@ -34,9 +34,9 @@ env:
 
 jobs:
   build:
-    # macos-14 still ships Xcode 15.x: its iig matches the xnu-8796 IORPC ABI
-    # (Xcode 16's iig emits IORPC.kernelContent, which this xnu lacks)
-    runs-on: macos-14
+    # macOS 15 has better hosted-runner availability. Patch 0104 backports
+    # Xcode 16 iig's kernel-only IORPC.kernelContent field to xnu-8796.
+    runs-on: macos-15
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +56,7 @@ jobs:
       - name: Deps
         run: |
           brew install jq gum bash cmake ninja
-          # build.sh only checks that xcodes exists (Xcode is preinstalled); no bottle on macOS 14
+          # build.sh only checks that xcodes exists; Xcode is preinstalled.
           printf '#!/bin/sh\nexit 0\n' | sudo tee /usr/local/bin/xcodes >/dev/null
           sudo chmod +x /usr/local/bin/xcodes
           sw_vers
@@ -65,6 +65,7 @@ jobs:
           echo "DEVELOPER_DIR=$XC/Contents/Developer" >> "$GITHUB_ENV"
           sudo xcode-select -s "$XC"
           xcodebuild -version
+          xcodebuild -version | grep -Eq '^Xcode 16\.'
           xcrun --find iig
 
       - name: Build
@@ -99,6 +100,8 @@ jobs:
             grep -Fq 'PE_parse_boot_argn("veuxfbconsole"' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'ml_io_map_wcomb((vm_offset_t)VEUX_FB_BASE, VEUX_FB_SIZE)' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'VEUX simplefb marker wrote white 32x32 at 0x85200000' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'IORPCMessage * kernelContent;' xnu/iokit/IOKit/IORPC.h
+            grep -Fq 'IORPCMessage * kernelContent;' xnu/iokit/DriverKit/IORPC.h
             grep -Fq 'veux_log_append(&c, 1)' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'static void veux_log_start(bool userdata_partition)' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'on != 1' xnu/bsd/dev/sweet_ufs.c
