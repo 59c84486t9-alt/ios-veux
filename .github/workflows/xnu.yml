@@ -119,6 +119,7 @@ jobs:
           kprintf = Path("xnu/pexpert/arm/pe_kprintf.c").read_text()
           ufs = Path("xnu/bsd/dev/sweet_ufs.c").read_text()
           amfi = Path("xnu/bsd/kern/sweet_amfi.c").read_text()
+          entitlements = Path("xnu/iokit/Kernel/arm/SweetEntitlements.cpp").read_text()
           bsd_init = Path("xnu/bsd/kern/bsd_init.c").read_text()
           iokit_user_client = Path("xnu/iokit/Kernel/IOUserClient.cpp").read_text()
           memdev = Path("xnu/bsd/dev/mem.c").read_text()
@@ -152,6 +153,7 @@ jobs:
           assert "su.log_first_block = su.first_block + su.nblocks - VEUX_LOG_BLOCKS" in ufs, "persistent log writes remain bounded to the reserved partition tail"
           assert "defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in bsd_init, "register the built-in AMFI compatibility policy on VEUX"
           assert "defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in amfi, "compile the AMFI provider for VEUX"
+          assert "#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in entitlements, "compile the shared XML entitlements provider for VEUX"
           assert "PE_parse_boot_argn(\"veuxsandbox\"" in amfi and "enable_sandbox != 1" in amfi, "the permissive Sandbox stand-in must stay explicitly opt-in"
           assert "PE_parse_boot_argn(\"veuxiolog\"" in iokit_user_client and "defined(ARM64_BOARD_CONFIG_VEUX)" in iokit_user_client, "compile the opt-in IOKit trace for VEUX"
           assert "PE_parse_boot_argn(\"veuxnull\"" in memdev, "compile the opt-in /dev/null tee for VEUX"
