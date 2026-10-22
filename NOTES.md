@@ -789,6 +789,13 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   The v2 packer was checked by reconstructing the prior known image byte for
   byte; unpacking the new image confirms the shim kernel, payload and selected
   `dtb_1.dtb` each match their source. It fits the 128 MiB `boot_b` partition.
-- The prepared image has not been flashed or booted.
+- Flashed `shim/out/shim-boot-veux-fb-marker-39699826454.img` to `boot_b`
+  only. Fastboot reported `Sending 'boot_b' (16656 KB) OKAY` and
+  `Writing 'boot_b' OKAY`; set slot B active and rebooted. Slot A and userdata
+  were untouched. The device left fastboot, but after 12 seconds neither ADB
+  nor fastboot enumerated it. This is expected for XNU unless it exposes a
+  transport; no display observation is available here, so marker visibility
+  and the live SDE guard result remain unknown. The tested image remains on
+  `boot_b`; slot B was selected active for this test.
 
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
