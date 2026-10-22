@@ -1,3 +1,34 @@
+## >>> UPDATE 2026-10-22 (logo persists; live-FDT standalone probe v2) <<<
+
+- User reports the fresh run-39805058203 image still shows the Xiaomi logo.
+  That CI run passed; there is no failed compile to repair for this candidate.
+  Neither fastboot nor ADB enumerates after the report. No log from this exact
+  boot can yet be read; older corrupted pmsg is not a reliable current last line.
+- Replaced the standalone fixed-address white fill with a live-FDT parser,
+  RGB bars, white corner marker and black border, plus staged pmsg records.
+  Framebuffer address/allocation/geometry/format must come from one complete,
+  enabled simple-framebuffer node supplied by ABL. No guessed fallback mode.
+  The probe holds indefinitely and does not start XNU or access storage/MMIO.
+- Pmsg is enabled only after confirming the known ramoops reservation; its
+  1 MiB runtime split at 0xd0100000 remains based on prior recovery evidence,
+  since the DT pmsg-size differs. Stages and decoded parameters are appended
+  with ordered stores. Log retention/corruption is still a runtime uncertainty.
+- Host tests cover truncation, malformed offsets, absent/disabled/incomplete/
+  ambiguous/unsupported framebuffer nodes, address/size bounds, translated
+  buses, RGB/BGR rendering, corner/border and untouched stride padding.
+  Six tests passed; strict freestanding AArch64 compile/link passed with no
+  absolute pointers in the C object. Both saved stock dtb_1.dtb and recovery
+  FDT parse with ramoops present but zero simple-framebuffer nodes: ABL must
+  supply one at handoff or the new probe will log SKIP and avoid drawing.
+- Board-matched `dsi-panel-k6s-38-0c-0a-fhdp-dsc-video.dtsi` specifies
+  `dsi_video_mode`. This makes command-mode refresh a weaker hypothesis;
+  it does not establish current controller state or active scanout.
+- Prepared `shim/out/veux-fdt-probe-v2/shim-boot-veux-fb-only.img`, 442,368
+  bytes; SHA-256 `3c9945ef6a9c2868b3e6eaf947ebe625def3ea5aad59f9d1bb1e6dcd9a3252a9`.
+  No new image flashed and no slot change in this update. First collect the
+  current boot's pstore/userdata-tail log through recovery when fastboot is
+  available, then decide whether to run this probe. See updated diagnostics doc.
+
 ## >>> UPDATE 2026-10-22 (corrected CI kernel packaged and flashed) <<<
 
 - User explicitly requested packaging the successful GitHub build, flashing

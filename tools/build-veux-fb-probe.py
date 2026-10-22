@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an unflashed, XNU-free white-screen probe using a known boot-v2 header.
+"""Build an unflashed, XNU-free live-FDT RGB probe using a known boot-v2 header.
 
 Requires clang and AArch64 ELF binutils. No device commands are issued.
 The template must be an existing VEUX shim image, not a stock boot-v3 image.
@@ -8,7 +8,6 @@ import argparse
 import gzip
 import hashlib
 from pathlib import Path
-import re
 import shutil
 import struct
 import subprocess
@@ -36,30 +35,28 @@ def main():
     dtb = args.dtb.read_bytes()
     if dtb[:4] != b'\xd0\x0d\xfe\xed' or header[dtb_offset:dtb_offset + dtb_size] != dtb:
         ap.error('DTB must match the selected DTB in the known VEUX template')
-    profile = (root / 'shim/console.h').read_text().split('#ifdef DEVICE_VEUX', 1)[1].split('#else', 1)[0]
-    values = {}
-    for name in ('BASE', 'W', 'H', 'STRIDE', 'SIZE'):
-        values[name] = int(re.search(r'#define\s+FB_' + name + r'\s+(0x[0-9a-fA-F]+|[0-9]+)', profile)[1], 0)
-    if not (0 < values['W'] * 4 <= values['STRIDE'] and values['H'] > 0
-            and values['STRIDE'] * values['H'] <= values['SIZE']
-            and values['BASE'] % 4 == values['STRIDE'] % 4 == 0):
-        ap.error('framebuffer geometry exceeds the reservation or is unaligned')
-    for tool in (args.clang, args.cross_prefix + 'ld', args.cross_prefix + 'objcopy'):
+    for tool in (args.clang, args.cross_prefix + 'ld', args.cross_prefix + 'objcopy', args.cross_prefix + 'readelf'):
         if not shutil.which(tool):
             ap.error('missing tool: ' + tool)
     out = args.out_dir.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    definitions = [f'-DPROBE_FB_{name}={values[key]}' for name, key in
-                   [('BASE', 'BASE'), ('WIDTH', 'W'), ('HEIGHT', 'H'), ('STRIDE', 'STRIDE')]]
-    subprocess.run([args.clang, '--target=aarch64-none-elf', *definitions, '-c',
-                    str(root / 'shim/veux-fb-probe.S'), '-o', str(out / 'probe.o')], check=True)
-    subprocess.run([args.cross_prefix + 'ld', '-Ttext=0', '-e', '_head',
-                    str(out / 'probe.o'), '-o', str(out / 'probe.elf')], check=True)
+    for source, obj in [('veux-fb-probe.S', 'entry.o'), ('veux-fb-probe.c', 'probe.o')]:
+        subprocess.run([args.clang, '--target=aarch64-none-elf', '-O2', '-ffreestanding',
+                        '-fno-builtin', '-fno-stack-protector', '-fno-pic', '-mgeneral-regs-only',
+                        '-mstrict-align', '-Wall', '-Wextra', '-Werror', '-c',
+                        str(root / 'shim' / source), '-o', str(out / obj)], check=True)
+    relocs = subprocess.check_output([args.cross_prefix + 'readelf', '-r', str(out / 'probe.o')], text=True)
+    if 'R_AARCH64_ABS64' in relocs:
+        raise SystemExit('C objects contain absolute pointers; ABL relocation is unsupported')
+    subprocess.run([args.cross_prefix + 'ld', '-T', str(root / 'shim/veux-fb-probe.ld'),
+                    str(out / 'entry.o'), str(out / 'probe.o'), '-o', str(out / 'probe.elf')], check=True)
     subprocess.run([args.cross_prefix + 'objcopy', '-O', 'binary',
                     str(out / 'probe.elf'), str(out / 'Image')], check=True)
     kernel = (out / 'Image').read_bytes()
-    assert len(kernel) == 4096 and kernel[56:60] == b'ARM\x64'
-    assert struct.unpack_from('<Q', kernel, 16)[0] == len(kernel)
+    image_size = struct.unpack_from('<Q', kernel, 16)[0]
+    assert len(kernel) <= image_size <= 0x100000 and kernel[56:60] == b'ARM\x64'
+    kernel += bytes(image_size - len(kernel))
+    (out / 'Image').write_bytes(kernel)
     # Empty newc archive, with a nonempty compressed ramdisk for ABL.
     fields = [0] * 13
     fields[4], fields[11] = 1, 11  # nlink, namesize incl. NUL
@@ -81,7 +78,7 @@ def main():
     image = out / 'shim-boot-veux-fb-only.img'
     image.write_bytes(packed)
     print(f'{image}\n{len(packed)} bytes; SHA-256 {hashlib.sha256(packed).hexdigest()}')
-    print('Expected: solid white screen, then halt. Visibility is not yet verified on hardware.')
+    print('Expected: RGB bars and a corner mark if live simplefb is usable; otherwise log SKIP. Holds indefinitely.')
 
 
 if __name__ == '__main__':
