@@ -1,3 +1,24 @@
+## >>> UPDATE 2026-10-22 (VEUX framebuffer screen-marker boot result) <<<
+
+- The user authorized flashing the screen-marker diagnostic image to `boot_b`.
+  Immediately before the write, fastboot identified product `veux`, current slot
+  `b`, and `boot_b` size `0x8000000` (128 MiB). The source image SHA-256 was
+  `64e021774ef9cb228a9ecbbdfc039252704aeb8901dfe9d06b90aa6087280125`.
+- `fastboot flash boot_b` and `fastboot reboot` both returned `OKAY`; B remained
+  active. No other partition was written. The user reports the display still
+  shows only the Xiaomi logo. After reboot, neither ADB nor fastboot enumerated
+  on the host.
+- Unpacked image verification confirms XNU boot-args include `-v`,
+  `veuxsde=1`, `veuxfbconsole=1`, and `veuxfb=1`; the embedded XNU payload
+  includes the marker implementation. Thus the absent visible change does not
+  show whether XNU failed before the probe, the live SDE guards rejected the
+  marker, or the 32x32 mark was simply too small to notice.
+- Next useful evidence is the persistent pmsg capture from this boot, especially
+  the SDE probe's final `marker wrote/skipped` message and the early-kernel
+  milestones. No such capture is currently available because USB has no ADB or
+  fastboot transport. Preserve slot B and do not infer a successful XNU boot
+  from the still-visible bootloader logo alone.
+
 ## >>> UPDATE 2026-10-21 (Evolution-X display source check and screen-marker candidate) <<<
 
 - Inspected Evolution-X-Devices `device_xiaomi_veux` (`bka`, `7172cb5`),
@@ -17,8 +38,8 @@
   other payload bytes were verified unchanged; the Android boot-v2 ID was
   recomputed. Image size is 17,080,320 bytes; SHA-256 is
   `64e021774ef9cb228a9ecbbdfc039252704aeb8901dfe9d06b90aa6087280125`.
-- This candidate has not been flashed. Phone last showed the MI logo, while
-  both ADB and fastboot currently enumerate no device. Do not switch from B.
+- This image was later flashed to `boot_b` on 2026-10-22 with user
+  authorization; see the newer boot-result entry above. Do not switch from B.
 
 ## >>> UPDATE 2026-10-21 (ios-spes RAM-only XNU diagnostic) <<<
 
