@@ -8,9 +8,33 @@ match the known splash reservation. The framebuffer path never writes SDE MMIO.
 
 Enable the bounded marker only with veuxfb=1.
 
+--- a/pexpert/pexpert/arm/protos.h
++++ b/pexpert/pexpert/arm/protos.h
+@@ -19,6 +19,7 @@
+ bool veux_pmsg_init(void);
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ void PE_init_veux_pmsg(void);
++void veux_sde_probe(void);
+ #endif
+ void veux_pmsg_putc(char c);
+ 
+--- a/pexpert/arm/pe_kprintf.c
++++ b/pexpert/arm/pe_kprintf.c
+@@ -107,6 +107,8 @@
+ 		veux_early_flush();
+ 		/* Keep the ramoops sink independent of VEUX's unknown UART. */
+ 		PE_kputc = veux_pmsg_putc_crlf;
++		/* Read SDE state; an opt-in marker may write guarded framebuffer RAM. */
++		veux_sde_probe();
+ 	}
+ }
+ #endif
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -812,0 +813,212 @@
+@@ -1423,3 +1423,214 @@
+ 	}
+ #endif /* APPLE_UART */
+ }
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +/*
 + * Read the VEUX SDE handoff registers. Optional framebuffer writes are limited
@@ -222,13 +246,3 @@ Enable the bounded marker only with veuxfb=1.
 +	veux_sde_log_text("--- VEUX SDE probe v1 end ---\n");
 +}
 +#endif /* ARM64_BOARD_CONFIG_VEUX */
-+
---- a/pexpert/arm/pe_kprintf.c
-+++ b/pexpert/arm/pe_kprintf.c
-@@ -109,0 +110,2 @@
-+		/* Read SDE state; an opt-in marker may write guarded framebuffer RAM. */
-+		veux_sde_probe();
---- a/pexpert/pexpert/arm/protos.h
-+++ b/pexpert/pexpert/arm/protos.h
-@@ -21,0 +22 @@
-+void veux_sde_probe(void);

@@ -766,8 +766,11 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   format/stride guards, and that the framebuffer map and marker store occur
   only after those checks. The complete ordered patch series 0091-0096 applies
   to saved buildtree `39639812065`, the exact embedded workflow guard passes,
-  and `tools/validate-repo.py` reports 96 contiguous patches. CI dispatch is
-  pending.
+  and `tools/validate-repo.py` reports 96 contiguous patches. CI run
+  `39698775780` failed because the zero-context 0095 hunk was skipped and the
+  0096 call landed outside `PE_init_veux_pmsg()`. Rebuilt 0095/0096 with
+  contextual hunks and strengthened the workflow guard to require the probe
+  call inside pmsg initialization. The corrected retry is pending.
 - No phone boot or flash was performed.
 
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes

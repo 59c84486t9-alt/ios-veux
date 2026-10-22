@@ -8,16 +8,37 @@ Give this logger a distinct start marker so the next dump identifies this build.
 
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -758 +758,2 @@
+@@ -755,7 +755,8 @@
+ 	}
+ 
+ 	paddr = (vm_offset_t)(reg[0] + reg[1] - *pmsg_size);
 -	vaddr = ml_io_map_wcomb(paddr, *pmsg_size);
 +	/* Treat reserved persistent RAM as device I/O on the phone. */
 +	vaddr = ml_io_map(paddr, *pmsg_size);
-@@ -775 +776 @@
+ 	if (vaddr == 0) {
+ 		return false;
+ 	}
+@@ -772,12 +773,12 @@
+ 		veux_pmsg_header[1] = 0;
+ 		veux_pmsg_header[2] = 0;
+ 	}
 -	/* The region is mapped write-combining, like Linux's ramoops pmsg zone. */
 +	/* The region is mapped as device I/O; order its persistent header updates. */
-@@ -780 +781 @@
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ 	veux_pmsg_start = veux_pmsg_header[1];
+ 	veux_pmsg_size = veux_pmsg_header[2];
+ 	veux_pmsg_initialized = true;
 -	static const char start[] = "\n--- XNU VEUX ramoops log start ---\n";
 +	static const char start[] = "\n--- XNU VEUX pmsg device-map v2 ---\n";
-@@ -802 +803 @@
+ 	for (unsigned int i = 0; i < sizeof(start) - 1; i++) {
+ 		veux_pmsg_putc(start[i]);
+ 	}
+@@ -799,7 +800,7 @@
+ 	}
+ 
+ 	/*
 -	 * pmsg is a Normal-NC/WCOMB mapping. Order the data store before its
 +	 * pmsg is a device I/O mapping. Order the data store before its
+ 	 * persistent_ram cursor update; cache clean-by-VA is for cacheable RAM
+ 	 * and must not be applied through this I/O alias.
+ 	 */
