@@ -1,3 +1,23 @@
+## >>> UPDATE 2026-10-22 (CoreAnimation surface pitch audit) <<<
+
+- SWEET's IOSurface provider advertises 64-byte row alignment. When
+  `IOSurfaceBytesPerRow` is omitted, it rounds `width * bytesPerElement` up to
+  that alignment; width 1125 with four-byte pixels therefore defaults to 4544
+  bytes. An explicit row-byte value is retained if it is at least the packed
+  row size. Its IOMobileFramebuffer blitter copies `width * 4` bytes per row,
+  using the surface's recorded source pitch and the framebuffer's destination
+  pitch, so either 4500-byte or 4544-byte source rows are supported.
+- A SWEET boot log recorded 1080x2400 IOSurfaces with 4352-byte pitch, matching
+  64-byte alignment. This is evidence for the SWEET implementation. VEUX has
+  not reached CoreAnimation/backboardd, so its runtime surface pitch is still
+  unknown; inspect the actual `IOSurfaceBytesPerRow`/bytes-per-row logs when it
+  does.
+- Keep the iPhone X 1125x2436 canvas separate from the VEUX physical scanout.
+  Existing Android evidence reports a 1080x2400 panel and 4352-byte DRM pitch;
+  that does not establish the bootloader scanout buffer's layout. Do not change
+  the `simple-framebuffer` scanout node to 1125x2436/4544 solely from the
+  CoreAnimation alignment calculation.
+
 ## >>> UPDATE 2026-10-22 (direct VEUX simple-framebuffer path) <<<
 
 - Used the framebuffer description supplied by the user: physical base
