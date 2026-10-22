@@ -778,5 +778,15 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - Binary strings confirm the probe and marker are present. This is only a
   successful compile: no phone boot or flash was performed, and the live
   scanout guards have not yet been observed on-device.
+- Prepared `shim/out/payload-veux-fb-marker-39699826454.bin` with the existing
+  high-memory/pmsg ADT and boot args ending in `veuxfb=1` (SHA-256
+  `25342b45f7703d6d8421bab6997a5ef32930510543fecad4e8f7a15a6f18e322`).
+  Wrapped it as Android boot-v2 image
+  `shim/out/shim-boot-veux-fb-marker-39699826454.img` (17,055,744 bytes;
+  SHA-256 `a75e391e42f9d6961e2f9e67bc7ade5c88837e0e533338310ee28a44f29f7651`).
+  The v2 packer was checked by reconstructing the prior known image byte for
+  byte; unpacking the new image confirms the shim kernel, payload and selected
+  `dtb_1.dtb` each match their source. It fits the 128 MiB `boot_b` partition.
+- The prepared image has not been flashed or booted.
 
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
