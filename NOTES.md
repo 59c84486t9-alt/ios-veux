@@ -18,6 +18,23 @@
 
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-21 (framebuffer-marker boot pstore read) <<<
+
+- After the user reported fastboot, selected slot A and used `fastboot reboot
+  recovery`; both commands succeeded. Recovery ADB became authorized and ran as
+  root. No partition writes were made during log collection.
+- Recovery exposed `/sys/fs/pstore/pmsg-ramoops-0` (2,984 bytes; SHA-256
+  `305e50c7a4beedd622b63f6437c63e2403687b1c5260ce9027062c9ec2f438d7`). It
+  contains the prior shim/XNU handoff text and output from the opt-in VEUX SDE
+  probe, so the boot-B image reached the probe code. The dump is heavily
+  corrupted. It appears to include SDE revision `0x60090000`, LM0 output size
+  `0x09600438`, and a plane address containing `0x85200000`, but register values
+  and the final marker-written/skipped message cannot be read reliably. Marker
+  visibility and successful framebuffer writes therefore remain unconfirmed.
+- Recovery's current `dmesg` is Linux recovery output, not the XNU boot log; its
+  tail includes repeated missing `ipa_fws.mdt` firmware warnings, which do not
+  explain the XNU stop. The raw pmsg capture is kept in `/tmp`, not the repo.
+
 ## >>> UPDATE 2026-10-21 (VEUX XNU QEMU probe) <<<
 
 - Installed QEMU 8.2.2 (`qemu-system-arm`) on the VPS and ran the VEUX kernel payload on generic AArch64 `virt` with a QEMU-specific ADT (`mkadt.py --qemu --veux`), one `cortex-a76` CPU, and no UFS-root arguments. This was a kernel payload test; the Android `shim-boot-veux-ufs-log.img` itself is not a QEMU boot image.
