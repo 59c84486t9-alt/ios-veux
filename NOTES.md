@@ -21,7 +21,9 @@
   check passed; generated ADT decoded to base `0x85200000`, size `0xc00000`,
   width 1080, height 2520, stride 4320, format `a8r8g8b8`; patch 0103 applies to
   a clean run-397061 build tree. No phone boot or flash was performed. XNU CI
-  build and a boot-image rebuild remain pending.
+  run `39781378209` was dispatched for commit `c27fda0` (macOS 13.5,
+  DEVELOPMENT/VEUX) and remains queued with no runner assigned. A boot-image
+  rebuild remains pending.
 
 ## >>> UPDATE 2026-10-22 (slot-A recovery log inspection) <<<
 
