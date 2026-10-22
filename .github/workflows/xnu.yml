@@ -91,8 +91,42 @@ jobs:
             grep -Fq 'PE_init_veux_pmsg(void)' xnu/pexpert/arm/pe_kprintf.c
             grep -Fq 'vaddr = ml_io_map(paddr, *pmsg_size);' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'XNU VEUX pmsg device-map v2' xnu/pexpert/arm/pe_serial.c
-            python3 -c 'from pathlib import Path; source = Path("xnu/pexpert/arm/pe_kprintf.c").read_text(); startup = source.split("PE_init_kprintf(void)", 1)[1].split("STARTUP(KPRINTF", 1)[0].split("#else", 1)[0]; vm = Path("xnu/osfmk/arm64/arm_vm_init.c").read_text(); assert "veux_pmsg_init()" not in startup, "VEUX pmsg mapping still runs in early kprintf startup"; assert vm.index("early I/O page tables ready") < vm.index("PE_init_veux_pmsg();"), "VEUX pmsg must wait for early I/O page tables"'
-            echo "Verified VEUX CPU, kmem RNG fallback, deferred pmsg initialization, and device-mapped logger"
+            grep -Fq 'veux_sde_probe();' xnu/pexpert/arm/pe_kprintf.c
+            grep -Fq 'VEUX SDE probe v1 begin base=0x05e00000 size=0x00090000' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'PE_parse_boot_argn("veuxsde"' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'PE_parse_boot_argn("veuxfb"' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'ml_io_map_wcomb((vm_offset_t)VEUX_FB_BASE, VEUX_FB_SIZE)' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'VEUX framebuffer marker v1 wrote white 32x32 at 0x85200000' xnu/pexpert/arm/pe_serial.c
+            python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          serial = Path("xnu/pexpert/arm/pe_serial.c").read_text()
+          region = serial.split("#if defined(ARM64_BOARD_CONFIG_VEUX)\n/*\n * Read the VEUX SDE handoff", 1)[1].split("#endif /* ARM64_BOARD_CONFIG_VEUX */", 1)[0]
+          probe = region.split("veux_sde_probe(void)", 1)[1]
+          fb = region.split("static bool\nveux_sde_pipe_can_mark", 1)[1].split("\nvoid\nveux_sde_probe", 1)[0]
+          kprintf = Path("xnu/pexpert/arm/pe_kprintf.c").read_text()
+          startup = kprintf.split("PE_init_kprintf(void)", 1)[1].split("STARTUP(KPRINTF", 1)[0].split("#else", 1)[0]
+          vm = Path("xnu/osfmk/arm64/arm_vm_init.c").read_text()
+          assert "veux_pmsg_init()" not in startup, "VEUX pmsg mapping still runs in early kprintf startup"
+          assert vm.index("early I/O page tables ready") < vm.index("PE_init_veux_pmsg();"), "VEUX pmsg must wait for early I/O page tables"
+          assert "ml_io_map(VEUX_SDE_BASE, VEUX_SDE_MAP_SIZE)" in probe, "SDE must use the guarded device mapping"
+          assert "PE_parse_boot_argn(\"veuxsde\"" in probe and "PE_parse_boot_argn(\"veuxfb\"" in probe, "SDE reads and framebuffer writes must be opt-in"
+          assert "VEUX_SDE_EXPECTED_REV" in probe and "unsupported revision" in probe, "unexpected SDE revisions must stop the register dump"
+          assert probe.index("if (revision != VEUX_SDE_EXPECTED_REV)") < probe.index("veux_sde_log_pipe(\"VIG0\""), "read pipe state only after revision validation"
+          assert "volatile const uint32_t *mdp" in region, "SDE registers must be accessed read-only"
+          assert not re.search(r"\bmdp\s*\[[^\]]+\]\s*=(?!=)", region), "SDE probe must not write MMIO registers"
+          assert "VEUX SDE probe v1 begin base=0x05e00000 size=0x00090000" in region, "unique SDE marker and mapping must stay guarded"
+          assert "0x85200000ULL" in region and "0x00c00000u" in region, "framebuffer must use the reserved splash mapping"
+          assert "ml_io_map_wcomb((vm_offset_t)VEUX_FB_BASE, VEUX_FB_SIZE)" in fb, "framebuffer must use the guarded write-combining mapping"
+          assert "address != VEUX_FB_BASE" in fb and "src_size != full_size" in fb and "out_size != full_size" in fb, "verify address and geometry before mapping framebuffer RAM"
+          assert "format != 0x00023effu" in fb and "format != 0x00023fffu" in fb and "recognized_unpack" in fb, "allow only the recognized linear 8888 layouts"
+          assert "VEUX_FB_STRIDE_PACKED" in fb and "VEUX_FB_STRIDE_PADDED" in fb and "VEUX_FB_SIZE" in fb, "bound framebuffer pitch and memory span"
+          assert fb.index("if (route == 0") < fb.index("ml_io_map_wcomb") < fb.index("row[x] = 0xffffffffu"), "write only after all guards and mapping succeed"
+          assert "VEUX framebuffer marker v1 wrote white 32x32 at 0x85200000" in fb, "successful screen marker must remain uniquely identifiable"
+          assert "intf_active & (1u << 1)" in probe and "lm0_out_size == expected_size" in probe, "require active DSI and matching LM0 geometry"
+          PY
+            echo "Verified VEUX CPU, deferred pmsg, read-only SDE access, and guarded opt-in framebuffer marker"
           fi
 
       - name: Package build tree for local compiles

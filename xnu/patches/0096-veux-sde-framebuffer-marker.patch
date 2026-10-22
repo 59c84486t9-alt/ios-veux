@@ -1,0 +1,234 @@
+From: ios-veux
+Subject: [PATCH] Add guarded opt-in VEUX framebuffer marker
+
+Add a VEUX-only diagnostic that reads the SDE handoff registers and logs their
+raw state to pmsg. With veuxfb=1, paint a small white marker only if live SDE
+routing, the physical address, dimensions, linear 8888 format, and stride all
+match the known splash reservation. The framebuffer path never writes SDE MMIO.
+
+Enable the bounded marker only with veuxfb=1.
+
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -812,0 +813,212 @@
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++/*
++ * Read the VEUX SDE handoff registers. Optional framebuffer writes are limited
++ * to a tiny RAM marker after the live display state passes all guards.
++ * Register offsets come from the board-matched SM6375 SDE 6.0.9 catalog.
++ */
++#define VEUX_SDE_BASE              0x05e00000ULL
++#define VEUX_SDE_MAP_SIZE          0x00090000u
++#define VEUX_SDE_REV_OFFSET        0x00001000u
++#define VEUX_SDE_EXPECTED_REV      0x60090000u
++#define VEUX_SDE_CTL0              0x00002000u
++#define VEUX_SDE_LM0               0x00045000u
++#define VEUX_SDE_VIG0              0x00005000u
++#define VEUX_SDE_DMA0              0x00025000u
++#define VEUX_FB_BASE               0x85200000ULL
++#define VEUX_FB_SIZE               0x00c00000u
++#define VEUX_FB_WIDTH              1080u
++#define VEUX_FB_HEIGHT             2400u
++#define VEUX_FB_STRIDE_PACKED      4320u
++#define VEUX_FB_STRIDE_PADDED      4352u
++#define VEUX_FB_MARKER_EDGE        32u
++
++static void
++veux_sde_log_text(const char *text)
++{
++	while (*text != '\0') {
++		veux_pmsg_putc(*text++);
++	}
++}
++
++static void
++veux_sde_log_hex32(uint32_t value)
++{
++	static const char digits[] = "0123456789abcdef";
++	for (int shift = 28; shift >= 0; shift -= 4) {
++		veux_pmsg_putc(digits[(value >> shift) & 0xf]);
++	}
++}
++
++static uint32_t
++veux_sde_read(volatile const uint32_t *mdp, uint32_t offset)
++{
++	return mdp[offset / sizeof(uint32_t)];
++}
++
++static void
++veux_sde_log_reg(const char *name, volatile const uint32_t *mdp, uint32_t offset)
++{
++	veux_sde_log_text(name);
++	veux_sde_log_text("=");
++	veux_sde_log_hex32(veux_sde_read(mdp, offset));
++	veux_pmsg_putc('\n');
++}
++
++static void
++veux_sde_log_pipe(const char *name, volatile const uint32_t *mdp, uint32_t base)
++{
++	veux_sde_log_text("VEUX SDE v1 pipe=");
++	veux_sde_log_text(name);
++	veux_sde_log_text(" src_size=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x00));
++	veux_sde_log_text(" src_xy=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x08));
++	veux_sde_log_text(" out_size=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x0c));
++	veux_sde_log_text(" addr0=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x14));
++	veux_sde_log_text(" addr1=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x18));
++	veux_sde_log_text(" addr2=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x1c));
++	veux_sde_log_text(" addr3=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x20));
++	veux_sde_log_text(" stride0=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x24));
++	veux_sde_log_text(" stride1=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x28));
++	veux_sde_log_text(" format=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x30));
++	veux_sde_log_text(" unpack=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x34));
++	veux_sde_log_text(" op_mode=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x38));
++	veux_sde_log_text(" ubwc_static=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x44));
++	veux_sde_log_text(" fetch_config=");
++	veux_sde_log_hex32(veux_sde_read(mdp, base + 0x48));
++	veux_pmsg_putc('\n');
++}
++
++static bool
++veux_sde_pipe_can_mark(volatile const uint32_t *mdp, uint32_t base,
++		uint32_t route, const char *name)
++{
++	uint32_t src_size = veux_sde_read(mdp, base + 0x00);
++	uint32_t src_xy = veux_sde_read(mdp, base + 0x08);
++	uint32_t out_size = veux_sde_read(mdp, base + 0x0c);
++	uint32_t out_xy = veux_sde_read(mdp, base + 0x10);
++	uint32_t address = veux_sde_read(mdp, base + 0x14);
++	uint32_t stride_reg = veux_sde_read(mdp, base + 0x24);
++	uint32_t format = veux_sde_read(mdp, base + 0x30);
++	uint32_t unpack = veux_sde_read(mdp, base + 0x34);
++	uint32_t op_mode = veux_sde_read(mdp, base + 0x38);
++	const uint32_t full_size = (VEUX_FB_HEIGHT << 16) | VEUX_FB_WIDTH;
++	uint32_t stride = stride_reg & 0xffff;
++	bool recognized_unpack = unpack == 0x03020001u || unpack == 0x03010002u ||
++		unpack == 0x02000103u || unpack == 0x01000203u;
++
++	if (route == 0 || address != VEUX_FB_BASE || src_size != full_size ||
++	    out_size != full_size || src_xy != 0 || out_xy != 0 ||
++	    (format != 0x00023effu && format != 0x00023fffu) || !recognized_unpack ||
++	    (op_mode & ((1u << 14) | (1u << 13) | 1u)) != 0 ||
++	    (stride_reg >> 16) != 0 ||
++	    (stride != VEUX_FB_STRIDE_PACKED && stride != VEUX_FB_STRIDE_PADDED) ||
++	    (uint64_t)stride * VEUX_FB_HEIGHT > VEUX_FB_SIZE) {
++		veux_sde_log_text("VEUX FB marker skipped pipe=");
++		veux_sde_log_text(name);
++		veux_sde_log_text(" route/address/geometry/format/stride guard failed\n");
++		return false;
++	}
++
++	vm_offset_t fb_vaddr = ml_io_map_wcomb((vm_offset_t)VEUX_FB_BASE, VEUX_FB_SIZE);
++	if (fb_vaddr == 0) {
++		veux_sde_log_text("VEUX FB marker skipped: framebuffer map failed\n");
++		return false;
++	}
++
++	volatile uint32_t *fb = (volatile uint32_t *)fb_vaddr;
++	for (uint32_t y = 16; y < 16 + VEUX_FB_MARKER_EDGE; y++) {
++		volatile uint32_t *row = fb + y * (stride / sizeof(uint32_t));
++		for (uint32_t x = 16; x < 16 + VEUX_FB_MARKER_EDGE; x++) {
++			row[x] = 0xffffffffu;
++		}
++	}
++	__asm__ volatile("dsb sy" ::: "memory");
++	veux_sde_log_text("VEUX framebuffer marker v1 wrote white 32x32 at 0x85200000 pipe=");
++	veux_sde_log_text(name);
++	veux_pmsg_putc('\n');
++	return true;
++}
++
++void
++veux_sde_probe(void)
++{
++	int dump_regs = 0;
++	int write_marker = 0;
++	(void)PE_parse_boot_argn("veuxsde", &dump_regs, sizeof(dump_regs));
++	(void)PE_parse_boot_argn("veuxfb", &write_marker, sizeof(write_marker));
++	if (dump_regs == 0 && write_marker == 0) {
++		return;
++	}
++
++	veux_sde_log_text("\n--- VEUX SDE probe v1 begin base=0x05e00000 size=0x00090000 ---\n");
++	vm_offset_t vaddr = ml_io_map(VEUX_SDE_BASE, VEUX_SDE_MAP_SIZE);
++	if (vaddr == 0) {
++		veux_sde_log_text("VEUX SDE v1 map failed\n");
++		return;
++	}
++
++	volatile const uint32_t *mdp = (volatile const uint32_t *)vaddr;
++	__asm__ volatile("dsb sy" ::: "memory");
++	uint32_t revision = veux_sde_read(mdp, VEUX_SDE_REV_OFFSET);
++	veux_sde_log_reg("VEUX SDE v1 revision", mdp, VEUX_SDE_REV_OFFSET);
++	if (revision != VEUX_SDE_EXPECTED_REV) {
++		veux_sde_log_text("VEUX SDE v1 unsupported revision; pipe reads skipped\n");
++		return;
++	}
++
++	/* CTL0 routing and LM0 blend-stage inputs identify the active SSPP. */
++	veux_sde_log_reg("VEUX SDE v1 ctl0_top", mdp, VEUX_SDE_CTL0 + 0x14);
++	veux_sde_log_reg("VEUX SDE v1 ctl0_status", mdp, VEUX_SDE_CTL0 + 0x64);
++	veux_sde_log_reg("VEUX SDE v1 ctl0_layer", mdp, VEUX_SDE_CTL0 + 0x00);
++	veux_sde_log_reg("VEUX SDE v1 ctl0_layer_ext", mdp, VEUX_SDE_CTL0 + 0x40);
++	veux_sde_log_reg("VEUX SDE v1 ctl0_layer_ext2", mdp, VEUX_SDE_CTL0 + 0x70);
++	veux_sde_log_reg("VEUX SDE v1 ctl0_layer_ext3", mdp, VEUX_SDE_CTL0 + 0xa0);
++	uint32_t ctl_layer = veux_sde_read(mdp, VEUX_SDE_CTL0 + 0x00);
++	uint32_t ctl_layer_ext2 = veux_sde_read(mdp, VEUX_SDE_CTL0 + 0x70);
++	uint32_t ctl_layer_ext3 = veux_sde_read(mdp, VEUX_SDE_CTL0 + 0xa0);
++	uint32_t intf_active = veux_sde_read(mdp, VEUX_SDE_CTL0 + 0xf4);
++	veux_sde_log_reg("VEUX SDE v1 ctl0_intf_active", mdp, VEUX_SDE_CTL0 + 0xf4);
++	veux_sde_log_reg("VEUX SDE v1 lm0_out_size", mdp, VEUX_SDE_LM0 + 0x04);
++	veux_sde_log_reg("VEUX SDE v1 lm0_blend0", mdp, VEUX_SDE_LM0 + 0x20);
++	veux_sde_log_reg("VEUX SDE v1 lm0_blend1", mdp, VEUX_SDE_LM0 + 0x38);
++	veux_sde_log_reg("VEUX SDE v1 lm0_blend2", mdp, VEUX_SDE_LM0 + 0x50);
++	veux_sde_log_reg("VEUX SDE v1 lm0_blend3", mdp, VEUX_SDE_LM0 + 0x68);
++	veux_sde_log_pipe("VIG0", mdp, VEUX_SDE_VIG0);
++	veux_sde_log_pipe("DMA0", mdp, VEUX_SDE_DMA0);
++	if (write_marker != 0) {
++		uint32_t lm0_out_size = veux_sde_read(mdp, VEUX_SDE_LM0 + 0x04);
++		bool dsi_active = (intf_active & (1u << 1)) != 0;
++		bool vig0_routed = (ctl_layer & 0x7u) != 0 || (ctl_layer_ext3 & 0xfu) != 0;
++		bool dma0_routed = (ctl_layer & 0x001c0000u) != 0 ||
++			((ctl_layer_ext2 >> 8) & 0xfu) != 0;
++		const uint32_t expected_size = (VEUX_FB_HEIGHT << 16) | VEUX_FB_WIDTH;
++		bool marked = false;
++
++		if (dsi_active && lm0_out_size == expected_size && vig0_routed) {
++			marked = veux_sde_pipe_can_mark(mdp, VEUX_SDE_VIG0, 1, "VIG0");
++		}
++		if (!marked && dsi_active && lm0_out_size == expected_size && dma0_routed) {
++			marked = veux_sde_pipe_can_mark(mdp, VEUX_SDE_DMA0, 1, "DMA0");
++		}
++		if (!marked && (!dsi_active || lm0_out_size != expected_size ||
++		    (!vig0_routed && !dma0_routed))) {
++			veux_sde_log_text("VEUX FB marker skipped: active DSI, LM0 geometry, or routed-pipe guard failed\n");
++		}
++	}
++	__asm__ volatile("dsb sy" ::: "memory");
++	veux_sde_log_text("--- VEUX SDE probe v1 end ---\n");
++}
++#endif /* ARM64_BOARD_CONFIG_VEUX */
++
+--- a/pexpert/arm/pe_kprintf.c
++++ b/pexpert/arm/pe_kprintf.c
+@@ -109,0 +110,2 @@
++		/* Read SDE state; an opt-in marker may write guarded framebuffer RAM. */
++		veux_sde_probe();
+--- a/pexpert/pexpert/arm/protos.h
++++ b/pexpert/pexpert/arm/protos.h
+@@ -21,0 +22 @@
++void veux_sde_probe(void);

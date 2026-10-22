@@ -744,4 +744,30 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - GitHub Actions run `39696554499` (head `4c7cc91ea672b3ec539ad1d45f5c96784aa43f25`) is now confirmed cancelled. No replacement XNU build was started.
 - To obtain a framebuffer format from DRM, a debug-capable recovery kernel or a read-only DRM diagnostic is needed; that would describe recovery's display state. To identify the bootloader/XNU handoff buffer, state must be captured before recovery or Android reprograms SDE, for example by an early handoff register/state logger. Static DT and ABL artifacts alone have not supplied the active plane format/address.
 
+## >>> UPDATE 2026-10-21 (guarded VEUX framebuffer marker) <<<
+
+- Patch `0096-veux-sde-framebuffer-marker.patch` adds the board-matched SDE
+  handoff probe and a tiny, opt-in screen marker. The probe maps SDE at
+  `0x05e00000`, checks revision `0x60090000`, and logs CTL0, LM0, VIG0 and
+  DMA0 state to pmsg when `veuxsde=1` or `veuxfb=1` is present.
+- `veuxfb=1` permits one 32x32 white RAM marker at offset (16,16) in the
+  candidate `0x85200000` splash buffer. Before mapping or writing, XNU must
+  observe active DSI, a 1080x2400 LM0, a routed VIG0/DMA0 plane whose address
+  equals the reserved splash base, zero source/output offsets, an accepted
+  linear 8888 format and unpack layout, no rotate/flip/BWC mode, and a bounded
+  4320/4352-byte stride within the 12 MiB reservation. Unexpected SDE revision,
+  mapping failure, or any mismatch skips the write. The marker does not write
+  display MMIO and is not a full framebuffer console.
+- The 12 MiB region and SDE register addresses are supported by the
+  board-matched DT and Qualcomm SDE source, but no pre-XNU live register read
+  has yet confirmed the current scanout address/format. Until the opt-in probe
+  runs on the phone, the guard's match and visible marker remain unverified.
+- `.github/workflows/xnu.yml` now asserts the opt-in path, the address/mode/
+  format/stride guards, and that the framebuffer map and marker store occur
+  only after those checks. The complete ordered patch series 0091-0096 applies
+  to saved buildtree `39639812065`, the exact embedded workflow guard passes,
+  and `tools/validate-repo.py` reports 96 contiguous patches. CI dispatch is
+  pending.
+- No phone boot or flash was performed.
+
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
