@@ -770,7 +770,13 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   `39698775780` failed because the zero-context 0095 hunk was skipped and the
   0096 call landed outside `PE_init_veux_pmsg()`. Rebuilt 0095/0096 with
   contextual hunks and strengthened the workflow guard to require the probe
-  call inside pmsg initialization. The corrected retry is pending.
-- No phone boot or flash was performed.
+  call inside pmsg initialization. Corrected CI run `39699826454` succeeded
+  on macOS 13.5 / DEVELOPMENT / VEUX; its log confirms both patches applied
+  and the SDE/framebuffer source guards passed. The downloaded arm64 kernel is
+  `xnu/out-39699826454/kernel.development.veux` (17,088,616 bytes; SHA-256
+  `b4772dfbeff1c06ad7d5776d4dc0ba58cbafea8d0bf52a18423c69efc7865197`).
+- Binary strings confirm the probe and marker are present. This is only a
+  successful compile: no phone boot or flash was performed, and the live
+  scanout guards have not yet been observed on-device.
 
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
