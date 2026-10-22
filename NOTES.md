@@ -1,3 +1,27 @@
+## >>> UPDATE 2026-10-22 (slot-A recovery log inspection) <<<
+
+- After the user's instruction, set the active slot to A and booted recovery.
+  Recovery ADB is authorized, runs as root, and reports `ro.boot.slot_suffix`
+  `_a`. No device partitions were written during inspection.
+- Pulled `/sys/fs/pstore/pmsg-ramoops-0` to
+  `/tmp/veux-recovery-pmsg-20261022.bin` (3,808 bytes; SHA-256
+  `aff8c9bd99803b2dcd177a95f34f49ece24ffb180eadc3e85d83c49e49059b24`). It
+  contains the exact `SHIM VEUX ramoops: XNU handoff` marker and corrupted
+  printable fragments consistent with the early XNU milestones and the VEUX
+  SDE probe. The remainder is too damaged to recover the final framebuffer
+  marker result or a panic cause. This confirms the tested image handed off
+  from the shim and entered early XNU code, but does not prove a successful
+  framebuffer write or explain why the display stayed at the Xiaomi logo.
+- Read the last 4 MiB + 4 KiB of `/dev/block/by-name/userdata` through recovery
+  ADB. The decoder found no `VEUXLOG1` header. The raw tail SHA-256
+  (`06955cde7f98b9503653b906e9634732d59a17a6dc2cb1a0e453fbdd4adaab86`)
+  matches `backup/veux-device/userdata-tail-pre-veuxlog.bin` exactly, so this
+  boot did not alter the reserved userdata tail. The tested RAM-disk image did
+  not request the userdata logger, so this is expected.
+- Current device state: slot-A recovery with authorized root ADB; the XNU test
+  image remains on `boot_b`. Next useful step is to fix pmsg reliability or
+  build a uniquely marked logger candidate before another boot test.
+
 ## >>> UPDATE 2026-10-22 (VEUX framebuffer screen-marker boot result) <<<
 
 - The user authorized flashing the screen-marker diagnostic image to `boot_b`.
