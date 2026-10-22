@@ -31,12 +31,23 @@
   XML entitlements provider for VEUX as well as SWEET.
 - All 102 patches pass `tools/validate-repo.py`. Patches 0097–0102 apply
   cleanly in order to the saved XNU tree from build 39699826454, and the new
-  workflow checks the provider guard. CI runs 39704310477 and 39705176541
-  failed at link on the seven provider symbols; the second run showed the
-  follow-up patch had been skipped by the patch applicator. The guard is now in
-  the patch that creates the provider; another retry is pending. Payload
-  packaging and any phone boot/flash remain pending; no phone partition was
-  changed in this step.
+  workflow checks the provider guard. The original CI attempts 39704310477 and
+  39705176541 exposed a skipped entitlement patch; moving the VEUX guard into
+  patch 0035 fixed it. CI run 39706120497 passed for macOS 13.5,
+  DEVELOPMENT/VEUX. Kernel SHA-256:
+  `a74be70aa3b8fe0cb81af24b8d0c9e7e09d4960ea7118b7665853aab9bec0049`.
+- Packaged an unflashed Android boot v2 candidate at
+  `shim/out/shim-boot-veux-xnu-39706120497.img` (17,063,936 bytes; SHA-256
+  `d96d3a06355d487b0337f81e9a6226e8139be14fdb004a7ef945fde030ce7b7d`). Its
+  embedded XNU payload SHA-256 is
+  `b39e0517a0845b5817d7a59265e1344a830c3a321a5a50279af2956411a465a9`; the
+  bootargs enable `veuxlog=1`, the SDE dump, guarded framebuffer marker, and
+  text console. Offline unpacking verified the outer shim, payload, and
+  selected `dtb_1.dtb` byte-for-byte. The image fits the 128 MiB boot_b
+  partition. No phone partition was changed; the logger's actual UFS writes
+  and framebuffer display still need runtime confirmation. Its reserved log
+  window is in the tail of userdata and can overwrite residual Android F2FS
+  data there; the saved tail backup is the recovery copy.
 
 ## >>> UPDATE 2026-10-21 (VEUX QEMU follow-up: board guards) <<<
 
