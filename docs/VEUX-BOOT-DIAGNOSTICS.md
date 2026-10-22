@@ -1,74 +1,101 @@
-# VEUX boot diagnostics
+# VEUX boot diagnostics: marker/reset control first
 
-The latest XNU run 39805058203 passed CI; its fresh boot image was flashed
-to boot_b and the user still sees the Xiaomi logo. This is a runtime issue.
-Older recovered pmsg contains the shim's XNU handoff and early XNU fragments,
-but it is corrupted and does not identify the current boot's stopping point.
-Do not present an older log fragment as the last line from this boot.
+CI run 39805058203 passed. Its freshly flashed XNU image still showed the
+Xiaomi logo; recovery yielded no pstore and an unchanged userdata-tail log.
+That result does not identify the XNU stopping point.
 
-## Standalone live-FDT probe v2
+## Regression candidate
+
+Commit c27fda0 removed VEUX_NO_FB from shim/build.sh. shim_main() now runs
+con_clear() before loader_boot() writes the pmsg handoff marker. The previous
+screen-disabled shim could reach that marker without accessing scanout RAM.
+A fault during the new screen clear could suppress all later markers. This
+is a source-supported hypothesis, not proof of the current fault. Patch 0103
+also changed XNU display mapping, and 0104/toolchain migration changed the
+build; the comparison cannot isolate a single cause without runtime evidence.
+
+## Local builds
 
 ```sh
 PATH=/usr/local/opt/aarch64-elf-binutils/bin:$PATH python3 tools/build-veux-fb-probe.py \
   --template shim/out/shim-boot-veux-directfb-probe-oldxnu-20261022.img \
   --dtb dtb/vendor_boot_b_unpacked/dtb_1.dtb \
-  --out-dir shim/out/veux-fdt-probe-v2
+  --out-dir shim/out/veux-marker-reset-v3
+# Same command with --screen and a distinct output directory builds RGB mode.
 python3 tests/test_veux_fb_probe.py
 ```
 
-Uses Clang and AArch64 ELF binutils; override `--clang` and `--cross-prefix`
-for other installations. The template must be the previously accepted VEUX
-shim boot-v2 package with the selected DTB. The builder issues no device commands.
-The original fixed-address white-screen image remains in its separate output
-folder as a historical artifact; v2 replaces that implementation in source.
+Default output: shim-boot-veux-marker-reset.img. It checks EL1/MMU-off/cache-off,
+writes `VEUX POSCTRL v3 stage=0 entered C; pmsg marker before FDT` to the
+previously verified pmsg ring, prints the counter frequency, spins for ten
+seconds using CNTVCT_EL0/CNTFRQ_EL0, logs elapsed ticks, then invokes PSCI
+SYSTEM_RESET (SMC 0x84000009). Marker-only links no FDT parser or renderer.
+If SYSTEM_RESET returns it logs x0 and halts. Invalid entry state halts before
+C; invalid counter frequency logs an error and halts without a timed reset.
+A counter-access exception or protected pmsg write could still halt early.
 
-The assembly preserves ABL's live FDT pointer in x0, checks EL1/MMU-off/cache-off,
-sets a private stack and enters the bounded C parser. No XNU, UFS, GIC, timer,
-MMU setup or display MMIO driver is linked. The probe waits indefinitely after
-completion or a skipped draw; it never returns to firmware.
+The pmsg ring is the same observed Linux persistent-RAM mechanism at
+0xd0100000 (1 MiB, no ECC, 12-byte DBGC header). The positive marker deliberately
+uses the independently verified runtime layout before FDT validation. It
+is VEUX-specific, not a portable probe. This tests retained-RAM logging and
+reset retention, not the separate UFS userdata logger. Missing marker remains
+ambiguous if execution or reset cannot be established independently.
 
-It accepts one enabled, complete `simple-framebuffer` under root or `/chosen`,
-or an identity-mapped reserved-memory bus. Base, allocation, width, height,
-stride and format all come from that live node. Supported formats are
-`a8r8g8b8`, `x8r8g8b8`, `a8b8g8r8`, `x8b8g8r8`. Addresses must additionally
-fit VEUX's independently verified 12 MiB splash reservation. This is a safety
-bound, not a fallback scanout address. Incomplete, unsupported, ambiguous or
-translated framebuffer descriptions are skipped.
+A standard PSCI reset does not select recovery or change slots. With B active,
+it may repeatedly boot the probe. During the device test, observe elapsed time
+from probe entry approximately (bootloader time adds delay from the host reboot
+command), then return with Power + Volume Down and select slot-A recovery.
+Do not invent Qualcomm-specific SYSTEM_RESET2 reason values. Collect pstore
+before another reboot. This sequence still includes firmware transitions;
+if the marker is absent, investigate execution and retention separately.
 
-The pattern has vertical red, green and blue bars, a white top-left square,
-and a black border. Padding bytes remain untouched. The known board-matched
-K6S panel source declares `dsi_video_mode`; that is source evidence, not a
-live controller-state measurement. The probe does not send a DSI refresh kick.
+## Screen mode and selection
 
-If the live FDT confirms the known ramoops reservation, the probe appends a
-uniquely marked text record to the previously runtime-verified 1 MiB pmsg ring
-at 0xd0100000. It retains that observed runtime split rather than deriving it
-from the differing DT pmsg-size property. Stores are ordered before updating
-the Linux persistent-RAM cursor. It logs the FDT address, framebuffer count,
-geometry, RGB/BGR selection and stages:
+`--screen` produces shim-boot-veux-rgb-reset.img. It writes the same marker
+first, then parses the live FDT supplied by ABL. Source priority:
 
-| Marker | Meaning |
-| --- | --- |
-| `stage=1 parsed live FDT` | FDT parsing completed and pmsg writes began. |
-| `stage=2 SKIP ...` | No usable unique framebuffer; no display write attempted. |
-| `stage=2 validated ...` | About to draw the RGB pattern. |
-| `stage=3 RGB fill complete ...` | RAM stores completed; panel visibility is still a separate observation. |
+1. One valid enabled live simple-framebuffer descriptor.
+2. If none exists, one identity-mapped named splash region under
+   reserved-memory, using the requested **assumption** of 1080x2400,
+   four-byte pixels, stride 4320, a8r8g8b8.
+3. Log the missing/invalid/ambiguous selection and proceed to timed reset.
 
-Malformed FDT or unexpected entry state halts without logging. If ramoops is
-not confirmed, logging is disabled. Persistent RAM retention and log integrity
-still require device validation; the prior XNU logs were corrupted. A missing
-marker alone does not prove that the probe never entered.
+An explicit but invalid/ambiguous live framebuffer is not overridden by the
+fallback. Both paths require bounded aligned writes within the independently
+verified VEUX splash reservation. The fallback base/size comes from the live
+reg property; SWEET's 0x9c000000 is rejected. Logs name the chosen source and
+record geometry before drawing. RGB bars, corner mark and border are held
+for ten seconds after the fill, then reset is requested. No SDE/DSI MMIO or
+UFS access is linked; padding bytes are untouched.
 
-Both saved inputs (`dtb_1.dtb` and recovery-fdt.dtb) parse successfully, contain
-the known ramoops reservation, and have no simple-framebuffer node. Unless ABL
-adds one to the live handoff FDT, expect SKIP. Adding an invented node to the
-input DTB would not verify the bootloader's actual scanout layout.
+## Live recovery evidence, 2026-10-22
 
-## Next device step
+This is current slot-A recovery, not stock Android. `find -L` is required
+because /proc/device-tree is a symlink. It reports:
 
-Recover logs from the current XNU attempt before overwriting boot_b again.
-Neither ADB nor fastboot was connected after the logo report; the user must
-return the phone to fastboot. Use slot-A recovery for the pstore and bounded
-userdata-tail read. Record the exact new log, or its absence, separately from
-older captures. Flashing a new probe is a separate device action; no new
-probe has been flashed in this update.
+```
+/proc/device-tree/reserved-memory/splash_region@0x85200000
+reg = <0x0 0x85200000 0x0 0x00c00000>
+```
+
+`grep -i splash /proc/iomem` gives no lines; the corresponding named range is:
+
+```
+85200000-85efffff : reserved
+```
+
+That iomem range also includes the adjacent DFPS reservation. The splash node
+itself is 12 MiB. Current live FDT has no simple-framebuffer node; host-testing
+it selects source 2, base 0x85200000, size 0xc00000. Neither reservation nor
+video-mode panel source establishes live scanout layout or continued scanning.
+The board-matched K6S panel declares dsi_video_mode, making command-mode refresh
+a weaker hypothesis, not an eliminated possibility for all display failures.
+
+## Validation and status
+
+Seven host tests cover malformed/truncated FDT, geometry bounds, display
+selection priority, fallback refusal, RGB/BGR layout and untouched row padding.
+Both freestanding AArch64 builds and boot-v2 payload/DTB/image-ID verification
+pass. C objects contain no ABS64 pointers; marker binary symbol/disassembly
+inspection confirms no parser/renderer and the counter/SMC sequence.
+Both v3 probes are prepared but unflashed. Phone remains in slot-A recovery.

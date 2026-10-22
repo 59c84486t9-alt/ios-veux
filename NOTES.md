@@ -1,3 +1,42 @@
+## >>> UPDATE 2026-10-22 (positive-control marker/reset probes prepared) <<<
+
+- Current root slot-A recovery live tree contains splash_region@0x85200000,
+  reg `<0 0x85200000 0 0xc00000>`, but no simple-framebuffer. `find -L` is
+  needed for /proc/device-tree's symlink. `/proc/iomem` has no splash-named
+  line; it reports `85200000-85efffff : reserved` (includes adjacent DFPS).
+  Fresh live FDT and iomem saved under ignored recovery-after-39805058203.
+  This is recovery evidence, not a new stock-Android observation.
+- Regression hypothesis: c27fda0 enabled shim con_clear before loader_boot's
+  handoff marker, whereas earlier recovered handoff logs used display-disabled
+  shim builds. A screen-clear fault could explain missing later markers; not
+  established. XNU 0103 and the Xcode16/0104 change are additional differences.
+- Added default marker-only positive control before any FDT dereference or
+  framebuffer access. It uses the confirmed pmsg layout, logs frequency,
+  waits ten seconds on CNTVCT_EL0/CNTFRQ_EL0 without IRQs, then requests
+  standard PSCI SYSTEM_RESET via SMC. No invented recovery/reset2 reason.
+  The marker-only linked image excludes parser and pattern code. Counter or
+  pmsg faults remain possible; a reset timing observation is not itself proof
+  of marker retention. This does not test the separate UFS log writer.
+- Optional --screen logs source priority: valid live simplefb, otherwise live
+  named splash reservation with explicit assumed 1080x2400/4320/a8r8g8b8.
+  Invalid/ambiguous explicit descriptors do not trigger a fallback. Both
+  address paths are bounded to VEUX splash RAM and reject 0x9c000000. Current
+  recovery FDT passes host selection as source 2 at 0x85200000 size 0xc00000.
+- Seven host tests pass. Initial screen build exposed compiler-generated
+  memset for larger zero-initialized state; replaced it with a freestanding
+  volatile byte-clear. Both final AArch64 builds pass, as do relocation,
+  symbol/disassembly and boot-v2 checksum/segment comparisons.
+- Marker candidate: shim/out/veux-marker-reset-v3/shim-boot-veux-marker-reset.img,
+  438272 bytes, SHA-256
+  edd94c34522aef58c6747e31d22a91fefd437dbd3f55fcd4422f4446def80a97.
+- Screen candidate: shim/out/veux-rgb-reset-v3/shim-boot-veux-rgb-reset.img,
+  446464 bytes, SHA-256
+  be013405f3e86d6ade48c8f6f072548a4a8980d2a2b134e5829b95c9b2b48cc9.
+- No v3 image flashed; phone remains slot-A recovery, fresh XNU on boot_b.
+  Standard reset keeps B active and may repeat the probe. First hardware test
+  should use marker-only and then return via fastboot to A recovery for pstore.
+  Exact procedure and limitations: docs/VEUX-BOOT-DIAGNOSTICS.md.
+
 ## >>> UPDATE 2026-10-22 (fresh-kernel recovery log result) <<<
 
 - User returned the phone to fastboot and enabled ADB for recovery log

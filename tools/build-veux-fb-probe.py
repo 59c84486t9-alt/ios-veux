@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an unflashed, XNU-free live-FDT RGB probe using a known boot-v2 header.
+"""Build an unflashed, XNU-free marker/reset probe (optional live-FDT RGB pattern) using a known boot-v2 header.
 
 Requires clang and AArch64 ELF binutils. No device commands are issued.
 The template must be an existing VEUX shim image, not a stock boot-v3 image.
@@ -20,6 +20,7 @@ def main():
     ap.add_argument('--out-dir', type=Path, required=True)
     ap.add_argument('--clang', default='clang')
     ap.add_argument('--cross-prefix', default='aarch64-elf-')
+    ap.add_argument('--screen', action='store_true', help='enable RGB drawing; default is marker/reset only')
     args = ap.parse_args()
     root = Path(__file__).resolve().parent.parent
     header = args.template.read_bytes()
@@ -43,12 +44,13 @@ def main():
     for source, obj in [('veux-fb-probe.S', 'entry.o'), ('veux-fb-probe.c', 'probe.o')]:
         subprocess.run([args.clang, '--target=aarch64-none-elf', '-O2', '-ffreestanding',
                         '-fno-builtin', '-fno-stack-protector', '-fno-pic', '-mgeneral-regs-only',
-                        '-mstrict-align', '-Wall', '-Wextra', '-Werror', '-c',
+                        '-mstrict-align', '-ffunction-sections', '-fdata-sections',
+                        f'-DPROBE_SCREEN={int(args.screen)}', '-Wall', '-Wextra', '-Werror', '-c',
                         str(root / 'shim' / source), '-o', str(out / obj)], check=True)
     relocs = subprocess.check_output([args.cross_prefix + 'readelf', '-r', str(out / 'probe.o')], text=True)
     if 'R_AARCH64_ABS64' in relocs:
         raise SystemExit('C objects contain absolute pointers; ABL relocation is unsupported')
-    subprocess.run([args.cross_prefix + 'ld', '-T', str(root / 'shim/veux-fb-probe.ld'),
+    subprocess.run([args.cross_prefix + 'ld', '--gc-sections', '-T', str(root / 'shim/veux-fb-probe.ld'),
                     str(out / 'entry.o'), str(out / 'probe.o'), '-o', str(out / 'probe.elf')], check=True)
     subprocess.run([args.cross_prefix + 'objcopy', '-O', 'binary',
                     str(out / 'probe.elf'), str(out / 'Image')], check=True)
@@ -75,10 +77,11 @@ def main():
     for part in (kernel, ramdisk, dtb):
         packed.extend(part)
         packed.extend(bytes(align(len(part)) - len(part)))
-    image = out / 'shim-boot-veux-fb-only.img'
+    image = out / ('shim-boot-veux-rgb-reset.img' if args.screen else 'shim-boot-veux-marker-reset.img')
     image.write_bytes(packed)
     print(f'{image}\n{len(packed)} bytes; SHA-256 {hashlib.sha256(packed).hexdigest()}')
-    print('Expected: RGB bars and a corner mark if live simplefb is usable; otherwise log SKIP. Holds indefinitely.')
+    print('Mode:', 'screen + marker' if args.screen else 'marker only (no framebuffer/FDT access)')
+    print('Requests standard PSCI reset after a 10-second counter wait; active slot stays unchanged.')
 
 
 if __name__ == '__main__':

@@ -44,7 +44,8 @@ class Display(C.Structure):
 
 
 class Info(C.Structure):
-    _fields_ = [('fb', Display), ('count', C.c_uint32), ('valid', C.c_uint32), ('ramoops', C.c_uint32)]
+    _fields_ = [('fb', Display), ('count', C.c_uint32), ('valid', C.c_uint32), ('ramoops', C.c_uint32), ('splash', Display),
+                ('splash_count', C.c_uint32), ('splash_valid', C.c_uint32)]
 
 
 class ProbeTests(unittest.TestCase):
@@ -56,6 +57,7 @@ class ProbeTests(unittest.TestCase):
                         str(ROOT / 'shim/veux-fb-probe.c'), '-o', str(lib)], check=True)
         cls.lib = C.CDLL(str(lib))
         cls.lib.probe_parse.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(Info)]
+        cls.lib.probe_select.argtypes = [C.POINTER(Info)]
         cls.lib.probe_pattern.argtypes = [C.POINTER(C.c_uint32), C.POINTER(Display)]
 
     @classmethod
@@ -100,6 +102,23 @@ class ProbeTests(unittest.TestCase):
             damaged = bytearray(data)
             struct.pack_into('>I', damaged, offset, value)
             self.assertEqual(self.parse(bytes(damaged))[0], 0)
+
+    def test_ordered_splash_fallback(self):
+        def reserved(base=0x85200000, size=0xc00000, duplicate=False):
+            child = ('splash_region@0x85200000', [('reg', u32(0, base, 0, size))], [])
+            return ('reserved-memory', [('#address-cells', u32(2)), ('#size-cells', u32(2)),
+                                        ('ranges', b'')], [child] * (2 if duplicate else 1))
+        info = self.parse(fdt([reserved()]))[1]
+        self.assertEqual(self.lib.probe_select(C.byref(info)), 2)
+        self.assertEqual((info.fb.base, info.fb.width, info.fb.height, info.fb.stride),
+                         (0x85200000, 1080, 2400, 4320))
+        info = self.parse(fdt([display(), reserved()]))[1]
+        self.assertEqual(self.lib.probe_select(C.byref(info)), 1)
+        self.assertEqual(info.fb.stride, 400)
+        for nodes in [[reserved(0x9c000000)], [reserved(size=100)],
+                      [reserved(duplicate=True)], [display(stride=None), reserved()]]:
+            info = self.parse(fdt(nodes))[1]
+            self.assertEqual(self.lib.probe_select(C.byref(info)), 0)
 
     def test_rgb_bgr_corner_and_stride_padding(self):
         for fmt, red, blue in [(b'a8r8g8b8\0', 0xffff0000, 0xff0000ff),
