@@ -30,6 +30,10 @@
   user's approval of this exact boot_b candidate, per AGENTS.md. Temporary
   `fastboot boot` was previously rejected as unsupported on this phone.
 - Concise procedure/evidence: `docs/VEUX-BOOT-DIAGNOSTICS.md`.
+- Committed and pushed as `818ea2b`. Dispatched fresh XNU CI run
+  `39805058203` on that exact commit (macOS 13.5 / DEVELOPMENT / VEUX,
+  Intel macOS 15 runner). Build result is pending; no fresh kernel is yet
+  validated or packaged.
 
 ## >>> UPDATE 2026-10-22 (direct-framebuffer shim boot probe) <<<
 
