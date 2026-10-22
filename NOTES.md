@@ -1,3 +1,29 @@
+## >>> UPDATE 2026-10-22 (fresh-kernel recovery log result) <<<
+
+- User returned the phone to fastboot and enabled ADB for recovery log
+  collection. Verified product veux and slot B, selected slot A and issued
+  `fastboot reboot recovery`; both succeeded. ADB is authorized and root;
+  recovery reports `_a`. No partition was flashed during this collection.
+- `/sys/fs/pstore` is empty. Recovery dmesg registers ramoops at
+  `0xd0000000`, size `0x200000`, ECC 0, without an invalid-buffer warning.
+  Runtime parameters confirm 1 MiB record + 1 MiB pmsg, zero console/ftrace,
+  mem_type 0. No last XNU line can be recovered from this attempt.
+- Read the final 1025 4096-byte blocks of userdata (`sda22`, 213196440
+  512-byte sectors). No VEUXLOG1 header. Tail SHA-256:
+  `06955cde7f98b9503653b906e9634732d59a17a6dc2cb1a0e453fbdd4adaab86`;
+  byte-for-byte identical to the pre-logger tail backup. Thus no successful
+  diagnostic tail flush is evident; the failure point remains unknown.
+- Independently read back the first 4162 blocks of boot_b. SHA-256 matches
+  the exact fresh image `279e7808f7d65a8d50004818325e8e76ad61e21d2bb4ad2c77eb1303f9095f95`.
+  This rules out accidentally testing a stale boot_b package in this attempt.
+- Raw tail, recovery dmesg, pstore listing and runtime parameters saved under
+  ignored `research/veux-logs/recovery-after-39805058203/`. The dmesg belongs
+  to Linux recovery, not XNU. Missing pstore does not distinguish early failure
+  from loss of retained RAM during the forced reset/boot transition.
+- Current state: slot-A root recovery, fresh XNU image still on boot_b. The
+  live-FDT RGB/pmsg v2 probe remains unflashed. No new flashing authorization
+  requested or inferred from this read-only log-collection step.
+
 ## >>> UPDATE 2026-10-22 (logo persists; live-FDT standalone probe v2) <<<
 
 - User reports the fresh run-39805058203 image still shows the Xiaomi logo.
