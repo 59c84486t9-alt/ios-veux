@@ -384,7 +384,7 @@ void shim_main(uint64_t dtb)
 	con_skip();
 	/* A VEUX payload failure must not fall through to SWEET's UFS/GIC/MMU
 	 * hardware probes. Those addresses and register sequences are unrelated. */
-#ifdef VEUX_NO_FB
+#ifdef DEVICE_VEUX
 	for (;;)
 		__asm__ volatile("wfe");
 #endif

@@ -91,6 +91,26 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
     phandle = iter(range(1, 1000))
     ph = lambda: ('AAPL,phandle', u32(next(phandle)))
 
+    veux_simplefb = node('framebuffer@85200000', [
+        ph(),
+        ('compatible', cstr('simple-framebuffer')),
+        # ADT encodes each root-level address and size cell as a u64.
+        ('reg', u64(0x85200000, 0x00c00000)),
+        ('width', u32(1080)),
+        ('height', u32(2520)),
+        ('stride', u32(4320)),
+        ('format', cstr('a8r8g8b8')),
+    ])
+
+    chosen_children = [node('memory-map', [ph()]),
+                       # Local boot policy: relaxed SIP and unauthenticated root,
+                       # as required by the iOS 16 userland and shared cache.
+                       node('asmb', [ph(), ('lp-sip0', u64(0x6f)), ('lp-sip1', u32(1))])]
+    if veux:
+        # This is a direct firmware scanout description; no SDE probe is needed
+        # to use the explicitly supplied buffer geometry and byte layout.
+        chosen_children.append(veux_simplefb)
+
     chosen = node('chosen', [
         ph(),
         ('dram-base', u64(phys_base)),
@@ -106,10 +126,9 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
         # libimg4 (cryptexd) aborts "failed to get crypto algorithm" without
         # it; real A11+ device trees say sha2-384.
         ('crypto-hash-method', cstr('sha2-384')),
-        # MobileGestalt's screen class: display-scale (u32, default 0) comes
-        # from /chosen, the pixel size from IOMobileFramebuffer. Scale 0 makes
-        # SpringBoard's FBSDisplayMode "infxinf@0x" invalid. 1080x2400 @3x =
-        # 360x800 points (like iPhone X class devices).
+        # MobileGestalt's logical screen class: display-scale (u32, default 0)
+        # comes from /chosen; the presented iPhone X canvas is 1125x2436 at
+        # 3x (375x812 points). The VEUX simple-framebuffer scanout is separate.
         ('display-scale', u32(3)),
         # XNU derives IOPlatformUUID (gethostuuid) from these on arm; without
         # them CFPreferences cannot use kCFPreferencesCurrentHost (no ByHost
@@ -126,13 +145,7 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
         ('effective-production-status-ap', u32(0)),
         ('certificate-security-mode', u32(1)),
         ('effective-security-mode-sep', u32(1)),
-    ], [node('memory-map', [ph()]),
-        # Local boot policy (kern_csr.c): SIP relaxed like `csrutil disable`
-        # (lp-sip0: untrusted kexts, unrestricted FS, task_for_pid, kernel
-        # debugger, dtrace, nvram), lp-sip1: unauthenticated (unsealed) root.
-        # The iOS shared cache is in no trust cache, so dyld can only map it
-        # with CSR_ALLOW_UNRESTRICTED_FS (vm_unix.c shared region checks).
-        node('asmb', [ph(), ('lp-sip0', u64(0x6f)), ('lp-sip1', u32(1))])])
+    ], chosen_children)
 
     # CPUs retain the physical MPIDR order read from the selected device tree.
     # The kernel defaults to one
@@ -186,15 +199,15 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
         node('wdt', [ph(), ('no-pmu', u32(1))]),
         # Main display: IOMobileFramebuffer.framework counts /arm-io children
         # with this device_type and reads the canvas size from the node
-        # (the presented iPhone X size, see SweetFramebuffer.cpp);
-        # the kernel's AppleCLCD matches the compatible string.
-        *([] if veux else [node('disp0', [
+        # (the presented iPhone X size, see SweetFramebuffer.cpp). VEUX's
+        # direct framebuffer node describes the firmware scanout separately.
+        node('disp0', [
             ph(),
             ('device_type', cstr('display-subsystem')),
             ('compatible', cstr('sweet,display')),
             ('canvas-width', u32(1125)),
             ('canvas-height', u32(2436)),
-        ])])])
+        ])])
 
     fbcon = node('sweet-fbcon', [
         ph(),

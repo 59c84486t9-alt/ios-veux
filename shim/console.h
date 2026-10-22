@@ -1,10 +1,19 @@
 #pragma once
 #include <stdint.h>
 
+#ifdef DEVICE_VEUX
+#define FB_BASE		0x85200000UL	/* VEUX simple-framebuffer node */
+#define FB_W		1080
+#define FB_H		2520
+#define FB_STRIDE	4320		/* a8r8g8b8 */
+#define FB_SIZE		0x00c00000UL
+#else
 #define FB_BASE		0x9c000000UL	/* reserved-memory cont_splash_region */
 #define FB_W		1080
 #define FB_H		2400
 #define FB_STRIDE	(FB_W * 4)	/* a8r8g8b8, matches mainline simplefb */
+#define FB_SIZE		0x01700000UL
+#endif
 
 #define RED	0xffff0000U
 #define BLUE	0xff0000a0U

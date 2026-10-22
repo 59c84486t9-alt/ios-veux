@@ -76,7 +76,7 @@ static int magic_ok(const char *m)
 
 typedef void (*xnu_entry_t)(uint64_t boot_args_pa);
 
-#ifdef VEUX_NO_FB
+#ifdef DEVICE_VEUX
 /*
  * ABL enters the shim with the MMU and caches off. Write a pre-XNU breadcrumb
  * into the same Linux ramoops pmsg ring described by the VEUX recovery DT.
@@ -180,7 +180,7 @@ const char *loader_boot(uintptr_t dtb)
 	uintptr_t entry_pa = p->entry_va + pa_of_va_base;
 	con_hex("JUMP", entry_pa);
 	con_str("XNU", "jumping (fbcon clears screen)");
-	#ifdef VEUX_NO_FB
+	#ifdef DEVICE_VEUX
 	veux_pmsg_handoff_marker();
 	#endif
 

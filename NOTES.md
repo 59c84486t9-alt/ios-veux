@@ -1,3 +1,28 @@
+## >>> UPDATE 2026-10-22 (direct VEUX simple-framebuffer path) <<<
+
+- Used the framebuffer description supplied by the user: physical base
+  `0x85200000`, allocation `0x00c00000` (12 MiB), 1080x2520, 4320-byte
+  stride, `a8r8g8b8`. The visible image needs 10,886,400 bytes (about 10.38
+  MiB), within the declared allocation. A 12 MiB allocation also fits
+  1200x2520 at 4800-byte stride (12,096,000 bytes); the table's 13 MiB value
+  leaves extra headroom. Kept the explicit node's 1080x2520 mode.
+- Replaced the live SDE register/geometry checks in patch 0103 with a direct
+  mapping of the declared simple framebuffer. The white marker and transparent
+  text console are still requested by `veuxfb=1` and `veuxfbconsole=1`; the
+  active XNU diagnostic cmdline must include those options. There are no SDE
+  register gates. A mapping failure still returns without a write.
+- The VEUX shim now uses the same framebuffer base, geometry and stride,
+  supplies those values in `Boot_Video`, and maps the containing physical block
+  as non-cacheable write-combining memory. Added the matching
+  `simple-framebuffer` node to the VEUX ADT. The separate logical canvas stays
+  at the iPhone X size, 1125x2436 at 3x (375x812 points).
+- Updated the XNU workflow's post-patch checks for the direct framebuffer and
+  repaired the inline Python check indentation. Validation: 103-patch repository
+  check passed; generated ADT decoded to base `0x85200000`, size `0xc00000`,
+  width 1080, height 2520, stride 4320, format `a8r8g8b8`; patch 0103 applies to
+  a clean run-397061 build tree. No phone boot or flash was performed. XNU CI
+  build and a boot-image rebuild remain pending.
+
 ## >>> UPDATE 2026-10-22 (slot-A recovery log inspection) <<<
 
 - After the user's instruction, set the active slot to A and booted recovery.
