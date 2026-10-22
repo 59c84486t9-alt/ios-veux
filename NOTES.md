@@ -1,6 +1,6 @@
 ## >>> UPDATE 2026-10-21 (VEUX display, userdata logging, and SWEET ports) <<<
 
-- Added patches 0097–0103. Patch 0097 connects the VEUX pmsg printk path to the
+- Added patches 0097–0102. Patch 0097 connects the VEUX pmsg printk path to the
   existing 4 MiB UFS ring, publishes ring bytes after storing them, bounds
   writes to the final 4 MiB + 4 KiB of the exact `userdata` partition on LUN 0,
   and requires `veuxlog=1`. Normal UFS/root writes remain read-only. Recovery
@@ -27,15 +27,16 @@
   The VEUX console uses the existing guarded SDE handoff instead of SWEET's
   fixed scanout mapping. The existing VEUX patches already cover the board
   expert, single-core CPU/timer bring-up, PRNG/crypto compatibility, pthread,
-  read-only UFS root, and DMA mapping. Patch 0103 enables SWEET's existing XML
-  entitlements provider for VEUX; the prior link failed because only the AMFI
-  caller had been included, leaving its seven helper symbols unresolved.
-- All 103 patches pass `tools/validate-repo.py`. Patches 0097–0103 apply
+  read-only UFS root, and DMA mapping. The original patch 0035 now enables its
+  XML entitlements provider for VEUX as well as SWEET.
+- All 102 patches pass `tools/validate-repo.py`. Patches 0097–0102 apply
   cleanly in order to the saved XNU tree from build 39699826454, and the new
-  workflow checks the provider guard. CI run 39704310477 compiled the object
-  files but failed at link on the missing provider symbols; the fix is in 0103
-  and the retry is pending. Payload packaging and any phone boot/flash remain
-  pending; no phone partition was changed in this step.
+  workflow checks the provider guard. CI runs 39704310477 and 39705176541
+  failed at link on the seven provider symbols; the second run showed the
+  follow-up patch had been skipped by the patch applicator. The guard is now in
+  the patch that creates the provider; another retry is pending. Payload
+  packaging and any phone boot/flash remain pending; no phone partition was
+  changed in this step.
 
 ## >>> UPDATE 2026-10-21 (VEUX QEMU follow-up: board guards) <<<
 
