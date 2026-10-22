@@ -1,3 +1,23 @@
+## >>> UPDATE 2026-10-22 (direct-framebuffer shim boot probe) <<<
+
+- Built `shim/out/shim-boot-veux-directfb-probe-oldxnu-20261022.img` with the
+  new VEUX direct-framebuffer shim, the selected `vendor_boot_b` `dtb_1.dtb`,
+  and the previously built XNU payload from CI run 39706120497. The payload
+  still contains the earlier XNU framebuffer guards; this image tests the
+  shim's pre-XNU screen writes and is not the patch-0103 kernel build. Image
+  size: 17,068,032 bytes; SHA-256:
+  `004c022496598c991fe82c9660b06d8f5feb39e732fa118a357d78f5829b54f6`.
+  Header-v2 unpacking matched the shim kernel, payload, and outer DTB exactly.
+- Verified fastboot product `veux`, active slot A before the write, and
+  `boot_b` size `0x8000000`. Flashed only `boot_b`, selected B, and rebooted.
+  Slot A was not written. The payload includes the previously authorized
+  `veuxlog=1` option, which can write only the bounded diagnostic log tail if
+  XNU UFS logging starts; no userdata image was flashed.
+- After about three minutes, neither ADB nor fastboot enumerated. Host-side
+  tools cannot observe the physical panel, so whether the new shim screen was
+  visible is unknown. The fresh patch-0103 XNU CI run 39786091688 remains
+  queued. Keep B active until the user directs otherwise.
+
 ## >>> UPDATE 2026-10-22 (local VEUX shim packaging check) <<<
 
 - Replaced the shim's `__builtin_strcmp` uses with a freestanding `name_equal`
