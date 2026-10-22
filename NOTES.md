@@ -1,3 +1,30 @@
+## >>> UPDATE 2026-10-22 (corrected CI kernel packaged and flashed) <<<
+
+- User explicitly requested packaging the successful GitHub build, flashing
+  via fastboot and rebooting into it. Run `39805058203` succeeded at head
+  `818ea2b813990805260495d28d3056539772c011`. Downloaded kernel SHA-256:
+  `8daeea32d216658245365d7dc1f4ec3affa0e9033c36556ef793cd6ea1ab5861`.
+  Artifact checksum and direct-simplefb implementation strings verified.
+- Generated fresh `mkadt.py --veux --highmem` ADT and XNU payload, retaining
+  RAM base `0x100000000`, size `0xf8600000`, single-core boot, `rd=ufsroot0`,
+  `veuxlog=1`, `veuxfb=1`, `veuxfbconsole=1`, and verbose output. No general
+  UFS/root write options enabled. The existing opted-in logger can write its
+  bounded userdata-tail diagnostic area if XNU reaches UFS initialization.
+- Packaged with the verified existing direct-framebuffer VEUX shim and exact
+  selected vendor_boot_b `dtb_1.dtb`, preserving known boot-v2 header values.
+  Every embedded XNU segment matches the fresh kernel; embedded ADT matches
+  the generated tree. Unpacked shim, payload and DTB match inputs byte-for-byte.
+- Image: `shim/out/veux-xnu-39805058203/shim-boot-veux-xnu-39805058203.img`,
+  17,047,552 bytes; SHA-256:
+  `279e7808f7d65a8d50004818325e8e76ad61e21d2bb4ad2c77eb1303f9095f95`.
+- Fastboot identified product `veux`, slot B, and 128 MiB `boot_b`. Sending
+  16,648 KiB and writing `boot_b` both returned OKAY. `set_active b`, verified
+  `current-slot: b`, and `reboot` all succeeded. Only boot_b was flashed;
+  no userdata image or slot-A partition was written.
+- Screen result and XNU startup remain unobserved. Leave slot B selected for
+  this test; obtain the user's screen observation before interpreting success.
+  This is the fresh XNU image, not the standalone white-screen-only probe.
+
 ## >>> UPDATE 2026-10-22 (fresh-chat audit, CI repair and standalone probe) <<<
 
 - Checked run `39796431519`: it acquired the Intel runner and compiled XNU,
