@@ -1,3 +1,36 @@
+## >>> UPDATE 2026-10-22 (fresh-chat audit, CI repair and standalone probe) <<<
+
+- Checked run `39796431519`: it acquired the Intel runner and compiled XNU,
+  but patch 0103 was skipped by `git apply` because its hunks had no context.
+  The post-build source checks rejected the resulting stale framebuffer code.
+  Patch 0104 applied successfully; this was not another runner queue failure.
+- Regenerated patch 0103 with three context lines against that run's actual
+  saved source. Standard `git apply --check` and application pass. Fixed the
+  workflow's IORPC checks to accept the field's actual whitespace. Executed
+  the complete workflow post-build check block against the repaired CI source:
+  all checks pass. Full recompilation is still pending.
+- Added `shim/veux-fb-probe.S` and `tools/build-veux-fb-probe.py`: a standalone
+  4 KiB Linux Image-header probe that checks EL1/MMU-off/cache-off, fills the
+  configured linear framebuffer white, executes DSB, and waits indefinitely.
+  It has no XNU, loader, stack, FDT parser, UFS, timer, GIC or pmsg dependency.
+  Geometry comes from the existing VEUX console profile: 0x85200000,
+  1080x2520, stride 4320, within the 12 MiB reservation. This profile is still
+  an unconfirmed scanout assumption; a blank result cannot alone prove that
+  the bootloader failed to enter the probe.
+- Built `shim/out/veux-fb-only-20261022/shim-boot-veux-fb-only.img`, 405,504
+  bytes; SHA-256 `e062a30f9d75a37d1335844a253d720385d37f34845b1575f0e22b409acc038b`.
+  Preserves the known shim boot-v2 metadata and exact selected vendor_boot_b
+  DTB. Unpack comparisons of kernel/ramdisk/DTB, independent Android image-ID
+  calculation, compressed cpio check, and assembly disassembly all pass.
+  Repository validation passes (104 patches). Diff whitespace warnings in
+  0103 are unified-diff context prefixes, not added source whitespace.
+- No phone access, slot change or flash in this session. The known earlier
+  shim/XNU pmsg handoff already proves some prior XNU entry; the standalone
+  probe isolates visibility from XNU startup. Next device action requires the
+  user's approval of this exact boot_b candidate, per AGENTS.md. Temporary
+  `fastboot boot` was previously rejected as unsupported on this phone.
+- Concise procedure/evidence: `docs/VEUX-BOOT-DIAGNOSTICS.md`.
+
 ## >>> UPDATE 2026-10-22 (direct-framebuffer shim boot probe) <<<
 
 - Built `shim/out/shim-boot-veux-directfb-probe-oldxnu-20261022.img` with the

@@ -7,7 +7,10 @@ text console can produce a visible XNU life signal.
 
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -1433,12 +1433,2 @@
+@@ -1430,24 +1430,13 @@
+ }
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ /*
 - * Read the VEUX SDE handoff registers. Optional framebuffer writes are limited
 - * to a tiny RAM marker after the live display state passes all guards.
 - * Register offsets come from the board-matched SM6375 SDE 6.0.9 catalog.
@@ -22,13 +25,21 @@ text console can produce a visible XNU life signal.
 -#define VEUX_SDE_DMA0              0x00025000u
 + * Static simple-framebuffer handoff supplied by the VEUX boot device tree.
 + */
-@@ -1448,3 +1438,2 @@
+ #define VEUX_FB_BASE               0x85200000ULL
+ #define VEUX_FB_SIZE               0x00c00000u
+ #define VEUX_FB_WIDTH              1080u
 -#define VEUX_FB_HEIGHT             2400u
 -#define VEUX_FB_STRIDE_PACKED      4320u
 -#define VEUX_FB_STRIDE_PADDED      4352u
 +#define VEUX_FB_HEIGHT             2520u
 +#define VEUX_FB_STRIDE             4320u
-@@ -1460,0 +1450,46 @@
+ #define VEUX_FB_MARKER_EDGE        32u
+ #define VEUX_FB_CONSOLE_SCALE      2u
+ #define VEUX_FB_CONSOLE_TOP        64u
+@@ -1458,6 +1447,52 @@
+ static uint32_t veux_fb_console_stride;
+ static uint32_t veux_fb_console_col, veux_fb_console_row;
+ static bool veux_fb_console_ready;
 +
 +static void
 +veux_fb_log(const char *text)
@@ -75,7 +86,13 @@ text console can produce a visible XNU life signal.
 +		veux_fb_log("VEUX simplefb marker wrote white 32x32 at 0x85200000\n");
 +	}
 +}
-@@ -1505,204 +1539,0 @@
+ 
+ void
+ veux_fb_console_putc(char c)
+@@ -1502,208 +1537,4 @@
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ 	veux_fb_console_col++;
+ }
 -
 -static void
 -veux_sde_log_text(const char *text)
@@ -280,9 +297,13 @@ text console can produce a visible XNU life signal.
 -	__asm__ volatile("dsb sy" ::: "memory");
 -	veux_sde_log_text("--- VEUX SDE probe v1 end ---\n");
 -}
+ #endif /* ARM64_BOARD_CONFIG_VEUX */
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
-@@ -111,5 +111,5 @@
+@@ -108,11 +108,11 @@
+ {
+ 	if (veux_pmsg_init()) {
+ 		veux_early_flush();
 -		/* Keep the ramoops sink independent of VEUX's unknown UART. */
 -		PE_kputc = veux_pmsg_putc_crlf;
 -		/* Read SDE state; an opt-in marker may write guarded framebuffer RAM. */
@@ -293,8 +314,17 @@ text console can produce a visible XNU life signal.
 +	veux_fb_init();
 +	/* Both pmsg and framebuffer sinks are safe no-ops when their option is off. */
 +	PE_kputc = veux_pmsg_putc_crlf;
+ }
+ #endif
+ 
 --- a/pexpert/pexpert/arm/protos.h
 +++ b/pexpert/pexpert/arm/protos.h
-@@ -22 +22 @@
+@@ -19,7 +19,7 @@
+ bool veux_pmsg_init(void);
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ void PE_init_veux_pmsg(void);
 -void veux_sde_probe(void);
 +void veux_fb_init(void);
+ #endif
+ void veux_pmsg_putc(char c);
+ 
