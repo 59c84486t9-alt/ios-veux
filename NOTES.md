@@ -37,7 +37,11 @@
   sweet_early.h before pexpert checks. Standard git apply and all CI source
   assertions pass; 105-patch validation and seven probe tests pass. Updated
   xnu-cc.py to detect fork CI paths/use installed clang/create object dir.
-  One final full CI build is next; exact run ID will be recorded separately.
+  Full CI run 39884652829 is in progress for commit 541cad4a058b56d91259827875f83d9e0e8464d1:
+  https://github.com/59c84486t9-alt/ios-veux/actions/runs/39884652829
+  Next: inspect the first error if it fails; on success package the XNU
+  candidate with cpus=1 and test stage cells. Full link and device stage
+  results are pending; current boot_b is still the RGB probe.
 - Flash sequence and outcome matrix: docs/VEUX-BOOT-DIAGNOSTICS.md.
 
 ## >>> UPDATE 2026-10-22 (positive-control marker/reset probes prepared) <<<
