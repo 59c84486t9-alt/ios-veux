@@ -3,11 +3,10 @@ Subject: [PATCH] Preserve VEUX console tail in a non-overlapping panic screen
 
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -1443,7 +1443,25 @@
+@@ -1443,7 +1443,26 @@
  #define VEUX_FB_CONSOLE_FG         0xffffffffu
  
  extern unsigned char iso_font[256 * 16];
--static volatile uint32_t *veux_fb_console_base;
 +#define VEUX_PANIC_TAIL_LINES 20u
 +#define VEUX_PANIC_TAIL_COLS (VEUX_FB_WIDTH / (8u * VEUX_FB_CONSOLE_SCALE))
 +static char veux_panic_tail[VEUX_PANIC_TAIL_LINES][VEUX_PANIC_TAIL_COLS];
@@ -26,11 +25,12 @@ Subject: [PATCH] Preserve VEUX console tail in a non-overlapping panic screen
 +	if ((unsigned char)c < 0x20 || (unsigned char)c > 0x7e) c = '?';
 +	veux_panic_tail[veux_panic_tail_head][veux_panic_tail_col++] = c;
 +}
+ static volatile uint32_t *veux_fb_console_base;
 +
  static uint32_t veux_fb_console_stride;
  static uint32_t veux_fb_console_col, veux_fb_console_row;
  static bool veux_fb_console_ready;
-@@ -1503,6 +1521,7 @@
+@@ -1503,6 +1522,7 @@
  	if (!veux_fb_console_ready || veux_fb_console_base == NULL) {
  		return;
  	}
@@ -38,7 +38,7 @@ Subject: [PATCH] Preserve VEUX console tail in a non-overlapping panic screen
  	const uint32_t cols = VEUX_FB_WIDTH / (8u * VEUX_FB_CONSOLE_SCALE);
  	const uint32_t rows = (800u - VEUX_FB_CONSOLE_TOP) / (16u * VEUX_FB_CONSOLE_SCALE);
  	if (c == '\r') {
-@@ -1551,7 +1570,7 @@
+@@ -1551,7 +1571,7 @@
  {
  	if (!veux_fb_console_ready || veux_fb_console_base == NULL) return;
  	veux_fb_panic_col = veux_fb_panic_row = 0;
@@ -47,7 +47,7 @@ Subject: [PATCH] Preserve VEUX console tail in a non-overlapping panic screen
  		for (uint32_t x = 0; x < VEUX_FB_WIDTH; ++x)
  			veux_fb_console_base[y * (veux_fb_console_stride / 4u) + x] = 0xff000000;
  }
-@@ -1561,7 +1580,7 @@
+@@ -1561,7 +1581,7 @@
  {
  	if (!veux_fb_console_ready || veux_fb_console_base == NULL) return;
  	const uint32_t cols = VEUX_FB_WIDTH / 8u;
@@ -56,7 +56,7 @@ Subject: [PATCH] Preserve VEUX console tail in a non-overlapping panic screen
  	if (c == '\r') { veux_fb_panic_col = 0; return; }
  	if (c == '\n' || veux_fb_panic_col >= cols) {
  		veux_fb_panic_col = 0;
-@@ -1572,7 +1591,7 @@
+@@ -1572,7 +1592,7 @@
  	if (ch < 0x20 || ch > 0x7e) ch = '?';
  	const unsigned char *glyph = iso_font + (uint32_t)ch * 16u;
  	uint32_t x0 = veux_fb_panic_col * 8u;
@@ -65,7 +65,7 @@ Subject: [PATCH] Preserve VEUX console tail in a non-overlapping panic screen
  	for (uint32_t gy = 0; gy < 16; ++gy) {
  		volatile uint32_t *line = veux_fb_console_base + (y0 + gy) * (veux_fb_console_stride / 4u) + x0;
  		for (uint32_t gx = 0; gx < 8; ++gx)
-@@ -1580,4 +1599,22 @@
+@@ -1580,4 +1600,22 @@
  	}
  	veux_fb_panic_col++;
  }
