@@ -1,3 +1,14 @@
+## >>> UPDATE 2026-10-23 (0109 CI dispatched) <<<
+
+- Source commit c2619e4673d87dc483875008673f095b54de5e43 pushed.
+  Manual VEUX DEVELOPMENT CI39929665498 queued/running:
+  https://github.com/59c84486t9-alt/ios-veux/actions/runs/39929665498
+- All local object/host/source/patch checks pass. Symbolizer reproduces known
+  skmem_sysctl_init+18hex and machine_idle+100hex from exact0108 CI kernel.
+- No0109 image or flash yet. Device remains0108. CI must pass first. After
+  success download exactkernel, verify source and artifacts, package sameargs,
+  then collect video covering all frozen wait pages; symbolize against0109.
+
 ## >>> UPDATE 2026-10-23 (0109 idle wait candidate prepared) <<<
 
 - User requests wait-state diagnosis after handled first fault and idle samples.
