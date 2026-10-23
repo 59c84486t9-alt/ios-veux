@@ -1,3 +1,19 @@
+## >>> UPDATE 2026-10-23 (VEUX launchd wrong-platform diagnosis and test image) <<<
+
+- The 0112 phone photos show HFS mounted and launchd exec reached. UFS success cell 16 is green; adjacent UFS read-failure cell 17 is dark, with no UFS error line. Far-right red BSD cell 15 means `execve("/sbin/launchd")` returned an error.
+- Panic `unexpected SIGKILL of launchd (CS_KILLED)` with namespace 9 / code `0xe`; caller `0xfffffe0007af1af8` symbolizes as `psignal_internal.cold.3` using the CI kernel at `__TEXT=0xfffffe0007004000`. This is `OS_REASON_EXEC / EXEC_EXIT_REASON_WRONG_PLATFORM`.
+- `mach_loader.c` reads the iOS device platform from `LC_BUILD_VERSION` (or arm64 `LC_VERSION_MIN_IPHONEOS`) and marks `PLATFORM_IOS` maps alien under `XNU_TARGET_OS_OSX`. The exec rejection is in `kern_exec.c`: for a `PLATFORM_IOS` process with no spawn platform, the no-sandbox entitlement is required; in DEVELOPMENT/DEBUG the `unentitled_ios_sim_launch=1` tunable satisfies that check. With a spawn platform present, the code requires `psa->psa_platform == PLATFORM_IOS`. This check is for device iOS, not `PLATFORM_IOSSIMULATOR`.
+- SWEET did not use `XNU_TARGET_OS_IOS`; historical SWEET boot used the macOS target plus the same development boot-arg. SWEET and VEUX differ in machine/board config and platform drivers, while the current build target OS remains macOS. The VEUX test image below applies that boot-arg only; it bypasses this exec gate but does not grant entitlements, disable sandboxing, or remove alien-map VM behavior.
+- Test image uses the passing CI kernel from run `39945294859` (SUCCESS, commit `7359133bbf46343c86fb82785155d62368ffd127`) and adds `unentitled_ios_sim_launch=1` to the payload command line. `shim/out/veux-xnu-39945294859/platform-test/shim-boot-veux-xnu-39945294859-platform-test.img`, 17,100,800 bytes, SHA-256 `ac867cc2fbc63d020f448e4514ba28f6a1806856cc7f021cc4c59bf9e8eb5df9`. Unpack/cmp verified the payload, original shim kernel, and selected DTB. Root remains read-only; diagnostics and early alias are retained.
+- Expected later differences: OSX alien-map/protected-pager handling, shared-region/cache layout, missing runtime Image4 trust-cache service, remaining MACF/entitlement checks, and OSX memory/task-policy defaults. Patch 0110 enables VEUX `pid_hibernate`; `config/MASTER` enables `CONFIG_FREEZE`, so the actual freeze implementation is compiled, but its device behavior remains untested. The prior SWEET launch reached libignition but failed its separate Preboot-volume lookup; watch dyld cache path/map/slide next.
+
+## >>> UPDATE 2026-10-23 (VEUX portable MD5 fix CI and flash) <<<
+
+- CI run `39945294859` passed on commit `7359133bbf46343c86fb82785155d62368ffd127` (DEVELOPMENT / VEUX); build, workflow source assertions, and synthetic framebuffer/frame diagnostic tests all passed. Run URL: https://github.com/59c84486t9-alt/ios-veux/actions/runs/39945294859
+- Kernel SHA-256: `8597f37ba80ad9ae36f59350869960195d045f0adec2e690027178e3ec97602d`. Disassembly at `MD5Init` now calls `_br_md5_init` on a local context and does not load `_g_crypto_funcs`.
+- Packaged `shim/out/veux-xnu-39945294859/shim-boot-veux-xnu-39945294859.img` (17,100,800 bytes; SHA-256 `d225d3310f41be987ca508fca5b734b07b5179e6c9b1f7618ba14dc36f42380d`). Android boot-v2 unpack verification matched the kernel payload, verified shim and `vendor_boot_b` `dtb_1.dtb`; command line remains single-core `rd=ufsroot0`, with `veuxlog=1`, and omits both `rootrw=1` and `ufsrw=1`.
+- Fastboot confirmed product `veux`, current slot B, and `boot_b` size `0x8000000`. Flash to `boot_b`, set active B, and reboot all returned OKAY. No other partition was written. ADB/fastboot had not re-enumerated 15 seconds after reboot; visual boot result is pending the next phone capture.
+
 ## >>> UPDATE 2026-10-23 (0111 CI passed, packaged, flashed to boot_b) <<<
 
 - Earlier run `39940219041` completed SUCCESS on source

@@ -1,6 +1,6 @@
 # VEUX root and post-root boot audit
 
-Audit basis: XNU 8796 as staged through 0111, the current 0111 source candidate, `tools/mkadt.py`, `tools/mkpayload.py`, `tools/mkiosroot.sh`, and the phone history in `NOTES.md`. The grep found 124 SWEET-related preprocessor lines and 190 SWEET string literals across `bsd/`, `iokit/`, `osfmk/`, `pexpert/`, `libkern/`, and `config/`. The classifications below cover behavior-bearing hits; remaining SWEET device strings belong to SWEET-only drivers and selectors.
+Audit basis: XNU 8796 as staged through 0112, the 0112 source candidate, `tools/mkadt.py`, `tools/mkpayload.py`, `tools/mkiosroot.sh`, and the phone history in `NOTES.md`. The grep found 124 SWEET-related preprocessor lines and 190 SWEET string literals across `bsd/`, `iokit/`, `osfmk/`, `pexpert/`, `libkern/`, and `config/`. The classifications below cover behavior-bearing hits; remaining SWEET device strings belong to SWEET-only drivers and selectors.
 
 ## SWEET-only behavior review
 
@@ -79,11 +79,26 @@ The BSD diagnostic strip is at y=2080, cells 32x32 with 64-pixel horizontal spac
 
 The labels intentionally distinguish a return from success: cell 12 means control returned from the init loader; cell 15 means `execve` returned an error. A successful exec may not reach either return marker.
 
-### 2026-10-23 boot result (CI 39942134414)
+### 2026-10-23 boot result (CI 39945294859)
 
-The photographed boot lit UFS cell 16 (first READ(10) succeeded), and BSD cells 6-9 (mountroot callback entry/return and `vfs_mountroot` entry/return). It did not light the later `bsd_utaskbootstrap` or launchd cells. The panic dump gives ESR `0x96000005`, FAR `0x20`, PC `0xfffffe000798bc40`, and LR `0xfffffe00077b8294`. Using the CI kernel at its linked `__TEXT` base `0xfffffe0007004000`, these resolve to `MD5Init+0x34` and `hfs_getvoluuid+0x64`. The faulting instruction is `ldr x20, [x22, #0x20]`; the preceding load reads `_g_crypto_funcs` at `0xfffffe00072490d0`, which was NULL. Thus this boot reached HFS UUID discovery and exposed the missed MD5 fallback gate; it does not indicate a bad UFS block read or prove the filesystem image is corrupt.
+The 0112 photos show HFS mounted and launchd exec reached. UFS cell 16 (first READ(10)) is green; adjacent red cell 17 (first read failure) is dark, and no UFS read error is visible. The far-right red cell 15 in the upper BSD strip means `execve("/sbin/launchd")` returned an error. Panic text: `unexpected SIGKILL of launchd (CS_KILLED) with reason -- namespace 9 code 0xe`. Caller `0xfffffe0007af1af8` resolves against the CI kernel to `psignal_internal.cold.3`, matching `OS_REASON_EXEC / EXEC_EXIT_REASON_WRONG_PLATFORM`; this is not a storage or HFS panic.
 
-Patch 0112 extends the already staged BearSSL MD5 implementation only to `ARM64_BOARD_CONFIG_VEUX`, including its little-endian codec units. The pmap, HFS read-only/journal, and UFS policies stay unchanged. CI must verify that the new candidate compiles and the VEUX MD5 source gates are active before the next flash. The screen's “handshake structure not initialized” line refers to the separate hardware-debugger handshake diagnostic; the faulting PC/LR identify the actionable kernel abort path.
+The kernel remains macOS-target XNU (`XNU_TARGET_OS_OSX`) with VEUX board configuration. In `mach_loader.c`, the iOS device platform is read from `LC_BUILD_VERSION` (or arm64 `LC_VERSION_MIN_IPHONEOS`); under the macOS target it calls `vm_map_mark_alien(map)` for `PLATFORM_IOS`. The actual exec rejection is in `kern_exec.c`: under `#if XNU_TARGET_OS_OSX`, when `proc_platform(p) == PLATFORM_IOS`, a missing/zero spawn platform requires the no-sandbox entitlement; in DEVELOPMENT/DEBUG, `unentitled_ios_sim_launch` satisfies that requirement. If a spawn platform is supplied, the branch requires `psa->psa_platform == PLATFORM_IOS`. `PLATFORM_IOSSIMULATOR` is distinct; this guard addresses device `PLATFORM_IOS`, not a simulator platform.
+
+SWEET did not change XNU to `XNU_TARGET_OS_IOS`; its historical boot used the same macOS target plus `unentitled_ios_sim_launch=1`. SWEET and VEUX differ in `MACHINE_CONFIG`/board macros (`SWEET` versus `VEUX`), CPUs, platform drivers and ADT, while the XNU target OS remains macOS. The VEUX test image adds that boot-arg only. It bypasses the missing no-sandbox-entitlement exec rejection for device-iOS binaries; it does not add entitlements, remove the OSX `vm_map_mark_alien` classification, disable sandboxing, or solve dyld/cache/trust issues.
+
+Other target-OS differences to expect after launchd starts:
+
+| Area | OSX-target behavior relevant here | VEUX status / likely next signal |
+|---|---|---|
+| Loader and VM | iOS maps are marked alien; the OSX VM path disables the protected cache pager for alien maps. | Still active after the boot-arg. A dyld shared-cache/protected-page mapping failure remains possible. |
+| AMFI, sandbox and entitlements | The exec boot-arg changes only the platform gate. MACF launch constraints and entitlement queries still run. | VEUX builds the SWEET-compatible AMFI/entitlement providers; watch for launch-constraint, codesign or sandbox denials. |
+| Trust caches | Runtime Image4/AMFI trust-cache services are unavailable in this bring-up. | VEUX returns not-found/not-supported for unavailable runtime caches; its built-in AMFI marks root binaries for development. This is not a production trust chain. |
+| dyld/shared cache | XNU retains the OSX shared-region implementation and alien-map rules; dyld is still the iOS userland binary and chooses cache/volume paths. | The iOS cache content exists on root, but the earlier SWEET launch reached libignition and failed looking for a separate Preboot volume. Watch for dyld cache open/map/slide errors. |
+| Hibernation | OSX omits the embedded `pid_hibernate` syscall path by default. | Patch 0110 enables it for VEUX. The shared `config/MASTER` enables `CONFIG_FREEZE`, so the real freeze path is compiled; actual freeze behavior still depends on compressor/jetsam state and needs runtime validation. |
+| Memory and task policy | OSX compile-time resource/accounting, VM/compressor, and task-policy defaults remain. Embedded iOS app-lifecycle policies differ. | Not comprehensively normalized. Watch memory-pressure kills and `task_policy`/`proc_policy` errors before changing target OS. |
+
+The panic region, caller/eight-frame display, first-fault dump, stage cells, and early alias remain in the 0112 kernel. CI run `39945294859` succeeded on commit `7359133bbf46343c86fb82785155d62368ffd127`. A separate image with the boot-arg is locally repackaged from that CI kernel; its SHA-256 is in `NOTES.md`. No kernel source change was needed for this test.
 
 The UFS read markers use the two 32x32 cells at y=2208: index 16 (green) means the first successful READ(10), and index 17 (red) means the first failed read. The failure also prints `error=0x...`, LBA, and block count in the top console. The stage strip at y=2240 remains separate.
 
