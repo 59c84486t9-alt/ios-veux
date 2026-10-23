@@ -39,7 +39,7 @@
   `rd=ufsroot0`, `cpus=1`, `veuxlog=1`, and no `rootrw`/`ufsrw` options.
 - Fastboot identified product `veux`, slot B, and `boot_b` size 0x8000000.
   Flashing `boot_b`, selecting B and rebooting all returned OKAY. Slot A and
-  userdata were not flashed. ADB/fastboot had not re-enumerated 10 seconds
+  userdata were not flashed. ADB/fastboot had not re-enumerated 60 seconds
   after reboot; awaiting the screen capture to classify boot outcome.
 
 ## >>> UPDATE 2026-10-23 (0109 CI passed, flashed to boot_b) <<<
