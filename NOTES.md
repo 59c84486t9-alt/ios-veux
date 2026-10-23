@@ -1,3 +1,25 @@
+## >>> UPDATE 2026-10-22 (stage-marker XNU built and flashed) <<<
+
+- CI 39884652829 SUCCESS for 541cad4a058b56d91259827875f83d9e0e8464d1.
+  Downloaded xnu-kernel to xnu/out-39884652829; SHA256SUMS passed.
+- Built fresh VEUX shim using local clang --target=aarch64-none-elf and
+  aarch64-elf binutils. Clang O2 produced absolute string-table pointers for
+  shim.c exception switch; -fno-jump-tables removed them. Verified zero
+  ABS64 relocations in all C objects; start.S image-size relocation is expected.
+- Generated fresh --veux --highmem ADT (2400 height), payload with cpus=1,
+  debug=0xc serial=3 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0
+  veuxlog=1 veuxfb=1 veuxfbconsole=1. No general writable-root options.
+- Image: shim/out/veux-xnu-39884652829/shim-boot-veux-xnu-39884652829.img
+  size 17084416, SHA256 5847c89c99882d6df22f0ba185760f19c7e25eb7a7fcfd9fdd550282782d5fb1.
+  Preserved verified boot-v2 header and dtb_1.dtb. Unpacked shim, payload,
+  and DTB all match byte-for-byte. Local flash-log.txt is beside the image.
+- Recovery reported slot A. Rebooted bootloader; product veux and boot_b
+  capacity 0x8000000 verified. Flashed boot_b, selected/verified B, rebooted:
+  every operation OKAY. Slot A and userdata image untouched.
+- CURRENT: stage-marker XNU on boot_b and B active. Await user observation
+  of bottom red/orange/yellow/green/cyan/magenta cells and any text/restart.
+  Do not reboot before observation. Bootloader acceptance is not XNU success.
+
 ## >>> UPDATE 2026-10-22 (probe tests, fastboot log loss, XNU stage patch) <<<
 
 - Executed requested marker-only control: flashed only boot_b with the verified
