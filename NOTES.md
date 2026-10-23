@@ -1,16 +1,15 @@
-## >>> UPDATE 2026-10-23 (0110 CI running; 0111 safety follow-up prepared) <<<
+## >>> UPDATE 2026-10-23 (0111 CI passed, packaged, flashed to boot_b) <<<
 
-- Current run `39940219041` is still in progress on committed source
-  `1a4c49db408763557127ba295a07b0cc87043631` (VEUX DEVELOPMENT). Its source is
-  patch 0110 plus the 0021/0022 VEUX-only gates. Do not cancel this run. Kernel
-  and packaged image hashes are pending artifact upload; no flash of this
-  candidate has happened in this session.
+- Earlier run `39940219041` completed SUCCESS on source
+  `1a4c49db408763557127ba295a07b0cc87043631` (VEUX DEVELOPMENT). It tested
+  patch 0110 plus the 0021/0022 VEUX-only gates. Its kernel artifact is not the
+  flash candidate because it lacks the read-only HFS journal guard.
 - The 0110 candidate has BSD cells 6-15 for mountroot/vfs/bootstrap/launchd,
   panic text at y1816-2071 with caller/eight bounded frames, and the prior dump
   and alias. Its root defaults MNT_RDONLY, but review found XNU can still open
   and replay a journaled HFS root. I am holding that safety gap for follow-up
   patch 0111 rather than treating read-only mount flags as journal protection.
-- Added follow-up 0111 locally, not yet dispatched: VEUX read-only HFS root
+- Added follow-up 0111: VEUX read-only HFS root
   disables early and legacy late journal initialization/replay; read-write
   requires both rootrw=1 and ufsrw=1. It adds y2208 first-success/read-error
   cells; errors print errno in hex. All changes remain VEUX-gated.
@@ -20,11 +19,28 @@
   HFS mount/launchd; it was flashed from a sparse image. No full userdata
   partition backup is present; Android userdata was explicitly expendable and
   was replaced by the reproducible iOS root. Only a 4 MiB tail backup exists.
+- Run `39942134414` completed SUCCESS on source
+  `6c8760871b89b9bb64f28d9b987c000cd1af0730` (VEUX DEVELOPMENT), including
+  synthetic host diagnostic checks. Run URL:
+  https://github.com/59c84486t9-alt/ios-veux/actions/runs/39942134414
 - Local 0111 patch application, repository validation, four changed-unit
   xnu-cc syntax checks, and console/frame/recovery/VM host tests pass. These
   host tests use RAM/synthetic data and do not validate actual UFS, HFS journal
-  replay behavior, hardware cacheability, or phone scanout. Do not flash until
-  the relevant CI build passes.
+  replay behavior, hardware cacheability, or phone scanout.
+- The CI kernel checksum is `8a05cf4be250b71915f702d87c9e6f8f933ae91a4dad48b69ef29f1c68d2574f`.
+  Post-VM disassembly confirms `vm_fault` returns to the immediate AT/ISB/PAR
+  capture without DSB/DMB/TLBI; Step A, B and the conditional cumulative C
+  sequence are present. The boot-v2 payload/kernel/selected outer DTB were
+  unpacked and byte-compared.
+- Image `shim/out/veux-xnu-39942134414/shim-boot-veux-xnu-39942134414.img`,
+  17,100,800 bytes, SHA256
+  `660d1990a74c559c73de1c1a91a00623079e8cbee1cbb9c0f813c51b3a8e602f`.
+  It uses the verified shim and `vendor_boot_b` `dtb_1.dtb`, with
+  `rd=ufsroot0`, `cpus=1`, `veuxlog=1`, and no `rootrw`/`ufsrw` options.
+- Fastboot identified product `veux`, slot B, and `boot_b` size 0x8000000.
+  Flashing `boot_b`, selecting B and rebooting all returned OKAY. Slot A and
+  userdata were not flashed. ADB/fastboot had not re-enumerated 10 seconds
+  after reboot; awaiting the screen capture to classify boot outcome.
 
 ## >>> UPDATE 2026-10-23 (0109 CI passed, flashed to boot_b) <<<
 

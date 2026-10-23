@@ -1,6 +1,6 @@
 # VEUX root and post-root boot audit
 
-Audit basis: XNU 8796 as staged through 0111, the current 0110 source candidate, `tools/mkadt.py`, `tools/mkpayload.py`, `tools/mkiosroot.sh`, and the phone history in `NOTES.md`. The grep found 124 SWEET-related preprocessor lines and 190 SWEET string literals across `bsd/`, `iokit/`, `osfmk/`, `pexpert/`, `libkern/`, and `config/`. The classifications below cover behavior-bearing hits; remaining SWEET device strings belong to SWEET-only drivers and selectors.
+Audit basis: XNU 8796 as staged through 0111, the current 0111 source candidate, `tools/mkadt.py`, `tools/mkpayload.py`, `tools/mkiosroot.sh`, and the phone history in `NOTES.md`. The grep found 124 SWEET-related preprocessor lines and 190 SWEET string literals across `bsd/`, `iokit/`, `osfmk/`, `pexpert/`, `libkern/`, and `config/`. The classifications below cover behavior-bearing hits; remaining SWEET device strings belong to SWEET-only drivers and selectors.
 
 ## SWEET-only behavior review
 
