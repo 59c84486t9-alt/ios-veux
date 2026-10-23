@@ -1,3 +1,27 @@
+## >>> UPDATE 2026-10-22 (0108 photos: resolved first fault, idle sample) <<<
+
+- Photo 1 is early: abort/VM counters zero, first PAR/result all-ones means
+  uncaptured, timer count1. Photo 2 shows abortcount1, repeatcount1, VM1/1,
+  normal sleh return1, first-pair count1. No experiment ran (step/mask0).
+- ESR96000047 (L3 write translation), ELRfffffe000764e18c = exact CI
+  skmem_sysctl_init+24, FARfffffe53b176c000. First/latest PARff00000104300b00
+  has F=0, PA104300000; vm_fault result0. L3 descriptor0 ->0060000104300603,
+  flags207->7, change mask4. Descriptor entry PA103bf2ed8 matches FAR index1499
+  in L3 table103bf0000. FARclass50 = kernel_map/general kernel VA.
+- TCR226511a511 = WB/WB, outer-shareable, T1SZ17/TG1=16K. Descriptor-page
+  attrs103ff0200 = AttrIndx0, SH2, MAIRff, valid L3; mismatch0. Table consistency
+  masks307. No cache/barrier recovery needed for this measured first fault.
+- Timer count2, sampled PCfffffe00074932e0 = machine_idle+256, exact instruction
+  is epilogue load after DAIFClr. Previous sample was ml_set_interrupts_enabled
+  with debug. CPU has reached idle; this snapshot is not an abort retry loop.
+  It does not identify a blocked thread/root-device wait. Inspect later boot
+  progress/wait states next if stationary. No pmap barrier fix justified here.
+- Found row07 publisher omission. Completion/result are proven via 0A/21/24
+  and green cell; repair row07 during the next instrumentation change, not
+  another image solely for display. Full results appended to audit doc.
+- Raw crop/decoded.json/idle disassembly in ignored 0108-photo-analysis.
+  No source patch/build/flash or device-state change for this analysis.
+
 ## >>> UPDATE 2026-10-22 (0108 CI passed, one image flashed) <<<
 
 - CI 39896881721 SUCCESS for 2c3f478de5b4f1f3f61e3c1af741a3436e65106e.

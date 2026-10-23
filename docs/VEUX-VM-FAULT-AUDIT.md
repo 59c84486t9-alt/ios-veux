@@ -154,3 +154,52 @@ cache maintenance or TLB invalidation. A green host test is not evidence on
 those hardware questions.** Local arm64 object compilation and disassembly
 check instruction emission. CI must link successfully before one image is made
 and flashed. No source-level pmap fix is mixed into this measurement build.
+
+
+## Hardware result: two 0108 photos
+
+Photo 1 is an early snapshot: no aborts/VM calls, first-PAR/result still all-ones
+(uncaptured), and one normal timer sample. It must not be read as a PAR fault.
+
+Photo 2 records:
+
+| Evidence | Value / meaning |
+| --- | --- |
+| 00 | ESR 0x96000047; PC 0xfffffe000764e18c = skmem_sysctl_init + 24 |
+| 01,15 | FAR 0xfffffe53b176c000; class 0x50 = kernel_map + general kernel VA |
+| 02,2B | One abort, consecutive count one, first-pair occurrence count one |
+| 06,24 | One VM call, one completed call |
+| 08 | One normal sleh return to the saved PC |
+| 0A,21 | PAR 0xff00000104300b00, VM result 0; PAR F=0, PA 0x104300000 |
+| 0D,14 | Change mask 4; walk flags 0x207 -> 7: invalid L3 became valid |
+| 10,13 | L3 table PA 0x103bf0000, descriptor 0 -> 0x0060000104300603 |
+| 22,25,26 | No experiment: step/occurrence/mask zero, skipped PAR slots all-ones |
+| 20 | Two observed normal timer interrupts; PC 0xfffffe00074932e0 |
+| 23 | Same-PC streak one, changed-PC count two |
+| 29,2D,2E | WB/WB, outer-shareable TCR; descriptor page AttrIndx0/SH2/MAIR0xff, mismatch mask zero |
+
+The descriptor entry PA is independently 0x103bf0000 + 1499*8 = 0x103bf2ed8,
+matching the screen. TCR=0x226511a511 decodes IRGN1=1, ORGN1=1, SH1=2,
+T1SZ=17 (47-bit), TG1=1 (16KiB). Table-alias consistency masks are 0x307 before
+and after: all three checked mappings agree with the tested WB/SH policy and
+SCTLR.C is set. This is evidence for these observed mappings, not a general
+proof about every cacheability alias in the system.
+
+This run's fault is L3 translation (ESR low FSC=7), not the earlier L2 fault.
+VM installed the leaf mapping, AT confirmed a usable write translation, and
+sleh returned. No repeat of this pair is observed, so no A/B/C recovery was
+needed. These captures do not support the retry-loop or blocked-vm_fault
+hypotheses for this recorded fault. They do not prove all later faults absent.
+
+The sampled PC symbolicates to machine_idle + 256, the epilogue immediately
+after clearing IRQ/FIQ masks. It is an idle-path sample, not a spin in the abort
+handler. Two samples do not identify which thread is blocked or why. Next
+investigate later bootstrap/thread waits and root-device readiness if the screen
+remains stationary; do not apply a pmap barrier change based on this first fault.
+
+There is a display omission: row07 is not emitted by vd_publish. VM result and
+completion are nevertheless independently shown in 0A/21 and 24, and the green
+completion cell is lit. Add the missing returned-call/result row in the next
+instrumentation change. No extra image was built solely for that display issue.
+Raw crop, decoded values and exact-PC disassembly stay in ignored
+research/veux-logs/0108-photo-analysis/.
