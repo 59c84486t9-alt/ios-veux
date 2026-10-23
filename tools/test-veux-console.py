@@ -8,8 +8,10 @@ import subprocess
 import sys
 root,out=map(Path,sys.argv[1:]);out.mkdir(parents=True,exist_ok=True)
 src=(root/'pexpert/arm/pe_serial.c').read_text()
+tail=src.split('#define VEUX_PANIC_TAIL_LINES',1)[1].split('static volatile uint32_t *veux_fb_console_base;',1)[0]
+tail='#define VEUX_PANIC_TAIL_LINES'+tail
 code=src.split('void\nveux_fb_console_putc(char c)',1)[1].split('#endif /* ARM64_BOARD_CONFIG_VEUX */',1)[0]
-code='void\nveux_fb_console_putc(char c)'+code
+code=tail+'\nvoid\nveux_fb_console_putc(char c)'+code
 code=code.replace('__asm__ volatile("dsb sy" ::: "memory");','')
 pre=r'''
 #include <stdint.h>
