@@ -252,3 +252,44 @@ renderer emulation with an unmapped stack, then full CI. Keep cpus=1 and the
 shim marker before con_clear. Flash boot_b only after CI success. Start filming
 while still in fastboot, then reboot; capture both strips, all dump rows and
 elapsed time to any reset. Do not infer PSCI versus watchdog from reboot alone.
+
+
+## 0106 photo and video result
+
+The photo shows original six cells plus second-strip white/lime/blue/pink/cyan/
+orange and diagnostic green. Red panic and purple timeout are unlit. Thus the
+one-shot virtual-timer interrupt reached its diagnostic handler, allocator and
+clock initialization returned, and a synchronous exception was observed later.
+This validates that test delivery; it does not prove every scheduler timer works.
+
+The attached MOV is 3.418 seconds long. It starts at the Xiaomi logo, shows the
+stage strips by sampled frame 2.002s, and ends on the same stage display at
+3.378s. There is no reset in this clip, so no reset interval can be measured.
+The video has no visible fault rows; those are present in the separate photo.
+
+Perspective/bit-grid fitting of the photo, without assuming register values,
+gives best decode ESR 0x96000046, ELR 0xfffffe000764b18c,
+FAR 0xfffffe1000b78000. The SP is less certain: candidates
+0xfffffe301f7277e0 and 0xfffffe301f727fe0 differ at a blurred bit. Some pixel
+thresholds also flip ELR bit14; the alternative 0xfffffe000764f18c is a BL
+instruction in fq_getq_flow_internal, inconsistent with this precise write data
+abort. At the best ELR, the exact run-39887758455 kernel instead contains
+`str w8, [x0]`, matching the syndrome. Symbolication resolves it to
+skmem_sysctl_init + 24; preceding code fetches skmem_get_sysctls_obj and loads
+w8=3. The object is a newly allocated 16KiB Skywalk sysctl region. The best FAR
+is 16KiB-aligned; a low-confidence threshold alternative flips bit13.
+
+ESR EC=0x25, WnR=1, DFSC=0x06: same-EL data write, level-2 translation fault.
+This is consistent with first-touch demand paging; it is not proof of a fatal
+fault or the last executed PC. The first-fault renderer deliberately retains
+handled exceptions too, and the panic cell is absent. Raw fitting scripts,
+annotated crops and exact-kernel disassembly are kept in ignored
+research/veux-logs/0106-video-analysis/.
+
+Source review found a separate console routing defect: PE_init_veux_pmsg sets
+the VEUX sink during VM initialization, then STARTUP(KPRINTF) PE_init_kprintf
+replaces it with UART output or a discard function. Patch 0107 preserves the
+already initialized, opted-in VEUX sink and prints a direct `VEUX kprintf route
+active` banner independent of kprintf gating. It retains the early alias and
+all 0106 diagnostics. Local object compilation passes; a new full CI build is
+required before the next flash. Device output from 0107 remains untested.

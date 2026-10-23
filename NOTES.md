@@ -1,3 +1,25 @@
+## >>> UPDATE 2026-10-22 (0106 video/photo decoded; console fix prepared) <<<
+
+- Photo confirms original six cells and second-strip 7/8/9/10/11/12/14;
+  13 panic and 15 timeout unlit. Virtual-timer test interrupt delivered;
+  allocator and clock returned. A first synchronous fault occurred later.
+- MOV duration 3.418s: initial logo, strips at 2.002s, same stage screen at
+  3.378s, no reset. Cannot give a reset interval. Photo shows dump rows absent
+  from this short video. No device-state changes performed during analysis.
+- Perspective grid fit best ESR96000046, ELRfffffe000764b18c,
+  FARfffffe1000b78000; SP ambiguous 0xfffffe301f7277e0/0xfffffe301f727fe0.
+  Raw data/scripts/annotated crops ignored under 0106-video-analysis.
+  Threshold sensitivity is documented in the diagnostics doc; exact-kernel
+  disassembly supports ELR: skmem_sysctl_init+24, str w8,[x0], w8=3, after
+  skmem_get_sysctls_obj. Alternative ELR bit14 is BL, inconsistent with ESR.
+- ESR says same-EL write L2 translation fault. This may be first-touch demand
+  paging of the new 16KiB Skywalk sysctl object. First-fault capture includes
+  handled exceptions; do not present it as a proven fatal stop or last PC.
+- Found later PE_init_kprintf overwrites the VEUX sink with UART/discard.
+  Added 0107 preserving VEUX sink plus direct routing banner; local arm64
+  object and 107-patch validation pass. Early alias and diagnostics retained.
+  Full CI is next; no 0107 image flashed yet. Current B still 0106.
+
 ## >>> UPDATE 2026-10-22 (0106 CI passed, packaged and booted) <<<
 
 - CI 39887758455 SUCCESS for 9d73fc612d8345c1c4a11dae8b4b25b370cd0972.
