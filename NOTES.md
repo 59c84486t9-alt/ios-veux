@@ -1,3 +1,25 @@
+## >>> UPDATE 2026-10-22 (0106 CI passed, packaged and booted) <<<
+
+- CI 39887758455 SUCCESS for 9d73fc612d8345c1c4a11dae8b4b25b370cd0972.
+  Downloaded xnu-kernel to xnu/out-39887758455; SHA256SUMS passed.
+  nm confirms veux_bit_row/fault_dump/irq_probe/probe_interrupt and alias state.
+- Packaged shim/out/veux-xnu-39887758455/shim-boot-veux-xnu-39887758455.img,
+  17084416 bytes, SHA256 8614d39f2058bd76e99cfdc8b3080801b39f6e4d7418ac1089fd2096aa0b3873.
+  XNU SHA256 29cb187ad02a5cd542ea01dedd68655e1099a94dd8e94c73939e505357e70ef0.
+  manifest.json and reproducible package.py beside image, ignored as artifacts.
+- Reused exactly the previously tested 0105 shim: git diff confirms shim and
+  ADT generator unchanged since 541cad4. Entry marker before con_clear remains.
+  Fresh --veux --highmem ADT and cpus=1 payload, same opted-in log/FB args.
+  Boot-v2 unpack confirms shim, payload and selected dtb_1 byte-for-byte.
+- User confirmed fastboot and recording readiness. Product veux, B active,
+  boot_b 0x8000000 verified. Flashed boot_b, selected/verified B: all OKAY.
+  Gave recording cue, waited 20 seconds, then fastboot reboot returned OKAY.
+  Exact host UTC reboot timestamp is in ignored reboot-time.txt/flash-log.txt.
+  Slot A and userdata image not flashed.
+- CURRENT: 0106 diagnostics on boot_b and B active. Await recording/screen
+  result: second strip, fault/timeout bit rows, reset interval. Do not reboot
+  before observation. No inference yet about where this candidate stops.
+
 ## >>> UPDATE 2026-10-22 (0106 diagnostic candidate) <<<
 
 - User requested second strip, stackless fault bits, bounded IRQ probe and
@@ -10,6 +32,8 @@
   Reusable test: tools/test-veux-bitdump.py; deps in ignored diag-test-venv.
 - Probe intercepts before normal timer/scheduler C handler, restores original
   timer and DAIF state, uses mapped selected GICR. No forced reset introduced.
+- CI 39887758455 started for 9d73fc612d8345c1c4a11dae8b4b25b370cd0972:
+  https://github.com/59c84486t9-alt/ios-veux/actions/runs/39887758455
 - Next: full CI success, package/verify image, user starts filming in fastboot,
   then authorized boot_b flash/reboot. Current device still previous XNU on B.
 
