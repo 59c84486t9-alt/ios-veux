@@ -1,3 +1,19 @@
+## >>> UPDATE 2026-10-23 (0109 CI passed, flashed to boot_b) <<<
+
+- CI39929665498 SUCCESS for source c2619e4673d87dc483875008673f095b54de5e43.
+  Kernel SHA256 efe5512b757bff7a9c6ac2faa009b45c3b8bbe50bf4e9b1d70093d3cd95ab912.
+  CI host console/frame bounds checks passed.
+- Packaged shim/out/veux-xnu-39929665498/shim-boot-veux-xnu-39929665498.img,
+  17,100,800 bytes, SHA256 fc5c9fb1adb7e85b793224a83e8ca3e8e04ea1538bf65ba70a1d1c5f897ba8a4.
+  Package unpack compare passed for kernel payload, reused verified shim and
+  vendor_boot_b DTB. `rd=ufsroot0`, same cpus=1 arguments. Under128MiB boot_b.
+- Fastboot reported product veux, current slot B, boot_b 0x8000000. Flash to
+  boot_b, set_active b, and reboot all returned OKAY. Only boot_b was written;
+  boot_a and userdata untouched.
+- At 37 seconds after reboot, neither fastboot nor ADB enumerated; this alone is
+  not boot-screen evidence. Await photo/video of frozen rotating wait snapshot.
+  Use exact kernel above with symbolize-veux-waits.py; pages rotate every2 sec.
+
 ## >>> UPDATE 2026-10-23 (0109 CI dispatched) <<<
 
 - Source commit c2619e4673d87dc483875008673f095b54de5e43 pushed.
