@@ -1,3 +1,25 @@
+## >>> UPDATE 2026-10-22 (0108 phase-safe VM diagnostics prepared) <<<
+
+- User requested counters/latest hex, fixed status cells, pre/post TTBR1 walks,
+  hardware PAR, pmap audit and interrupted-PC samples in one measurement build.
+  Subsequent steering: no new diagnostic full barrier between VM return and
+  experiment end; sticky first dump before VM may flush. One A/B/C experiment
+  only on occurrence two with successful VM + immediate PAR F=1; N=8 is only
+  repeat warning. First post-VM PAR/result/pair saved and published without
+  requiring a repeat. Pmap source unchanged.
+- Added 0108, test-veux-vm-diag.py and test-veux-recovery.py. Host tests pass
+  using synthetic tables/mocked architectural effects: not hardware/cache/
+  barrier validation. Exact limitations and row legend in VEUX-VM-FAULT-AUDIT.
+- New stage_mark_nb is stores only, flush is one dsb sy. New panel publishes
+  at normal sleh return or a safe timer tick after recovery, NB draws+one flush.
+  Normal sampler writes NB without flushing while VM is pending. Original
+  first-fault dump, early alias and slot-A recovery preserved.
+- Local object compiles passed. Disassembly caught semicolons treating trailing
+  inline-asm instructions as comments; changed new asm to explicit newlines.
+  Verified emitted AT/ISB/MRS, DSB/ISB, DC/DSB and TLBI/DSB/ISB sequences.
+- No 0108 build dispatched or device change yet. Final validation and CI next;
+  current device image remains 0107. Require CI success before one image/flash.
+
 ## >>> UPDATE 2026-10-22 (0107 console proven; data-abort return audit) <<<
 
 - Latest user photo proves XNU text now displays, with Skywalk self-tests

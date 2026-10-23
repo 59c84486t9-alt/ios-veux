@@ -98,6 +98,21 @@ jobs:
             grep -Fq 'veux_stage_mark(4)' xnu/pexpert/arm/pe_fiq.c
             grep -Fq 'veux_stage_mark(5)' xnu/pexpert/arm/pe_kprintf.c
             grep -Fq 'VEUX kprintf route active' xnu/pexpert/arm/pe_kprintf.c
+            grep -Fq 'veux_diag_kernel_entry(get_saved_state_pc(state), fault_addr)' xnu/osfmk/arm64/sleh.c
+            grep -Fq 'veux_diag_vm_before(get_saved_state_pc(state), fault_addr, &veux_snapshot)' xnu/osfmk/arm64/sleh.c
+            grep -Fq 'veux_diag_vm_after(get_saved_state_pc(state), fault_addr, result, &veux_snapshot)' xnu/osfmk/arm64/sleh.c
+            grep -Fq 'veux_diag_return(get_saved_state_pc(state), far)' xnu/osfmk/arm64/sleh.c
+            grep -Fq 'veux_diag_panic(get_saved_state_pc(ss))' xnu/osfmk/arm64/sleh.c
+            grep -Fq 'veux_diag_tick(get_saved_state_pc(state))' xnu/osfmk/arm64/sleh.c
+            grep -Fq 'at s1e1w, %0\n\tisb' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'tlbi vaae1is, %0\n\tdsb ish\n\tisb' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'vd_run >= 8' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'report->occurrence != 2' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'veux_stage_mark_nb(unsigned int cell)' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'veux_stage_flush(void)' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'vd_first_par = immediate' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'vd_walk_core' xnu/osfmk/arm64/veux_early.c
+            grep -Fq '800u - VEUX_FB_CONSOLE_TOP' xnu/pexpert/arm/pe_serial.c
             ! grep -Fq 'veux_discard_kprintf' xnu/pexpert/arm/pe_kprintf.c
             grep -Fq 'veux_irq_probe();' xnu/osfmk/arm64/machine_routines.c
             grep -Fq 'veux_stage_mark(7)' xnu/osfmk/kern/startup.c

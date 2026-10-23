@@ -1,0 +1,613 @@
+From: VEUX bring-up
+Subject: [PATCH] Instrument VM faults with phase-safe recovery experiments
+
+--- a/osfmk/arm64/veux_early.c
++++ b/osfmk/arm64/veux_early.c
+@@ -3,6 +3,11 @@
+ 
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ #include <stdint.h>
++#include <arm64/proc_reg.h>
++#include <mach/vm_param.h>
++#include <vm/vm_map.h>
++#include <vm/vm_kern.h>
++#include <arm/machine_routines.h>
+ #include <kern/misc_protos.h>
+ #include <pexpert/arm/protos.h>
+ 
+@@ -61,25 +66,37 @@
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ }
+ void
+-veux_stage_mark(unsigned int cell)
+-{
+-	static const uint32_t colors[15] = {
++veux_stage_mark_nb(unsigned int cell)
++{
++	static const uint32_t colors[22] = {
+ 		0xffff0000u, 0xffff8000u, 0xffffff00u,
+ 		0xff00ff00u, 0xff00ffffu, 0xffff00ffu,
+ 		0xffffffffu, 0xff80ff00u, 0xff0080ffu, 0xffff0080u,
+-		0xff00ffffu, 0xffff8000u, 0xffff0000u, 0xff00ff00u, 0xff8000ffu
++		0xff00ffffu, 0xffff8000u, 0xffff0000u, 0xff00ff00u, 0xff8000ffu, 0xff404040u,
++		0xffffffffu, 0xffffff00u, 0xff00ff00u, 0xff00ffffu,
++		0xffff0000u, 0xffff00ffu
+ 	};
+-	if (cell >= 15) return;
+-	unsigned int row = cell < 6 ? 2304 : 2352;
+-	unsigned int col = cell < 6 ? cell : cell - 6;
++	if (cell >= 22) return;
++	unsigned int row = cell < 6 ? 2304 : (cell < 16 ? 2352 : 2240);
++	unsigned int col = cell < 6 ? cell : (cell < 16 ? cell - 6 : cell - 16);
+ 	volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
+ 	for (unsigned int y = row; y < row + 32; y++) {
+ 		for (unsigned int x = 32 + col * 64; x < 64 + col * 64; x++) {
+ 			fb[y * (4320 / 4) + x] = colors[cell];
+ 		}
+ 	}
+-	__asm__ volatile("dsb sy" ::: "memory");
+-	/* Exception-safe: no log writer or formatter in the paint path. */
++	/* Stores only: fault diagnostics choose their own publication point. */
++}
++void
++veux_stage_flush(void)
++{
++ __asm__ volatile("dsb sy" ::: "memory");
++}
++void
++veux_stage_mark(unsigned int cell)
++{
++ veux_stage_mark_nb(cell);
++ veux_stage_flush();
+ }
+ 
+ void
+@@ -128,4 +145,425 @@
+ 		veux_early_overflow = false;
+ 	}
+ }
++/* Lock-free, allocation-free display diagnostics for single-core VEUX bring-up.
++ * The bit dump above remains first-fault-only. This panel is latest state. */
++extern unsigned long gPhysBase, gPhysSize, gVirtBase;
++extern unsigned long real_phys_size;
++extern vm_offset_t vm_kernel_base, vm_kernel_top;
++extern const vm_map_address_t physmap_base, physmap_end;
++
++static volatile uint64_t vd_aborts, vd_run, vd_last_pc, vd_last_far;
++static volatile uint64_t vd_vm_calls, vd_vm_done, vd_returns, vd_panics;
++static volatile uint64_t vd_ticks, vd_tick_pc, vd_tick_same, vd_tick_different;
++static uint64_t vd_tick_shown, vd_latest_esr, vd_latest_sp;
++static unsigned int vd_phase; /* 0 outside, 1 VM pending, 2 experiments done, 3 experimenting, 4 terminal panic */
++static bool vd_busy, vd_dirty;
++static uint64_t vd_first_par, vd_first_result, vd_first_pc, vd_first_far, vd_first_call, vd_first_pair_count;
++static bool vd_first_valid;
++static uint64_t vd_exp_par[4] = {UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
++static uint64_t vd_exp_step, vd_exp_mask, vd_exp_occurrence, vd_exp_pc, vd_exp_far;
++static uint64_t vd_exp_line, vd_exp_entry_pa, vd_exp_attrs, vd_exp_mismatch, vd_exp_cacheline;
++static bool vd_exp_once;
++
++static void
++vd_cell(unsigned int col)
++{
++ if (col < 6) veux_stage_mark_nb(col + 16);
++}
++
++/* 4x7 hexadecimal glyphs, 2px scale. No iso_font, printf, pmsg or console locks. */
++static void
++vd_digit(unsigned int x, unsigned int y, unsigned int digit)
++{
++ static const uint32_t font[16] = {
++  0x6999996, 0x2622227, 0x691248f, 0xe161196,
++  0x226af22, 0xf8e1196, 0x688e996, 0xf124444,
++  0x6996996, 0x6997116, 0x699f999, 0xe99e99e,
++  0x6988896, 0xe99999e, 0xf88e88f, 0xf88e888
++ };
++ volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
++ uint32_t glyph = font[digit & 15];
++ for (unsigned int gy = 0; gy < 7; gy++) {
++  for (unsigned int gx = 0; gx < 4; gx++) {
++   uint32_t color = glyph & (1u << ((6 - gy) * 4 + 3 - gx)) ? 0xffffffff : 0xff101010;
++   for (unsigned int sy = 0; sy < 2; sy++) {
++    for (unsigned int sx = 0; sx < 2; sx++)
++     fb[(y + gy * 2 + sy) * 1080 + x + gx * 2 + sx] = color;
++   }
++  }
++ }
++}
++static void
++vd_hex(unsigned int x, unsigned int y, uint64_t value)
++{
++ for (unsigned int i = 0; i < 16; i++)
++  vd_digit(x + i * 10, y, (unsigned int)(value >> (60 - i * 4)));
++}
++static void
++vd_row(unsigned int id, uint64_t a, uint64_t b)
++{
++ if (id > 0x2f) return;
++ unsigned int y = 820 + id * 20;
++ vd_digit(16, y, id >> 4); vd_digit(26, y, id);
++ vd_hex(96, y, a); vd_hex(512, y, b);
++ __asm__ volatile("" ::: "memory");
++}
++static uint64_t
++vd_at(uint64_t va, bool write)
++{
++ uint64_t par;
++ if (write) __asm__ volatile("at s1e1w, %0\n\tisb" :: "r"(va) : "memory");
++ else __asm__ volatile("at s1e1r, %0\n\tisb" :: "r"(va) : "memory");
++ __asm__ volatile("mrs %0, PAR_EL1" : "=r"(par));
++ return par;
++}
++
++/* BEGIN VEUX WALK CORE -- host tests execute these exact functions. */
++struct vd_walk {
++ uint64_t pa[3], desc[3], par[3], flags;
++};
++typedef bool (*vd_read_fn)(uint64_t, uint64_t, uint64_t *, uint64_t *);
++/* Flags: bits0..2 read levels, 8 bad geometry/range, 9 invalid descriptor,
++ * 10 L1/L2 block leaf, 11 unsafe table backing. No invalid descriptor followed. */
++static struct vd_walk
++vd_walk_core(uint64_t va, uint64_t tcr, uint64_t ttbr, vd_read_fn read_entry)
++{
++ struct vd_walk w = {0};
++ unsigned int bits = 64 - ((tcr >> 16) & 63);
++ if (((tcr >> 30) & 3) != 1 || bits < 26 || bits > 47 ||
++     (ttbr & 0x3ffe) ||
++     (va >> bits) != (UINT64_MAX >> bits)) {
++  w.flags = 1u << 8; return w;
++ }
++ if (tcr & (1ULL << 23)) w.flags |= 1u << 12; /* EPD1: hardware walks disabled */
++ unsigned int first = bits > 36 ? 0 : 1;
++ uint64_t pa = ttbr & 0x0000ffffffffc000ULL;
++ for (unsigned int level = first; level < 3; level++) {
++  unsigned int shift = 36 - level * 11;
++  unsigned int index_bits = level == first ? bits - shift : 11;
++  uint64_t index = (va >> shift) & ((1ULL << index_bits) - 1);
++  w.pa[level] = pa;
++  if (!read_entry(pa, index, &w.desc[level], &w.par[level])) {
++   w.flags |= 1u << 11; return w;
++  }
++  w.flags |= 1u << level;
++  if (!(w.desc[level] & 1)) { w.flags |= 1u << 9; return w; }
++  if (level == 2) {
++   if ((w.desc[level] & 3) != 3) w.flags |= 1u << 9;
++   return w;
++  }
++  if (!(w.desc[level] & 2)) { w.flags |= 1u << 10; return w; }
++  pa = w.desc[level] & 0x0000ffffffffc000ULL;
++ }
++ return w;
++}
++/* END VEUX WALK CORE */
++
++static bool
++vd_read_entry(uint64_t pa, uint64_t index, uint64_t *desc, uint64_t *par)
++{
++ /* Never chase a corrupt descriptor into a protected carve-out/MMIO. */
++ if (pa < gPhysBase || pa - gPhysBase >= real_phys_size ||
++     real_phys_size - (pa - gPhysBase) < 16384 || (pa & 0x3fff)) return false;
++ uint64_t va = phystokv(pa);
++ *par = vd_at(va, false);
++ if (*par & 1) return false;
++ *desc = ((volatile uint64_t *)(uintptr_t)va)[index];
++ return true;
++}
++static struct vd_walk
++vd_walk_far(uint64_t far)
++{
++ return vd_walk_core(far, __builtin_arm_rsr64("TCR_EL1"),
++     __builtin_arm_rsr64("TTBR1_EL1"), vd_read_entry);
++}
++static void
++vd_ranges(uint64_t far)
++{
++ uint64_t slot = VM_MIN_KERNEL_ADDRESS + 0x2000000ULL;
++ uint64_t km_lo = kernel_map ? vm_map_min(kernel_map) : 0;
++ uint64_t km_hi = kernel_map ? vm_map_max(kernel_map) : 0;
++ uint64_t mask = 0;
++ if (far >= slot && far < slot + 0x2000000ULL) mask |= 1;
++ if (far >= veux_stage_fb && far - veux_stage_fb < 0xc00000) mask |= 2;
++ if (far >= physmap_base && far < physmap_end) mask |= 4;
++ if (far >= vm_kernel_base && far < vm_kernel_top) mask |= 8;
++ if (far >= km_lo && far < km_hi) mask |= 16;
++ if (far >= gVirtBase && far - gVirtBase < gPhysSize) mask |= 32;
++ if (VM_KERNEL_ADDRESS(far)) mask |= 64;
++ vd_row(0x15, mask, far);
++ vd_row(0x16, slot, slot + 0x2000000ULL);
++ vd_row(0x17, physmap_base, physmap_end);
++ vd_row(0x18, vm_kernel_base, vm_kernel_top);
++ vd_row(0x19, km_lo, km_hi);
++ vd_row(0x1a, gPhysBase, real_phys_size);
++ vd_row(0x1b, gVirtBase, gPhysSize);
++}
++static void
++vd_show_walk(unsigned int first, const struct vd_walk *w)
++{
++ for (unsigned int i = 0; i < 3; i++) vd_row(first + i, w->pa[i], w->desc[i]);
++}
++static uint64_t
++vd_attributes(const struct vd_walk *w, uint64_t tcr)
++{
++ /* Evidence, not a guess: compare each table's live direct-map PAR attributes
++  * with TTBR1 walk policy. Supported WB/WB outer/inner-shareable policy only.
++  * low bits0..2 table mappings agree; bit8 expected TCR policy, bit9 SCTLR.C. */
++ unsigned int irgn = (tcr >> 24) & 3, orgn = (tcr >> 26) & 3, sh = (tcr >> 28) & 3;
++ uint64_t flags = 0;
++ if (irgn == 1 && orgn == 1 && (sh == 2 || sh == 3)) flags |= 1u << 8;
++ if (__builtin_arm_rsr64("SCTLR_EL1") & 4) flags |= 1u << 9;
++ for (unsigned int i = 0; i < 3; i++) {
++  if ((w->flags & (1u << i)) && !(w->par[i] & 1) &&
++      ((w->par[i] >> 56) & 0xff) == 0xff && ((w->par[i] >> 7) & 3) == sh)
++   flags |= 1u << i;
++ }
++ return flags;
++}
++struct vd_report {
++ struct vd_walk before, after;
++ uint64_t pc, far, occurrence, call, par, result, tcr, sctlr, ttbr, mair, changed, esr;
++};
++static struct vd_report vd_report;
++static uint64_t vd_latest_desc_pa, vd_latest_attrs, vd_latest_mismatch, vd_latest_desc_par;
++
++/* Capture the descriptor page's actual mapping, not just its PAR memory type.
++ * Packed: AttrIndx[2:0], SH[9:8], MAIR byte[23:16], leaf level[31:24], valid[32]. */
++static uint64_t
++vd_page_attributes(uint64_t va)
++{
++ struct vd_walk w = vd_walk_far(va);
++ if (w.flags & ((1u << 8) | (1u << 9) | (1u << 11))) return 0;
++ for (int i = 2; i >= 0; i--) {
++  if (w.flags & (1u << i)) {
++   uint64_t d = w.desc[i], index = (d >> 2) & 7;
++   uint64_t mair = __builtin_arm_rsr64("MAIR_EL1");
++   return index | (((d >> 8) & 3) << 8) | (((mair >> (index * 8)) & 0xff) << 16) |
++       ((uint64_t)(i + 1) << 24) | (1ULL << 32);
++  }
++ }
++ return 0;
++}
++static bool
++vd_descriptor_line(const struct vd_walk *walk, uint64_t far, unsigned int level,
++    uint64_t *va, uint64_t *pa)
++{
++ if (level < 1 || level > 3 || !(walk->flags & (1u << (level - 1)))) return false;
++ uint64_t table = walk->pa[level - 1];
++ if (table < gPhysBase || table - gPhysBase >= real_phys_size ||
++     real_phys_size - (table - gPhysBase) < 16384) return false;
++ unsigned int shift = 36 - (level - 1) * 11;
++ uint64_t index = (far >> shift) & 2047;
++ if (level == 1) {
++  unsigned int bits = 64 - ((__builtin_arm_rsr64("TCR_EL1") >> 16) & 63);
++  if (bits <= 36 || bits > 47) return false;
++  index &= (1ULL << (bits - 36)) - 1;
++ }
++ *pa = table + index * 8;
++ *va = phystokv(table) + index * 8;
++ return !(vd_at(*va, false) & 1);
++}
++/* Steps are cumulative, one experiment for the whole boot, second consecutive
++ * PC+FAR occurrence only. No drawing/flush before these measurements finish. */
++static void
++vd_recovery(const struct vd_report *report)
++{
++ if (vd_exp_once || report->occurrence != 2 || report->result != 0 || !(report->par & 1)) return;
++ vd_exp_once = true; vd_exp_occurrence = report->occurrence;
++ vd_exp_pc = report->pc; vd_exp_far = report->far;
++ vd_exp_par[0] = report->par;
++ vd_exp_par[1] = vd_exp_par[2] = vd_exp_par[3] = UINT64_MAX;
++ vd_exp_step = 0; vd_exp_mask = 0;
++ __asm__ volatile("dsb ish\n\tisb" ::: "memory");
++ vd_exp_par[1] = vd_at(report->far, true); vd_exp_mask |= 1;
++ if (!(vd_exp_par[1] & 1)) { vd_exp_step = 1; return; }
++ unsigned int fst = (unsigned int)((vd_exp_par[1] >> 1) & 63);
++ unsigned int level = fst & 3;
++ uint64_t descriptor_va = 0;
++ if (vd_descriptor_line(&report->after, report->far, level, &descriptor_va, &vd_exp_entry_pa)) {
++  vd_exp_attrs = vd_page_attributes(descriptor_va);
++  unsigned int irgn = (report->tcr >> 24) & 3, orgn = (report->tcr >> 26) & 3, sh = (report->tcr >> 28) & 3;
++  if (!(vd_exp_attrs & (1ULL << 32))) vd_exp_mismatch |= 1;
++  else {
++   if (((vd_exp_attrs >> 8) & 3) != sh) vd_exp_mismatch |= 2;
++   if (irgn != 1 || orgn != 1 || ((vd_exp_attrs >> 16) & 255) != 255) vd_exp_mismatch |= 4;
++  }
++  uint64_t ctr = __builtin_arm_rsr64("CTR_EL0");
++  vd_exp_cacheline = 4ULL << ((ctr >> 16) & 15);
++  if (vd_exp_cacheline <= 16384) {
++   vd_exp_line = descriptor_va & ~(vd_exp_cacheline - 1);
++   __asm__ volatile("dc civac, %0\n\tdsb ish" :: "r"(vd_exp_line) : "memory");
++   vd_exp_par[2] = vd_at(report->far, true); vd_exp_mask |= 2;
++   if (!(vd_exp_par[2] & 1)) { vd_exp_step = 2; return; }
++  } else vd_exp_mask |= 1u << 9;
++ } else vd_exp_mask |= 1u << 8; /* no safe descriptor address; B skipped */
++ uint64_t operand = (report->far >> 12) & 0x00000fffffffffffULL;
++ __asm__ volatile("tlbi vaae1is, %0\n\tdsb ish\n\tisb" :: "r"(operand) : "memory");
++ vd_exp_par[3] = vd_at(report->far, true); vd_exp_mask |= 4;
++ vd_exp_step = vd_exp_par[3] & 1 ? 4 : 3; /* 4 = none fixed */
++}
++static void
++vd_publish(void)
++{
++ if (vd_busy || !vd_dirty || vd_phase == 1 || vd_phase == 3) return;
++ vd_busy = true;
++ vd_row(0, vd_latest_esr, vd_last_pc); vd_row(1, vd_last_far, vd_latest_sp);
++ vd_row(2, vd_aborts, vd_run); vd_row(3, vd_last_pc, vd_last_far);
++ if (vd_run >= 8) { vd_cell(5); vd_row(4, vd_run, vd_aborts); }
++ vd_row(0x0a, vd_first_valid ? vd_first_par : UINT64_MAX,
++     vd_first_valid ? vd_first_result : UINT64_MAX);
++ vd_row(0x0b, vd_report.tcr, vd_report.sctlr); vd_row(0x0c, vd_report.ttbr, vd_report.mair);
++ vd_row(0x0d, vd_report.changed, vd_report.after.flags);
++ vd_show_walk(0x0e, &vd_report.before); vd_show_walk(0x11, &vd_report.after);
++ vd_row(0x14, vd_report.before.flags, vd_report.after.flags); vd_ranges(vd_report.far);
++ vd_row(0x1c, vd_report.before.par[0], vd_report.before.par[1]);
++ vd_row(0x1d, vd_report.before.par[2], vd_attributes(&vd_report.before, vd_report.tcr));
++ vd_row(0x1e, vd_report.after.par[0], vd_report.after.par[1]);
++ vd_row(0x1f, vd_report.after.par[2], vd_attributes(&vd_report.after, vd_report.tcr));
++ vd_row(0x20, vd_ticks, vd_tick_pc); vd_row(0x23, vd_tick_same, vd_tick_different);
++ vd_row(0x21, vd_report.par, vd_report.result); vd_row(0x22, vd_exp_step, vd_exp_occurrence);
++ vd_row(0x24, vd_vm_calls, vd_vm_done); vd_row(0x25, vd_exp_par[1], vd_exp_par[2]);
++ vd_row(0x26, vd_exp_par[3], vd_exp_mask); vd_row(0x27, vd_exp_line, vd_exp_entry_pa);
++ vd_row(0x28, vd_exp_attrs, vd_exp_mismatch);
++ uint64_t tcr_fields = ((vd_report.tcr >> 24) & 3) | (((vd_report.tcr >> 26) & 3) << 4) |
++     (((vd_report.tcr >> 28) & 3) << 8) | (((vd_report.tcr >> 16) & 63) << 16) |
++     (((vd_report.tcr >> 30) & 3) << 24);
++ vd_row(0x29, tcr_fields, vd_exp_cacheline);
++ vd_row(0x2a, vd_first_pc, vd_first_far); vd_row(0x2b, vd_first_pair_count, vd_first_call);
++ vd_row(0x2c, vd_exp_par[0], vd_phase);
++ vd_row(0x2d, vd_latest_desc_pa, vd_latest_attrs);
++ vd_row(0x2e, vd_latest_mismatch, vd_latest_desc_par);
++ vd_row(0x2f, vd_exp_pc, vd_exp_far);
++ vd_dirty = false;
++ veux_stage_flush(); /* one full barrier, after every measurement/experiment */
++ vd_busy = false;
++}
++void
++veux_diag_abort(uint64_t esr, uint64_t pc, uint64_t far, uint64_t sp)
++{
++ unsigned int ec = (unsigned int)(esr >> 26);
++ if (ec != 0x24 && ec != 0x25) return;
++ ++vd_aborts;
++ if (pc == vd_last_pc && far == vd_last_far) ++vd_run; else vd_run = 1;
++ if (vd_first_valid && pc == vd_first_pc && far == vd_first_far) ++vd_first_pair_count;
++ vd_last_pc = pc; vd_last_far = far; vd_latest_esr = esr; vd_latest_sp = sp;
++ vd_dirty = true; vd_phase = 1;
++ if (vd_run >= 8) { vd_cell(5); vd_row(4, vd_run, vd_aborts); }
++}
++void
++veux_diag_kernel_entry(uint64_t pc, uint64_t far)
++{
++ (void)far;
++ vd_cell(0); vd_row(5, vd_aborts, pc); /* NB marker/status, no publish */
++}
++void
++veux_diag_vm_before(uint64_t pc, uint64_t far, struct veux_diag_vm_snapshot *snapshot)
++{
++ ++vd_vm_calls; vd_phase = 1;
++ snapshot->call = vd_vm_calls; snapshot->flags = 1ULL << 31;
++ snapshot->pc = pc; snapshot->far = far; snapshot->esr = vd_latest_esr;
++ snapshot->occurrence = pc == vd_last_pc && far == vd_last_far ? vd_run : 0;
++ snapshot->tcr = __builtin_arm_rsr64("TCR_EL1");
++ snapshot->sctlr = __builtin_arm_rsr64("SCTLR_EL1");
++ snapshot->ttbr = __builtin_arm_rsr64("TTBR1_EL1");
++ snapshot->mair = __builtin_arm_rsr64("MAIR_EL1");
++ for (unsigned int i = 0; i < 3; i++) snapshot->pa[i] = snapshot->desc[i] = snapshot->par[i] = 0;
++ vd_cell(1); vd_row(6, vd_vm_calls, far);
++ volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
++ for (unsigned int y = 2240; y < 2272; y++)
++  for (unsigned int x = 160; x < 192; x++) fb[y * 1080 + x] = 0xff101010;
++ uint64_t saved_par = __builtin_arm_rsr64("PAR_EL1");
++ struct vd_walk before = vd_walk_far(far);
++ for (unsigned int i = 0; i < 3; i++) {
++  snapshot->pa[i] = before.pa[i]; snapshot->desc[i] = before.desc[i]; snapshot->par[i] = before.par[i];
++ }
++ snapshot->flags = before.flags;
++ __builtin_arm_wsr64("PAR_EL1", saved_par);
++}
++void
++veux_diag_vm_after(uint64_t pc, uint64_t far, int result, const struct veux_diag_vm_snapshot *snapshot)
++{
++ /* No framebuffer calls/full barriers before this first measurement. */
++ uint64_t saved_par = __builtin_arm_rsr64("PAR_EL1");
++ uint64_t daif = __builtin_arm_rsr64("DAIF");
++ /* Mask without a DSB: timer diagnostics cannot flush during measurement. */
++ __asm__ volatile("msr daifset, #3" ::: "memory");
++ uint64_t immediate = vd_at(far, true);
++ vd_phase = 3; ++vd_vm_done;
++ vd_cell(2); /* NB completion marker: distinguish VM block from experiment block */
++ struct vd_report report = {0};
++ report.pc = pc; report.far = far; report.call = snapshot->call;
++ report.esr = snapshot->esr;
++ report.occurrence = snapshot->occurrence; report.par = immediate; report.result = (uint32_t)result;
++ report.tcr = snapshot->tcr; report.sctlr = snapshot->sctlr; report.ttbr = snapshot->ttbr; report.mair = snapshot->mair;
++ report.before.flags = snapshot->flags;
++ for (unsigned int i = 0; i < 3; i++) {
++  report.before.pa[i] = snapshot->pa[i]; report.before.desc[i] = snapshot->desc[i]; report.before.par[i] = snapshot->par[i];
++ }
++ report.after = vd_walk_far(far); /* no DSB; software evidence before recovery */
++ for (unsigned int i = 0; i < 3; i++) {
++  if (report.before.desc[i] != report.after.desc[i]) report.changed |= 1u << i;
++  if (report.before.pa[i] != report.after.pa[i]) report.changed |= 1u << (i + 8);
++ }
++ if (!vd_first_valid) {
++  vd_first_par = immediate; vd_first_result = (uint32_t)result; vd_first_pc = pc; vd_first_far = far;
++  vd_first_call = snapshot->call; vd_first_pair_count = snapshot->occurrence; vd_first_valid = true;
++ }
++ bool was_experimented = vd_exp_once;
++ vd_recovery(&report);
++ /* Attribute inspection is evidence collected after recovery, even if no
++  * repeat/experiment happened. Never substitute it for the immediate PAR. */
++ unsigned int level = (unsigned int)(immediate & 1 ? (immediate >> 1) & 3 : report.esr & 3);
++ uint64_t descriptor_va = 0;
++ vd_latest_desc_pa = vd_latest_attrs = vd_latest_mismatch = vd_latest_desc_par = 0;
++ if (vd_descriptor_line(&report.after, far, level, &descriptor_va, &vd_latest_desc_pa)) {
++  vd_latest_attrs = vd_page_attributes(descriptor_va);
++  vd_latest_desc_par = vd_at(descriptor_va, false);
++  unsigned int irgn = (report.tcr >> 24) & 3, orgn = (report.tcr >> 26) & 3, sh = (report.tcr >> 28) & 3;
++  if (!(vd_latest_attrs & (1ULL << 32))) vd_latest_mismatch |= 1;
++  else {
++   if (((vd_latest_attrs >> 8) & 3) != sh) vd_latest_mismatch |= 2;
++   if (irgn != 1 || orgn != 1 || ((vd_latest_attrs >> 16) & 255) != 255) vd_latest_mismatch |= 4;
++  }
++ } else vd_latest_mismatch = 8;
++ if (!was_experimented && vd_exp_once && !vd_exp_attrs) {
++  vd_exp_attrs = vd_latest_attrs; vd_exp_mismatch = vd_latest_mismatch;
++  vd_exp_entry_pa = vd_latest_desc_pa;
++  vd_exp_cacheline = 4ULL << ((__builtin_arm_rsr64("CTR_EL0") >> 16) & 15);
++  if (descriptor_va && vd_exp_cacheline <= 16384) vd_exp_line = descriptor_va & ~(vd_exp_cacheline - 1);
++ }
++ vd_report = report; vd_dirty = true; vd_phase = 2;
++ __builtin_arm_wsr64("PAR_EL1", saved_par);
++ __builtin_arm_wsr64("DAIF", daif);
++ /* Publish only at the normal sleh return or a safe subsequent timer tick. */
++}
++void
++veux_diag_return(uint64_t pc, uint64_t far)
++{
++ (void)far;
++ ++vd_returns; vd_cell(3); vd_row(8, vd_returns, pc);
++ vd_phase = 0; vd_dirty = true; vd_publish();
++}
++void
++veux_diag_panic(uint64_t pc)
++{
++ ++vd_panics; vd_cell(4); vd_row(9, vd_panics, pc);
++ vd_phase = 4; vd_dirty = true; vd_publish(); /* terminal panic aborts measurement */
++}
++void
++veux_diag_tick(uint64_t pc)
++{
++ ++vd_ticks;
++ if (pc == vd_tick_pc) ++vd_tick_same; else { ++vd_tick_different; vd_tick_same = 1; }
++ vd_tick_pc = pc;
++ if (vd_ticks != 1 && vd_ticks - vd_tick_shown < 100) return;
++ vd_tick_shown = vd_ticks;
++ if (vd_busy) return;
++ /* During a VM block, these NB writes remain visible without completing PTE
++  * stores. Full panel publication/flush is deferred until experiments finish. */
++ vd_row(0x20, vd_ticks, pc); vd_row(0x23, vd_tick_same, vd_tick_different);
++ if (vd_phase != 1 && vd_phase != 3) { vd_dirty = true; vd_publish(); }
++}
++
+ #endif /* ARM64_BOARD_CONFIG_VEUX */
+--- a/osfmk/arm64/sweet_early.h
++++ b/osfmk/arm64/sweet_early.h
+@@ -18,8 +18,21 @@
+ void veux_early_flush(void);
+ void veux_early_relocate(uint64_t base);
+ void veux_stage_mark(unsigned int cell);
++void veux_stage_mark_nb(unsigned int cell);
++void veux_stage_flush(void);
+ void veux_bit_row(uint64_t value, unsigned int y);
+ void veux_fault_dump(uint64_t esr, uint64_t elr, uint64_t far, uint64_t sp);
++void veux_diag_abort(uint64_t esr, uint64_t pc, uint64_t far, uint64_t sp);
++void veux_diag_kernel_entry(uint64_t pc, uint64_t far);
++struct veux_diag_vm_snapshot {
++ uint64_t pa[3], desc[3], par[3], flags, call;
++ uint64_t pc, far, occurrence, tcr, sctlr, ttbr, mair, esr;
++};
++void veux_diag_vm_before(uint64_t pc, uint64_t far, struct veux_diag_vm_snapshot *snapshot);
++void veux_diag_vm_after(uint64_t pc, uint64_t far, int result, const struct veux_diag_vm_snapshot *snapshot);
++void veux_diag_return(uint64_t pc, uint64_t far);
++void veux_diag_panic(uint64_t pc);
++void veux_diag_tick(uint64_t pc);
+ void veux_irq_probe(void);
+ int veux_probe_interrupt(unsigned int group);
+ static inline void sweet_early_disable(void) {}
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -464,6 +464,9 @@
+ void
+ panic_with_thread_kernel_state(const char *msg, arm_saved_state_t *ss)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_diag_panic(get_saved_state_pc(ss));
++#endif
+ 	boolean_t ss_valid;
+ 
+ 	ss_valid = is_saved_state64(ss);
+@@ -511,6 +514,8 @@
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+  veux_fault_dump(esr, get_saved_state_pc(&context->ss), far,
+      get_saved_state_sp(&context->ss));
++ veux_diag_abort(esr, get_saved_state_pc(&context->ss), far,
++     get_saved_state_sp(&context->ss));
+ #endif
+ 	esr_exception_class_t  class = ESR_EC(esr);
+ 	arm_saved_state_t    * state = &context->ss;
+@@ -608,6 +613,8 @@
+ {
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+  veux_fault_dump(esr, get_saved_state_pc(&context->ss), far,
++     get_saved_state_sp(&context->ss));
++ veux_diag_abort(esr, get_saved_state_pc(&context->ss), far,
+      get_saved_state_sp(&context->ss));
+ #endif
+ 	esr_exception_class_t  class   = ESR_EC(esr);
+@@ -881,6 +888,10 @@
+ 	if (preemption_level != sleh_get_preemption_level()) {
+ 		panic("synchronous exception changed preemption level from %d to %d", preemption_level, sleh_get_preemption_level());
+ 	}
++#endif
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ if (class == ESR_EC_DABORT_EL1 || class == ESR_EC_DABORT_EL0)
++  veux_diag_return(get_saved_state_pc(state), far);
+ #endif
+ }
+ 
+@@ -1519,6 +1530,9 @@
+ handle_kernel_abort(arm_saved_state_t *state, uint32_t esr, vm_offset_t fault_addr,
+     fault_status_t fault_code, vm_prot_t fault_type, expected_fault_handler_t expected_fault_handler)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_diag_kernel_entry(get_saved_state_pc(state), fault_addr);
++#endif
+ 	thread_t thread = current_thread();
+ 	bool recover = find_copyio_recovery_entry(state) != 0;
+ 
+@@ -1605,9 +1619,16 @@
+ 			/*
+ 			 *  We have to "fault" the page in.
+ 			 */
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ struct veux_diag_vm_snapshot veux_snapshot;
++ veux_diag_vm_before(get_saved_state_pc(state), fault_addr, &veux_snapshot);
++#endif
+ 			result = vm_fault(map, fault_addr, fault_type,
+ 			    /* change_wiring */ FALSE, VM_KERN_MEMORY_NONE, interruptible,
+ 			    /* caller_pmap */ NULL, /* caller_pmap_addr */ 0);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_diag_vm_after(get_saved_state_pc(state), fault_addr, result, &veux_snapshot);
++#endif
+ 		}
+ 
+ 		if (result == KERN_SUCCESS) {
+@@ -1883,6 +1904,9 @@
+ 		sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_TIMER);
+ 		cdp->cpu_decrementer = -1; /* Large */
+ 		INTERRUPT_MASKED_DEBUG_START(rtclock_intr, DBG_INTR_TYPE_TIMER);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_diag_tick(get_saved_state_pc(state));
++#endif
+ 		rtclock_intr(TRUE);
+ 		INTERRUPT_MASKED_DEBUG_END();
+ 		__builtin_arm_wsr64("ICC_EOIR1_EL1", iar);
+@@ -2015,6 +2039,9 @@
+ 		 * moment (AArch32 doesn't either).
+ 		 */
+ 		INTERRUPT_MASKED_DEBUG_START(rtclock_intr, DBG_INTR_TYPE_TIMER);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_diag_tick(get_saved_state_pc(state));
++#endif
+ 		rtclock_intr(TRUE);
+ 		INTERRUPT_MASKED_DEBUG_END();
+ 	}
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1501,7 +1501,7 @@
+ 		return;
+ 	}
+ 	const uint32_t cols = VEUX_FB_WIDTH / (8u * VEUX_FB_CONSOLE_SCALE);
+-	const uint32_t rows = (1760u - VEUX_FB_CONSOLE_TOP) / (16u * VEUX_FB_CONSOLE_SCALE);
++	const uint32_t rows = (800u - VEUX_FB_CONSOLE_TOP) / (16u * VEUX_FB_CONSOLE_SCALE);
+ 	if (c == '\r') {
+ 		veux_fb_console_col = 0;
+ 		return;

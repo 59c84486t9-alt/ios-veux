@@ -293,3 +293,12 @@ already initialized, opted-in VEUX sink and prints a direct `VEUX kprintf route
 active` banner independent of kprintf gating. It retains the early alias and
 all 0106 diagnostics. Local object compilation passes; a new full CI build is
 required before the next flash. Device output from 0107 remains untested.
+
+
+## 0108 follow-up measurement
+
+The current candidate adds phase-safe fault/retry counters, first and latest
+post-VM PARs, fixed status words, TTBR1 snapshots, a once-only A/B/C experiment
+on occurrence two, descriptor-page attributes, and normal-timer PC sampling.
+Pmap behavior is unchanged. See [VEUX VM fault audit](VEUX-VM-FAULT-AUDIT.md)
+for the exact screen legend, measurement phases and hardware-test limitations.
