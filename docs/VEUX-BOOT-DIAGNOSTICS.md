@@ -188,3 +188,67 @@ was refreshed for the two pexpert compile checks; full CI handles header export.
 The helper xnu-cc.py now detects the fork's CI root, finds installed clang when
 ~/swift is absent, and creates the requested object directory. Full XNU link
 and device breadcrumb results remain separate pending checks.
+
+
+## Stage 0106: retained-alias fault and IRQ diagnostics
+
+Keep the 0105 alias and L3 mapping until real console output is demonstrated.
+The first strip stays at y=2304. The second strip is at y=2352, 32x32 cells,
+x=32+64*i. User-facing cells 7–15 correspond to function indices 6–14:
+
+| Cell | Color | Boundary |
+| --- | --- | --- |
+| 7 | white | machine_startup entry, before kernel_bootstrap |
+| 8 | lime | vm_mem_bootstrap returned |
+| 9 | blue | kernel_bootstrap clock_init returned |
+| 10 | pink | immediately before diagnostic IRQ/FIQ unmask |
+| 11 | cyan | first IRQ/FIQ first-level assembly handler, after context save |
+| 12 | orange | first synchronous first-level assembly handler |
+| 13 | red | sweet_early_panic entry |
+| 14 | green | diagnostic handler acknowledged the virtual timer INTID |
+| 15 | purple | timer probe timed out (or prerequisites unavailable) |
+
+These are boundaries, not chronological numbers. The probe runs at cell 7,
+after the original six sites but before allocator/clock/scheduler startup.
+The first-level markers precede handler bookkeeping/C dispatch; they preserve
+live context registers and have no extra stack/log dependencies. A failure
+before context save can still prevent a first-level marker. IRQ/FIQ share cell
+11; the handler only lights cell 14 for the configured virtual timer INTID.
+
+The renderer itself is stackless AArch64 assembly. Sync C handlers pass saved
+ESR/PC/FAR/SP before thread/context validation; panic passes current ESR_EL1,
+ELR_EL1, FAR_EL1 and handler SP. The first dump is retained so a later panic
+cannot overwrite a synchronous fault. A panic without a preceding synchronous
+exception may show stale ESR/ELR/FAR; those are not automatically its caller PC.
+Rows y=2120/2144/2168/2192 contain ESR, ELR, FAR, SP respectively. Each is 64
+16x16 squares at x=28 with 16px pitch, MSB left, white=1, dark gray=0. Text wraps
+above y=1760, preserving all diagnostic rows.
+
+The one-shot probe saves DAIF/CNTV_CTL/CNTV_CVAL, sets about 1ms TVAL, enables
+an unmasked virtual timer and clears PSTATE IRQ/FIQ masks. It spins using CNTVCT
+for up to 50ms. The diagnostic handler acknowledges/EOIs the appropriate GIC
+group and disables the timer; it bypasses rtclock/scheduler C handlers while
+retaining balanced assembly interrupt bookkeeping. Timer and DAIF state are
+restored before normal startup continues. It does not add a forced reset.
+
+On timeout, rows starting y=1800, spaced 24px, are:
+CNTV_CTL, GICR_ISPENDR0, GICR_ISENABLER0, GICR_IGROUPR0, priority byte for INTID19,
+GICR_WAKER, GICD_CTLR, ICC_SRE, ICC_PMR, ICC_IGRPEN0, ICC_IGRPEN1.
+These use the redistributor selected by the existing initialization, not a
+hardcoded CPU frame. If prerequisites are absent, only the first row (frequency)
+and purple cell are written; lack of cell 10 distinguishes this case.
+
+ISTATUS=0 suggests timer programming/counter trouble. ISTATUS=1 with INTID19
+not pending points toward delivery to the redistributor. Pending without a
+vector points toward group/priority/interface or exception routing. Group
+register views can be constrained by non-secure access; zero alone is not proof
+of Group 0 configuration. A cyan vector without green delivery requires checking
+which exception/INTID arrived. Fault rows take priority if system-register/MMIO
+access itself traps. Absence of a cell does not rule out a fault before that
+marker can execute.
+
+Before flashing: local object compiles, patch application, actual assembly
+renderer emulation with an unmapped stack, then full CI. Keep cpus=1 and the
+shim marker before con_clear. Flash boot_b only after CI success. Start filming
+while still in fastboot, then reboot; capture both strips, all dump rows and
+elapsed time to any reset. Do not infer PSCI versus watchdog from reboot alone.

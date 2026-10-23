@@ -1,0 +1,463 @@
+From: VEUX bring-up
+Subject: [PATCH] Retained-alias stage, fault and bounded IRQ diagnostics
+
+--- a/osfmk/arm64/veux_early.c
++++ b/osfmk/arm64/veux_early.c
+@@ -52,7 +52,8 @@
+ 
+ /* Low splash RAM is outside the high-bank physmap. start.s provides a
+  * narrow identity alias; arm_vm_init switches us to a permanent kernel VA. */
+-static uintptr_t veux_stage_fb = 0x85200000;
++uint32_t veux_exception_seen;
++uintptr_t veux_stage_fb = 0x85200000;
+ void
+ veux_early_relocate(uint64_t base)
+ {
+@@ -62,21 +63,23 @@
+ void
+ veux_stage_mark(unsigned int cell)
+ {
+-	static const uint32_t colors[6] = {
++	static const uint32_t colors[15] = {
+ 		0xffff0000u, 0xffff8000u, 0xffffff00u,
+-		0xff00ff00u, 0xff00ffffu, 0xffff00ffu
++		0xff00ff00u, 0xff00ffffu, 0xffff00ffu,
++		0xffffffffu, 0xff80ff00u, 0xff0080ffu, 0xffff0080u,
++		0xff00ffffu, 0xffff8000u, 0xffff0000u, 0xff00ff00u, 0xff8000ffu
+ 	};
+-	if (cell >= 6) return;
++	if (cell >= 15) return;
++	unsigned int row = cell < 6 ? 2304 : 2352;
++	unsigned int col = cell < 6 ? cell : cell - 6;
+ 	volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
+-	for (unsigned int y = 2304; y < 2336; y++) {
+-		for (unsigned int x = 32 + cell * 64; x < 64 + cell * 64; x++) {
++	for (unsigned int y = row; y < row + 32; y++) {
++		for (unsigned int x = 32 + col * 64; x < 64 + col * 64; x++) {
+ 			fb[y * (4320 / 4) + x] = colors[cell];
+ 		}
+ 	}
+ 	__asm__ volatile("dsb sy" ::: "memory");
+-	veux_early_string("VEUX COLOR CELL ");
+-	veux_early_uint(cell);
+-	veux_early_putc('\n');
++	/* Exception-safe: no log writer or formatter in the paint path. */
+ }
+ 
+ void
+@@ -98,6 +101,12 @@
+ 		return;
+ 	}
+ 	veux_early_panicking = true;
++	veux_stage_mark(12);
++	/* Snapshot current EL1 syndrome; preserve a prior synchronous fault dump. */
++	uint64_t sp;
++	__asm__ volatile("mov %0, sp" : "=r"(sp));
++	veux_fault_dump(__builtin_arm_rsr64("ESR_EL1"),
++	    __builtin_arm_rsr64("ELR_EL1"), __builtin_arm_rsr64("FAR_EL1"), sp);
+ 	veux_early_string("\nVEUX EARLY PANIC: ");
+ 	va_list copy;
+ 	va_copy(copy, *args);
+--- a/osfmk/arm64/sweet_early.h
++++ b/osfmk/arm64/sweet_early.h
+@@ -18,6 +18,10 @@
+ void veux_early_flush(void);
+ void veux_early_relocate(uint64_t base);
+ void veux_stage_mark(unsigned int cell);
++void veux_bit_row(uint64_t value, unsigned int y);
++void veux_fault_dump(uint64_t esr, uint64_t elr, uint64_t far, uint64_t sp);
++void veux_irq_probe(void);
++int veux_probe_interrupt(unsigned int group);
+ static inline void sweet_early_disable(void) {}
+ #else
+ static inline void sweet_early_mark(unsigned int stage, const char *label)
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -1025,3 +1025,75 @@
+ //#include	"globals_asm.h"
+ 
+ /* vim: set ts=4: */
++
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++/* Leaf renderers: no stack, calls, fonts, allocation, or logging. x0-x17 scratch.
++ * 64 cells, MSB left, 16px square/pitch, x=28. Retained early alias only. */
++.text
++.align 2
++.globl EXT(veux_bit_row)
++LEXT(veux_bit_row)
++ adrp x4, EXT(veux_stage_fb)@page
++ ldr x4, [x4, EXT(veux_stage_fb)@pageoff]
++ mov x5, #4320
++ madd x4, x1, x5, x4
++ add x4, x4, #112
++ mov x6, #64
++1:
++ movz w7, #0x2020
++ movk w7, #0xff20, lsl #16
++ tbz x0, #63, 2f
++ mov w7, #-1
++2:
++ mov x8, x4
++ mov x9, #16
++3:
++ mov x10, #16
++ mov x11, x8
++4:
++ str w7, [x11], #4
++ subs x10, x10, #1
++ b.ne 4b
++ add x8, x8, x5
++ subs x9, x9, #1
++ b.ne 3b
++ lsl x0, x0, #1
++ add x4, x4, #64
++ subs x6, x6, #1
++ b.ne 1b
++ dsb sy
++ ret
++
++/* First fault wins so panic cannot replace the synchronous fault's PC/SP.
++ * Keep input values in caller-scratch regs untouched by the leaf above. */
++.globl EXT(veux_fault_dump)
++LEXT(veux_fault_dump)
++ adrp x4, Lveux_fault_seen@page
++ add x4, x4, Lveux_fault_seen@pageoff
++ ldr w5, [x4]
++ cbnz w5, 5f
++ mov w5, #1
++ str w5, [x4]
++ mov x12, x30
++ mov x13, x1
++ mov x14, x2
++ mov x15, x3
++ mov x1, #2120
++ bl EXT(veux_bit_row)
++ mov x0, x13
++ mov x1, #2144
++ bl EXT(veux_bit_row)
++ mov x0, x14
++ mov x1, #2168
++ bl EXT(veux_bit_row)
++ mov x0, x15
++ mov x1, #2192
++ bl EXT(veux_bit_row)
++ mov x30, x12
++5:
++ ret
++.data
++.align 2
++Lveux_fault_seen:
++ .long 0
++#endif
+--- a/osfmk/arm64/locore.s
++++ b/osfmk/arm64/locore.s
+@@ -578,8 +578,43 @@
+ 
+ 	.text
+ 	.align 2
++
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++/* FLEH entered with registers saved. Only x9-x14 clobbered; no stack use. */
++.macro VEUX_EXCEPTION_CELL
++ adrp x9, EXT(veux_exception_seen)@page
++ add x9, x9, EXT(veux_exception_seen)@pageoff
++ ldr w10, [x9]
++ tbnz w10, $0, 9f
++ orr w10, w10, #(1 << $0)
++ str w10, [x9]
++ adrp x9, EXT(veux_stage_fb)@page
++ ldr x9, [x9, EXT(veux_stage_fb)@pageoff]
++ MOV64 x10, (2352 * 4320 + (32 + 64 * $0) * 4)
++ add x9, x9, x10
++ MOV64 x10, $1
++ mov x11, #32
++1:
++ mov x12, #32
++ mov x13, x9
++2:
++ str w10, [x13], #4
++ subs x12, x12, #1
++ b.ne 2b
++ mov x14, #4320
++ add x9, x9, x14
++ subs x11, x11, #1
++ b.ne 1b
++ dsb sy
++9:
++.endmacro
++#endif
++
+ 	.global EXT(fleh_synchronous)
+ LEXT(fleh_synchronous)
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ VEUX_EXCEPTION_CELL 5, 0xffff8000
++#endif
+ 	
+ UNWIND_PROLOGUE
+ UNWIND_DIRECTIVES	
+@@ -676,6 +711,9 @@
+ 	.align 2
+ 	.global EXT(fleh_irq)
+ LEXT(fleh_irq)
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ VEUX_EXCEPTION_CELL 4, 0xff00ffff
++#endif
+ UNWIND_PROLOGUE
+ UNWIND_DIRECTIVES
+ 	BEGIN_INTERRUPT_HANDLER
+@@ -702,6 +740,9 @@
+ 	.align 2
+ 	.global EXT(fleh_fiq)
+ LEXT(fleh_fiq)
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ VEUX_EXCEPTION_CELL 4, 0xff00ffff
++#endif
+ UNWIND_PROLOGUE
+ UNWIND_DIRECTIVES
+ 	BEGIN_INTERRUPT_HANDLER
+@@ -756,6 +797,9 @@
+ 	.text
+ 	.align 2
+ fleh_synchronous_sp1:
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ VEUX_EXCEPTION_CELL 5, 0xffff8000
++#endif
+ 	mrs		x1, ESR_EL1							// Load exception syndrome
+ 	str		x1, [x0, SS64_ESR]
+ 	mrs		x2, FAR_EL1							// Load fault address
+@@ -767,6 +811,9 @@
+ 	.text
+ 	.align 2
+ fleh_irq_sp1:
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ VEUX_EXCEPTION_CELL 4, 0xff00ffff
++#endif
+ 	mov		x1, x0
+ 	adr		x0, Lsp1_irq_str
+ 	b		EXT(panic_with_thread_kernel_state)
+@@ -776,6 +823,9 @@
+ 	.text
+ 	.align 2
+ fleh_fiq_sp1:
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ VEUX_EXCEPTION_CELL 4, 0xff00ffff
++#endif
+ 	mov		x1, x0
+ 	adr		x0, Lsp1_fiq_str
+ 	b		EXT(panic_with_thread_kernel_state)
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -26,6 +26,7 @@
+  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
+  */
+ 
++#include <arm64/sweet_early.h>
+ #include <arm/caches_internal.h>
+ #include <arm/cpu_data.h>
+ #include <arm/cpu_data_internal.h>
+@@ -507,6 +508,10 @@
+ void
+ sleh_synchronous_sp1(arm_context_t *context, uint32_t esr, vm_offset_t far __unused)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_fault_dump(esr, get_saved_state_pc(&context->ss), far,
++     get_saved_state_sp(&context->ss));
++#endif
+ 	esr_exception_class_t  class = ESR_EC(esr);
+ 	arm_saved_state_t    * state = &context->ss;
+ 
+@@ -601,6 +606,10 @@
+ void
+ sleh_synchronous(arm_context_t *context, uint32_t esr, vm_offset_t far)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_fault_dump(esr, get_saved_state_pc(&context->ss), far,
++     get_saved_state_sp(&context->ss));
++#endif
+ 	esr_exception_class_t  class   = ESR_EC(esr);
+ 	arm_saved_state_t    * state   = &context->ss;
+ 	thread_t               thread  = current_thread();
+@@ -1850,6 +1859,9 @@
+ void
+ sleh_irq(arm_saved_state_t *state)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ if (veux_probe_interrupt(1)) return;
++#endif
+ 	cpu_data_t * cdp __unused             = getCpuDatap();
+ #if MACH_ASSERT
+ 	int preemption_level = sleh_get_preemption_level();
+@@ -1919,6 +1931,9 @@
+ void
+ sleh_fiq(arm_saved_state_t *state)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ if (veux_probe_interrupt(0)) return;
++#endif
+ 	unsigned int type   = DBG_INTR_TYPE_UNKNOWN;
+ #if MACH_ASSERT
+ 	int preemption_level = sleh_get_preemption_level();
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -26,6 +26,7 @@
+  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
+  */
+ 
++#include <arm64/sweet_early.h>
+ #include <arm64/machine_machdep.h>
+ #include <arm64/proc_reg.h>
+ #include <arm/machine_cpu.h>
+@@ -476,6 +477,10 @@
+ void
+ machine_startup(__unused boot_args * args)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_stage_mark(6);
++ veux_irq_probe();
++#endif
+ #if defined(HAS_IPI) && (DEVELOPMENT || DEBUG)
+ 	if (!PE_parse_boot_argn("fastipi", &gFastIPI, sizeof(gFastIPI))) {
+ 		gFastIPI = 1;
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -66,6 +66,7 @@
+  *	Mach kernel startup.
+  */
+ 
++#include <arm64/sweet_early.h>
+ #include <debug.h>
+ #include <mach_kdp.h>
+ 
+@@ -432,6 +433,9 @@
+ 
+ 	kernel_bootstrap_log("vm_mem_bootstrap");
+ 	vm_mem_bootstrap();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_stage_mark(7);
++#endif
+ 
+ 	machine_info.memory_size = (uint32_t)mem_size;
+ #if XNU_TARGET_OS_OSX
+@@ -508,6 +512,9 @@
+ 
+ 	kernel_bootstrap_log("clock_init");
+ 	clock_init();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_stage_mark(8);
++#endif
+ 
+ 	/*
+ 	 *	Initialize the IPC, task, and thread subsystems.
+--- a/pexpert/arm/pe_fiq.c
++++ b/pexpert/arm/pe_fiq.c
+@@ -26,6 +26,89 @@
+ static vm_offset_t gicd_base;
+ static vm_offset_t gicr_base;
+ static vm_offset_t gicr_size;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++static uint32_t _gic_read32(vm_offset_t addr);
++static vm_offset_t veux_probe_gicr;
++static volatile unsigned int veux_probe_active, veux_probe_delivered;
++static bool veux_probe_ran;
++
++/* Intercept only during the bounded probe, before rtclock/scheduler startup.
++ * Assembly interrupt bookkeeping still runs and is balanced on return. */
++int
++veux_probe_interrupt(unsigned int group)
++{
++ if (!veux_probe_active) return 0;
++ uint64_t iar = group ? __builtin_arm_rsr64("ICC_IAR1_EL1") :
++     __builtin_arm_rsr64("ICC_IAR0_EL1");
++ uint32_t intid = iar & 0xffffff;
++ if (intid == arm64_vtimer_intid) {
++  __builtin_arm_wsr64("CNTV_CTL_EL0", 2); /* disable and mask before EOI */
++  __builtin_arm_isb(ISB_SY);
++  veux_probe_delivered = group ? 1 : 2;
++  veux_stage_mark(13);
++ }
++ if (intid < 1020) {
++  if (group) __builtin_arm_wsr64("ICC_EOIR1_EL1", iar);
++  else __builtin_arm_wsr64("ICC_EOIR0_EL1", iar);
++  __builtin_arm_isb(ISB_SY);
++ }
++ return 1;
++}
++
++void
++veux_irq_probe(void)
++{
++ if (veux_probe_ran) return;
++ veux_probe_ran = true;
++ uint64_t daif = __builtin_arm_rsr64("DAIF");
++ __asm__ volatile("msr daifset, #3" ::: "memory");
++ uint64_t old_ctl = __builtin_arm_rsr64("CNTV_CTL_EL0");
++ uint64_t old_cval = __builtin_arm_rsr64("CNTV_CVAL_EL0");
++ uint64_t freq = __builtin_arm_rsr64("CNTFRQ_EL0");
++ if (!freq || !veux_probe_gicr || !gicd_base) {
++  veux_stage_mark(14);
++  veux_bit_row(freq, 1800);
++  __builtin_arm_wsr64("DAIF", daif);
++  return;
++ }
++ __builtin_arm_wsr64("CNTV_CTL_EL0", 2);
++ __builtin_arm_wsr64("CNTV_TVAL_EL0", freq / 1000 ? freq / 1000 : 1);
++ veux_probe_active = 1;
++ __builtin_arm_wsr64("CNTV_CTL_EL0", 1);
++ __builtin_arm_isb(ISB_SY);
++ uint64_t start = __builtin_arm_rsr64("CNTVCT_EL0");
++ veux_stage_mark(9); /* immediately before this probe's IRQ/FIQ unmask */
++ __asm__ volatile("msr daifclr, #3; isb" ::: "memory");
++ while (!veux_probe_delivered &&
++     __builtin_arm_rsr64("CNTVCT_EL0") - start < freq / 20) {
++  __asm__ volatile("yield");
++ }
++ __asm__ volatile("msr daifset, #3; isb" ::: "memory");
++ if (!veux_probe_delivered) {
++  /* Snapshot before restoring/masking the virtual timer. Rows top to bottom. */
++  veux_stage_mark(14);
++  veux_bit_row(__builtin_arm_rsr64("CNTV_CTL_EL0"), 1800);
++  veux_bit_row(_gic_read32(veux_probe_gicr + 0x10200 /* SGI frame ISPENDR0 */), 1824);
++  veux_bit_row(_gic_read32(veux_probe_gicr + GICR_ISENABLER0), 1848);
++  veux_bit_row(_gic_read32(veux_probe_gicr + GICR_IGROUPR0), 1872);
++  veux_bit_row(*(volatile uint8_t *)(veux_probe_gicr + GICR_IPRIORITYR0 + 19), 1896);
++  veux_bit_row(_gic_read32(veux_probe_gicr + GICR_WAKER), 1920);
++  veux_bit_row(_gic_read32(gicd_base + GICD_CTLR), 1944);
++  veux_bit_row(__builtin_arm_rsr64("ICC_SRE_EL1"), 1968);
++  veux_bit_row(__builtin_arm_rsr64("ICC_PMR_EL1"), 1992);
++  veux_bit_row(__builtin_arm_rsr64("ICC_IGRPEN0_EL1"), 2016);
++  veux_bit_row(__builtin_arm_rsr64("ICC_IGRPEN1_EL1"), 2040);
++ }
++ __builtin_arm_wsr64("CNTV_CTL_EL0", 2);
++ __builtin_arm_isb(ISB_SY);
++ veux_probe_active = 0;
++ __builtin_arm_wsr64("CNTV_CVAL_EL0", old_cval);
++ __builtin_arm_wsr64("CNTV_CTL_EL0", old_ctl);
++ __builtin_arm_isb(ISB_SY);
++ __builtin_arm_wsr64("DAIF", daif);
++}
++#endif
++
+ 
+ static uint32_t
+ _gic_read32(vm_offset_t addr)
+@@ -146,6 +229,9 @@
+ 
+ 	// Find the redistributor for this processor
+ 	vm_offset_t gicr_pe_base = find_gicr_pe_base();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ veux_probe_gicr = gicr_pe_base;
++#endif
+ 
+ 	// Mark this PE to be awake
+ 	uint32_t gicr_waker = gicr_read32(GICR_WAKER);
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1501,7 +1501,7 @@
+ 		return;
+ 	}
+ 	const uint32_t cols = VEUX_FB_WIDTH / (8u * VEUX_FB_CONSOLE_SCALE);
+-	const uint32_t rows = (2240u - VEUX_FB_CONSOLE_TOP) / (16u * VEUX_FB_CONSOLE_SCALE);
++	const uint32_t rows = (1760u - VEUX_FB_CONSOLE_TOP) / (16u * VEUX_FB_CONSOLE_SCALE);
+ 	if (c == '\r') {
+ 		veux_fb_console_col = 0;
+ 		return;

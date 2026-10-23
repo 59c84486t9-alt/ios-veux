@@ -1,3 +1,18 @@
+## >>> UPDATE 2026-10-22 (0106 diagnostic candidate) <<<
+
+- User requested second strip, stackless fault bits, bounded IRQ probe and
+  retained alias. Added 0106; no device write yet. See diagnostics doc for
+  exact rows/colors and interpretation, including FLEH-after-context-save limit.
+- All eight changed translation units compiled as arm64 objects. Fixed local
+  macro syntax and used GICR SGI-frame ISPENDR0 offset 0x10200 (not in header).
+- Actual assembly renderer executed in Unicorn with SP=0/unmapped stack:
+  all four rows, MSB order, exact buffer bounds and first-fault retention pass.
+  Reusable test: tools/test-veux-bitdump.py; deps in ignored diag-test-venv.
+- Probe intercepts before normal timer/scheduler C handler, restores original
+  timer and DAIF state, uses mapped selected GICR. No forced reset introduced.
+- Next: full CI success, package/verify image, user starts filming in fastboot,
+  then authorized boot_b flash/reboot. Current device still previous XNU on B.
+
 ## >>> UPDATE 2026-10-22 (photo confirms all six XNU cells) <<<
 
 - User photo after run-39884652829 boot shows red, orange, yellow, green,
