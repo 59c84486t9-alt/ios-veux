@@ -1,3 +1,19 @@
+## >>> UPDATE 2026-10-22 (photo confirms all six XNU cells) <<<
+
+- User photo after run-39884652829 boot shows red, orange, yellow, green,
+  cyan and magenta footer cells. This confirms execution of all six 0105
+  paint sites: _start, MMU-on, arm_init, PE_init_platform(FALSE) return,
+  GIC/timer-PPI configuration, and PE_init_veux_pmsg console-route setup.
+- Top text is still shim loader/handoff text; no readable XNU panic or
+  later XNU progress line is established by this photo. Magenta means the
+  routing function returned from veux_fb_init, not proof text rendering
+  succeeded (that routine can return early). Cyan does not prove IRQ delivery.
+- No reboot, flash or device-state change performed for this observation.
+  B remains the diagnostic XNU candidate. Next diagnostic boundaries are
+  VM/bootstrap return, serial/kprintf readiness, machine_startup and actual
+  timer/SGI delivery; use the proven footer mapping to expose progress.
+  Review why text output is absent as a separate observability issue.
+
 ## >>> UPDATE 2026-10-22 (stage-marker XNU built and flashed) <<<
 
 - CI 39884652829 SUCCESS for 541cad4a058b56d91259827875f83d9e0e8464d1.
