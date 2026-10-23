@@ -21,6 +21,7 @@ The table lists the behavior-bearing SWEET conditions in the boot/root path. Lin
 | `bsd/kern/kern_mib.c`, `bsd/kern/syscalls.master` | iOS machine identity and `pid_hibernate` accommodations | Share the required iOS-userland behavior with VEUX | The target is iOS 16 userland; unrelated SWEET-specific interfaces remain gated. |
 | `osfmk/prng/entropy.c:40,97,482` | Use SWEET's built-in SHA-256 implementation | Share with VEUX | VEUX needs early entropy without waiting for an absent crypto kext. |
 | `iokit/Kernel/KernelConfigTables.cpp` and SWEET device drivers | Board matching and optional SWEET display/HID/SoC devices | Keep VEUX's platform and Kryo matches; leave Sweet-specific drivers gated | VEUX has its own platform expert and hardware. No global kext/IOKit skip is needed. |
+| `libkern/crypto/corecrypto_md5.c:20`; `sweet_md5.c`, `sweet_dec32le.c`, `sweet_enc32le.c` | Use BearSSL MD5 when the corecrypto function table is absent | Share the portable provider with VEUX under `ARM64_BOARD_CONFIG_VEUX` | The phone's panic PC resolved to `MD5Init+0x34`; `_g_crypto_funcs` was NULL and the following load faulted at FAR `0x20` during HFS UUID discovery. |
 | `osfmk` CPU/MMU/GIC/timer/serial/FIQ gates | SM7150-specific early hardware behavior | Keep VEUX's independent branches | SM6375 addresses and CPU identifiers differ; reusing SWEET constants would be unsafe. |
 
 The patch series therefore changes the no-storage-class behavior specifically under `ARM64_BOARD_CONFIG_VEUX`, plus the adjacent root-auth, dirty/read-write-root, iOS syscall/identity, entropy and diagnostic policies justified above. It does not disable IOKit matching globally.
@@ -77,6 +78,12 @@ The BSD diagnostic strip is at y=2080, cells 32x32 with 64-pixel horizontal spac
 | 15 | launchd `execve` returned an error |
 
 The labels intentionally distinguish a return from success: cell 12 means control returned from the init loader; cell 15 means `execve` returned an error. A successful exec may not reach either return marker.
+
+### 2026-10-23 boot result (CI 39942134414)
+
+The photographed boot lit UFS cell 16 (first READ(10) succeeded), and BSD cells 6-9 (mountroot callback entry/return and `vfs_mountroot` entry/return). It did not light the later `bsd_utaskbootstrap` or launchd cells. The panic dump gives ESR `0x96000005`, FAR `0x20`, PC `0xfffffe000798bc40`, and LR `0xfffffe00077b8294`. Using the CI kernel at its linked `__TEXT` base `0xfffffe0007004000`, these resolve to `MD5Init+0x34` and `hfs_getvoluuid+0x64`. The faulting instruction is `ldr x20, [x22, #0x20]`; the preceding load reads `_g_crypto_funcs` at `0xfffffe00072490d0`, which was NULL. Thus this boot reached HFS UUID discovery and exposed the missed MD5 fallback gate; it does not indicate a bad UFS block read or prove the filesystem image is corrupt.
+
+Patch 0112 extends the already staged BearSSL MD5 implementation only to `ARM64_BOARD_CONFIG_VEUX`, including its little-endian codec units. The pmap, HFS read-only/journal, and UFS policies stay unchanged. CI must verify that the new candidate compiles and the VEUX MD5 source gates are active before the next flash. The screen's “handshake structure not initialized” line refers to the separate hardware-debugger handshake diagnostic; the faulting PC/LR identify the actionable kernel abort path.
 
 The UFS read markers use the two 32x32 cells at y=2208: index 16 (green) means the first successful READ(10), and index 17 (red) means the first failed read. The failure also prints `error=0x...`, LBA, and block count in the top console. The stage strip at y=2240 remains separate.
 

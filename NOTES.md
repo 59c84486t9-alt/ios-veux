@@ -1568,6 +1568,14 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 
 # iOS 16 on sweet (Redmi Note 10 Pro, SM7150) - working notes
 
+## >>> UPDATE 2026-10-23 (VEUX HFS UUID panic; portable MD5 follow-up) <<<
+
+- The 0111 image from CI run `39942134414` booted through the first successful UFS READ(10), the selected filesystem mountroot callback, and `vfs_mountroot`; the phone photos show the expected cells 16 and 6-9. The later `bsd_utaskbootstrap` and launchd markers remained dark.
+- Panic dump: ESR `0x96000005`, FAR `0x20`, PC `0xfffffe000798bc40`, LR `0xfffffe00077b8294`. Symbolization against the run's kernel (`__TEXT` base `0xfffffe0007004000`) gives `MD5Init+0x34` called from `hfs_getvoluuid+0x64`. The faulting instruction loads `[x22, #0x20]`; `x22` came from `_g_crypto_funcs` at `0xfffffe00072490d0`, which is NULL for this VEUX build. The HFS UUID helper therefore entered the legacy corecrypto MD5 path even though VEUX has no corecrypto kext.
+- Candidate patch 0112 extends the existing BearSSL legacy MD5 provider to `ARM64_BOARD_CONFIG_VEUX`, including its MD5 and little-endian codec translation units. It does not change the pmap barriers, root mount mode, journal handling, UFS path, or the SWEET/VEUX IOKit gate.
+- Added workflow source checks for all four VEUX MD5 gates. Local patch-sequence/syntax validation passes (112 contiguous patches); patch 0112 applies cleanly to the saved XNU source snapshot. The synthetic framebuffer/stack/VM host tests require the patched CI source tree and are left to the workflow. No follow-up CI or image exists yet; do not flash until that run passes.
+- The photo's `handshake structure not initialized` text is a hardware-debugger/KDP handshake diagnostic; the panic PC/LR and FAR identify the independent MD5 null-table fault above.
+
 ## >>> UPDATE 2026-10-22 (VEUX direct framebuffer build dispatch) <<<
 
 - Dispatched GitHub Actions run `39789142904` on `59c84486t9-alt/ios-veux`, branch `veux-xnu-build`, head `1aab246be4a361392f1c7683ca799a6b11e76f64`; no workflow was run on `ios-sweet`.

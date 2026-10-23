@@ -107,6 +107,10 @@ jobs:
             grep -Fq '#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/bsd/kern/kern_trustcache.c
             grep -Fq 'SWEET/VEUX: trust caches unavailable' xnu/bsd/kern/kern_trustcache.c
             grep -Fq 'ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/libkern/crypto/corecrypto_aes.c
+            grep -Fq 'ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/libkern/crypto/corecrypto_md5.c
+            grep -Fq 'ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/libkern/crypto/sweet_md5.c
+            grep -Fq 'ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/libkern/crypto/sweet_dec32le.c
+            grep -Fq 'ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/libkern/crypto/sweet_enc32le.c
             grep -Fq 'ifneq ($(filter SWEET VEUX,$(CURRENT_MACHINE_CONFIG)),)' xnu/libkern/conf/Makefile.template
             grep -Fq 'PE_init_veux_pmsg();' xnu/osfmk/arm64/arm_vm_init.c
             grep -Fq 'PE_init_veux_pmsg(void)' xnu/pexpert/arm/pe_kprintf.c

@@ -1,0 +1,61 @@
+diff --git a/libkern/crypto/corecrypto_md5.c b/libkern/crypto/corecrypto_md5.c
+index e9bbc42..720db11 100644
+--- a/libkern/crypto/corecrypto_md5.c
++++ b/libkern/crypto/corecrypto_md5.c
+@@ -17,9 +17,9 @@ setCount(MD5_CTX *ctx, uint64_t count)
+ }
+ 
+ /* Copy a ccdigest ctx into a legacy MD5 context */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ /*
+- * SWEET has no corecrypto kext (g_crypto_funcs stays NULL). MD5 uses
++ * SWEET and VEUX have no corecrypto kext (g_crypto_funcs stays NULL). MD5 uses
+  * BearSSL's portable implementation (libkern/crypto/sweet_md5.c), with
+  * MD5_CTX carrying exactly its state: chaining value, byte count and the
+  * partial block, converted around each call like the corecrypto path does.
+@@ -71,7 +71,7 @@ MD5Final(unsigned char digest[MD5_DIGEST_LENGTH], MD5_CTX *ctx)
+ 	br_md5_out(&br_ctx, digest);
+ }
+ 
+-#else /* !ARM64_BOARD_CONFIG_SWEET */
++#else /* neither SWEET nor VEUX */
+ 
+ static void
+ DiToMD5(const struct ccdigest_info *di, struct ccdigest_ctx *di_ctx, MD5_CTX *md5_ctx)
+@@ -125,4 +125,4 @@ MD5Final(unsigned char digest[MD5_DIGEST_LENGTH], MD5_CTX *ctx)
+ 	ccdigest_final(di, di_ctx, digest);
+ }
+ 
+-#endif /* !ARM64_BOARD_CONFIG_SWEET */
++#endif /* neither SWEET nor VEUX */
+diff --git a/libkern/crypto/sweet_dec32le.c b/libkern/crypto/sweet_dec32le.c
+index cc0414e..b7ab868 100644
+--- a/libkern/crypto/sweet_dec32le.c
++++ b/libkern/crypto/sweet_dec32le.c
+@@ -1,4 +1,4 @@
+ /* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include "sweet_bearssl/src/codec/dec32le.c"
+ #endif
+diff --git a/libkern/crypto/sweet_enc32le.c b/libkern/crypto/sweet_enc32le.c
+index ab7dbd1..335275c 100644
+--- a/libkern/crypto/sweet_enc32le.c
++++ b/libkern/crypto/sweet_enc32le.c
+@@ -1,4 +1,4 @@
+ /* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include "sweet_bearssl/src/codec/enc32le.c"
+ #endif
+diff --git a/libkern/crypto/sweet_md5.c b/libkern/crypto/sweet_md5.c
+index 2832b92..602d331 100644
+--- a/libkern/crypto/sweet_md5.c
++++ b/libkern/crypto/sweet_md5.c
+@@ -1,4 +1,4 @@
+ /* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include "sweet_bearssl/src/hash/md5.c"
+ #endif
