@@ -1,3 +1,22 @@
+## >>> UPDATE 2026-10-22 (0107 console route fix flashed) <<<
+
+- CI 39891452278 SUCCESS at 729dc6f16b07605707a7856bdb8ce684ebaee1b4.
+  Downloaded kernel checksum passed. Exact binary contains the direct VEUX
+  kprintf route banner plus fault-dump/timer-probe/alias symbols.
+- Image shim/out/veux-xnu-39891452278/shim-boot-veux-xnu-39891452278.img,
+  17084416 bytes, SHA256 4e6f336997425b185e0a840a7b39ea74abf68ff2674c06bd1b48ff0dcfc4c26c.
+  Kernel SHA256 7f65074b61801c13d4eaf7953cf574949bfe79a2b1938539df8605461523549a.
+  Fresh --veux --highmem ADT and cpus=1 payload; preserved tested unchanged
+  shim (entry marker before clear) and selected DTB. Unpacked components match.
+  Manifest, package.py, reboot timestamp and flash log beside ignored image.
+- User explicitly reported built/fastboot/ready to flash. Verified product
+  veux, slot B, boot_b size 0x8000000. Flash boot_b, select B, verify slot,
+  reboot all returned OKAY. Recording cue and 20-second delay before reboot.
+  Slot A and userdata image not flashed.
+- CURRENT: 0107 console-fix candidate on boot_b, B active. Await observation
+  of direct banner, later XNU text, markers and any reset. Do not reboot before
+  observation. Device output success remains unconfirmed.
+
 ## >>> UPDATE 2026-10-22 (0106 video/photo decoded; console fix prepared) <<<
 
 - Photo confirms original six cells and second-strip 7/8/9/10/11/12/14;
