@@ -1,25 +1,27 @@
 # VEUX root and post-root boot audit
 
-Audit basis: the XNU 8796 source assembled through patch 0109, the 39929665498 VEUX artifact, `tools/mkadt.py`, `tools/mkpayload.py`, and `tools/mkiosroot.sh`. The grep found 124 SWEET-related preprocessor lines and 190 SWEET string literals across `bsd/`, `iokit/`, `osfmk/`, `pexpert/`, `libkern/`, and `config/`. The classifications below cover the behavior-bearing hits by source area. Shared UFS/HFS/root messages now identify both boards; remaining SWEET device log strings belong to SWEET-only drivers and selectors.
+Audit basis: XNU 8796 as staged through 0111, the current 0110 source candidate, `tools/mkadt.py`, `tools/mkpayload.py`, `tools/mkiosroot.sh`, and the phone history in `NOTES.md`. The grep found 124 SWEET-related preprocessor lines and 190 SWEET string literals across `bsd/`, `iokit/`, `osfmk/`, `pexpert/`, `libkern/`, and `config/`. The classifications below cover behavior-bearing hits; remaining SWEET device strings belong to SWEET-only drivers and selectors.
 
 ## SWEET-only behavior review
 
-| Area | VEUX decision | Reason / change |
-|---|---|---|
-| `IOService::setRootMedia` (`iokit/Kernel/IOService.cpp`, patch 0021) | Same behavior, VEUX-gated | No IOStorageFamily means no `IOBlockStorageDriver` metaclass. Treat that as image/UFS root without asserting. Added `ARM64_BOARD_CONFIG_VEUX` alongside SWEET in patch 0021. |
-| `publishHiddenMedia` (`iokit/Kernel/IOService.cpp`, patch 0022) | Same behavior, VEUX-gated | No `IOMedia` class exists to unhide; skip the class assertion and avoid dereferencing a null class. Added VEUX to patch 0022. |
-| `IOFindBSDRoot` | Already shared | VEUX already recognizes `rd=ufsroot0` and calls `sweet_ufs_rootdev`; generic `rd=md0` handling consumes `/chosen/memory-map/RAMDisk` when present. No new device-matching shortcut needed. |
-| `bsd_init` | Same unsealed-root policy | The build is unsigned and has no Image4 chain; root-auth ioctl failure must be reported and tolerated for VEUX. Added the VEUX board gate. Built-in AMFI policy and SWEET_HFS registration already cover VEUX. `bsd_utaskbootstrap` itself is common code, not SWEET-gated. |
-| mockfs / ramdisk root | Available but not active in this image | `MASTER.arm64.veux` already enables `mockfs` and `sweet_hfs`. The generic ramdisk-to-`md0` code is present. Patch 0021 does not connect the shim payload to mockfs by itself. The current boot args use `rd=ufsroot0`, and the generated ADT has no RAMDisk property, so mockfs is not selected by the current build. If `rd=md0` were used with this ADT, root lookup would stop because no `RAMDisk` entry created `md0`. If a RAMDisk entry were added for the current `SWEETXNU` payload, `mockfs_mountroot` would reject its non-Mach-O header; the payload is not a mockfs root image. |
-| `vfs_mountroot` / HFS+ | Same root policies | VEUX has one root volume and no separate data volume in this setup; `rootrw=1` clears `MNT_RDONLY`. Its unsigned, not-yet-cleanly-unmounted root also needs SWEET’s dirty-root allowance. Both gates now include VEUX. HFS+ registration/config is already present. |
-| launchd bootstrap / exec | Same diagnostics; common bootstrap | `bsd_utaskbootstrap` and `load_init_program` are generic. Added launchd `execve` entry/failed-return markers. The short iOS-exec log style now applies to VEUX. `kern_mib.c` excludes VEUX from the macOS-style machine/model branch. `pid_hibernate` is exposed because the iOS SpringBoard userland calls it. |
-| default core dumps | Same bounded default | Disable core files by default for VEUX as for SWEET; iOS shared-region dumps can be extremely large on the root volume. |
-| HFS+ root and iOS syscalls | Same boot policy | VEUX can boot a real HFS+ root whose journal may be dirty after a reset; allow that root as SWEET does. Keep the HFS hard-link repair messages rate-limited because the root image is assembled with Linux tools. Expose `pid_hibernate` to iOS userland. |
-| in-kernel SHA-256 for entropy | Same built-in implementation | VEUX already links the SWEET corecrypto SHA-2 implementation. Its entropy code must not wait for a corecrypto kext that is not part of this boot. Added VEUX to those gates. |
-| IOKit/platform matching | Do not copy SWEET selectors or skip matching | `KernelConfigTables.cpp` has separate VEUX platform-expert and Kryo CPU matches. Sweet framebuffer, surface, watchdog, key-store, HID and SoC drivers are device-specific and remain SWEET-only. No blanket kext/IOKit matching skip is justified. |
-| early MMU, CPU, GIC, timer, serial and FIQ gates | Keep device-specific branches | VEUX has its own framebuffer alias, memory-map and platform setup; SWEET's SM7150 MPIDR, GIC/serial/display paths are not interchangeable. Existing shared VEUX branches remain in startup, VM, FIQ and diagnostic code. |
-| SWEET network logging, buttons/touch/USB, sampling, and UFS peripheral probes | Keep SWEET-only | These are optional observation/device drivers, not boot prerequisites. VEUX uses the separate VEUX UFS path and bounded log writer. |
-| crypto primitives and trust-cache compatibility | Already shared where needed | The files needed by VEUX already use `ARM64_BOARD_CONFIG_VEUX`; unrelated per-file Sweet-only endian/MD5 variants remain unchanged. |
+The table lists the behavior-bearing SWEET conditions in the boot/root path. Line numbers refer to the assembled source after 0111; diagnostic and device-only SWEET strings are not platform gates.
+
+| File:line | SWEET condition/behavior | VEUX decision | Reason |
+|---|---|---|---|
+| `iokit/Kernel/IOService.cpp:5129,5140,5191` | Missing `IOBlockStorageDriver`/`IOMedia` classes are tolerated on SWEET | Apply the same narrow behavior under `ARM64_BOARD_CONFIG_VEUX` in 0021/0022 | The VEUX root is a BSD UFS disk and does not instantiate IOStorageFamily classes; no blanket matching bypass. |
+| `iokit/bsddev/IOKitBSDInit.cpp:769-785` | `rd=ufsroot0` selects SWEET UFS helper | Shared with VEUX | The helper reads `/veux-ufs` from the VEUX ADT and locates `userdata` on LUN 0. |
+| `bsd/dev/sweet_ufs.c:21,282-296,690-704` | Compile helper and optional `ufsrw`/SWEET peripherals | Compile for VEUX; first read/failure cells; `ufsrw=1` is opt-in | Reuse ABL's host state, bounded READ(10), and keep the root read-only by default. SWEET-only buttons/touch/sample/USB calls remain SWEET-only. |
+| `bsd/kern/bsd_init.c:697,949` | Tolerate an unsealed root for SWEET | Share with VEUX | The development kernel has no Image4-sealed root; fail-fast root authentication would prevent the known UFS root from continuing. |
+| `bsd/vfs/vfs_subr.c:1272-1281` | `rootrw=1` clears the default root `MNT_RDONLY` | Share with VEUX, off by default | First boot must stay read-only; `rootrw=1` is the explicit mount-mode opt-in. Actual UFS writes also require `ufsrw=1`. |
+| `bsd/sweet_hfs/core/hfs_vfsutils.c:203-220` | Permit SWEET's dirty, non-journaled root when mounted read-write | Share the root exception, but only after 0111's VEUX read-only policy | A read-only first mount does not enter this read-write exception. A read-write dirty, non-journaled root is accepted without fsck and is not a safe first-boot mode. |
+| `bsd/sweet_hfs/core/hfs_vfsops.c:1419,1571-1593`; `bsd/sweet_hfs/core/hfs_vfsutils.c:734-739` | Open/replay HFS journal during root mount | VEUX read-only root skips early and late journal init/replay; rw opt-in uses normal XNU journal path | `journal_open()` replays pending journal transactions and may write the volume. The read-only VEUX path sets `jnl_disable` and also skips the legacy late-journal initializer. |
+| `bsd/vfs/vfs_subr.c:1215-1291`; `bsd/kern/bsd_init.c:1201` | Generic `mountroot`, `vfs_mountroot`, and `bsd_utaskbootstrap` | Keep common code and add VEUX stage cells | These functions are not SWEET-only; the new markers localize mount and bootstrap progress. |
+| `bsd/kern/bsd_init.c:1097-1122`; `bsd/kern/kern_exec.c:6836-6840` | Common init loader / exec path | Keep common code; VEUX marks launchd exec entry and error return | A successful exec does not return; entry and returned-error cells distinguish it. |
+| `config/MASTER.arm64.veux` and `bsd/vfs/vfs_conf.c:198-224` | SWEET HFS and mockfs registration | Existing VEUX config already enables both | Mockfs is available but not used by this `rd=ufsroot0` payload. |
+| `bsd/kern/kern_mib.c`, `bsd/kern/syscalls.master` | iOS machine identity and `pid_hibernate` accommodations | Share the required iOS-userland behavior with VEUX | The target is iOS 16 userland; unrelated SWEET-specific interfaces remain gated. |
+| `osfmk/prng/entropy.c:40,97,482` | Use SWEET's built-in SHA-256 implementation | Share with VEUX | VEUX needs early entropy without waiting for an absent crypto kext. |
+| `iokit/Kernel/KernelConfigTables.cpp` and SWEET device drivers | Board matching and optional SWEET display/HID/SoC devices | Keep VEUX's platform and Kryo matches; leave Sweet-specific drivers gated | VEUX has its own platform expert and hardware. No global kext/IOKit skip is needed. |
+| `osfmk` CPU/MMU/GIC/timer/serial/FIQ gates | SM7150-specific early hardware behavior | Keep VEUX's independent branches | SM6375 addresses and CPU identifiers differ; reusing SWEET constants would be unsafe. |
 
 The patch series therefore changes the no-storage-class behavior specifically under `ARM64_BOARD_CONFIG_VEUX`, plus the adjacent root-auth, dirty/read-write-root, iOS syscall/identity, entropy and diagnostic policies justified above. It does not disable IOKit matching globally.
 
@@ -35,11 +37,31 @@ The Android boot-v2 header labels a 16,518,272-byte segment as its ramdisk and g
 
 The segment begins with `SWEETXNU` (verified in the packaged artifact), and is the kernel payload, not a root filesystem. It contains no `/sbin/launchd`, and is neither an HFS+ volume nor a mockfs image. `mkpayload.py --ramdisk IMAGE` is the separate path that appends an image as a kernel segment and adds the ADT RAMDisk property for `rd=md0`.
 
-The current root choice is `rd=ufsroot0`, so `IOFindBSDRoot` selects the VEUX UFS-backed `userdata` device. The project root-builder, `tools/mkiosroot.sh`, produces a real case-sensitive HFS+ iOS root image for that UFS target; this is the expected root format, not mockfs. The current XNU boot image does not itself prove what is presently written to userdata. If userdata does not contain that HFS+ root image, `IOFindBSDRoot` can still return the UFS device, but `vfs_mountroot` will fail its filesystem probes and `bsd_init` will log `cannot mount root` and retry. The next decisive signal is the new mountroot/vfs markers. If HFS+ root mounting succeeds, the next stages are `bsd_utaskbootstrap`, `load_init_program`/`execve("/sbin/launchd")`, then launchd's dyld startup and shared-cache lookup. Missing launchd or cache files fail after root mount and are distinct from `IOFindBSDRoot`.
+The root choice is `rd=ufsroot0`, so `IOFindBSDRoot` selects `userdata` on the VEUX UFS disk. The last documented phone state is iOS root image v15 on userdata, a 16 GiB case-sensitive HFSX volume (the case-sensitive HFS+ variant); it was written from a sparse image with `fastboot -S 512M flash userdata ...simg`. Earlier phone logs show HFS mounted from UFS and Apple's `/sbin/launchd` executed, so this storage path and userland have been exercised on this phone. That is historical evidence, not a fresh readback of userdata during the 0110 build. The current 0110 boot-image test did not write userdata.
+
+The image was built from iPhone X iOS 16.7.1 / build 20H392 OS and cryptex contents. `/sbin/launchd` is an arm64 Mach-O; the previous successful phone run reached launchd and later iOS GUI startup, so architecture and shared-cache placement were already validated on device. The image creation/flash history is in `NOTES.md` entries for 0029 and v15. No full userdata partition image backup exists in this checkout; the separate saved userdata-tail image protects only 4 MiB plus a header. The Android userdata contents were explicitly declared expendable earlier, and userdata has already been replaced with the iOS root image. There is no claim of a full backup.
+
+If the userdata image is missing or damaged, `IOFindBSDRoot` can still return the UFS device, but `vfs_mountroot` will fail HFS probing and `bsd_init` logs `cannot mount root` and retries. If mount succeeds, the next stages are `bsd_utaskbootstrap`, `load_init_program`/`execve("/sbin/launchd")`, then launchd's dyld startup and shared-cache lookup. Missing launchd or cache files fail after root mount and are distinct from UFS discovery.
+
+## VEUX UFS helper and read failure behavior
+
+The helper maps the `/veux-ufs` ADT register range, but does not cold-initialize the controller or UIC link. It reuses ABL's already-enabled UFSHCI host/link state, verifies that the host is ready and no request is outstanding, disables UFS interrupts, replaces the transfer-request-list base with a kernel-owned DMA allocation, and verifies the new base before issuing commands. It creates one command slot (UTRL entry 0), one command descriptor/response UPIU with PRDT entries, and a 1 MiB physically contiguous bounce buffer. Commands are polled one at a time; it does not set up an interrupt-driven queue.
+
+It sends TEST UNIT READY up to three times, reads GPT LBA 1 and the GPT entries, then finds the partition named `userdata` (overridable with `ufsroot=`). Reads use SCSI READ(10) on **LUN 0**, in 4 KiB device blocks, with 512-byte BSD logical sectors. The known userdata partition starts at 4 KiB LBA `0x2b8c00` (byte offset `0x2b8c00000` from LUN 0); HFS offsets are relative to that partition start. `ufscache=1` enables cache maintenance optimized for the host, while `ufswait=1` permits bounded sleeps during commands; the current boot args set neither.
+
+Phone evidence already goes beyond the shim log writer: XNU located the GPT userdata partition, read the HFS volume, mounted HFS from UFS, and previously executed launchd. The shim's userdata log writer independently establishes that some shim-side UFS commands work, but does not by itself validate this XNU driver's reads.
+
+Each UFS command has a 5-second deadline. If its doorbell remains set, the driver clears the request and returns `ETIMEDOUT` (`0x3c`); nonzero OCS or failed response status returns `EIO` (`0x5`); invalid arguments/ranges return `EINVAL` (`0x16`). During initial GPT discovery, an error bubbles to `sweet_ufs_rootdev()` and `IOFindBSDRoot` panics because the selected root device is unavailable. After the disk is registered, a read error completes the BSD buffer with that errno; HFS mount receives the I/O failure, `vfs_mountroot` returns an error, and `bsd_init` logs the failure and retries its mount loop. The read itself does not retry, panic, or hang beyond the command's bounded timeout (the initial TUR has three attempts). Patch 0111 adds a first-success cell and a first-read-failure cell; the failure line includes the errno in hex.
+
+## Root write and journal policy
+
+The generic root mount begins `MNT_RDONLY`. The current boot args omit both `rootrw=1` and `ufsrw=1`. VEUX keeps this safe default. To opt in to a writable root in a future image, include both `rootrw=1` (mount HFS read-write) and `ufsrw=1` (permit bounded in-partition UFS writes); neither is present in the current candidate. The persistent logger remains a separate, explicit `veuxlog=1` write limited to its reserved tail window.
+
+XNU's normal journaled-HFS mount calls `journal_open()`, which replays pending transactions and can write both journal and filesystem blocks, even if the mount began read-only for a root volume. A dirty non-journaled read-write root is accepted by the earlier SWEET exception without running fsck; the filesystem can therefore remain inconsistent. Patch 0111 changes the VEUX read-only root path to set `jnl_disable` before early journal setup and skips HFS's legacy late-journal initializer. The first read-only mount neither replays nor initializes the journal. It inspects the filesystem without recovery; if on-disk metadata cannot be read safely, HFS mount may fail and the root-mount retry path remains the signal. `rootrw=1 ufsrw=1` explicitly restores XNU's normal writable journal behavior, including replay, and should only be used after choosing a recoverable image.
 
 ## New display markers
 
-The third diagnostic strip remains at y=2080, cells 32x32 with 64-pixel horizontal spacing. Existing cells 0-5 retain their meaning. New cells 6-15 are:
+The BSD diagnostic strip is at y=2080, cells 32x32 with 64-pixel horizontal spacing. Existing cells 0-5 retain their meaning. Cells 6-15 are:
 
 | Cell | Event |
 |---:|---|
@@ -55,6 +77,8 @@ The third diagnostic strip remains at y=2080, cells 32x32 with 64-pixel horizont
 | 15 | launchd `execve` returned an error |
 
 The labels intentionally distinguish a return from success: cell 12 means control returned from the init loader; cell 15 means `execve` returned an error. A successful exec may not reach either return marker.
+
+The UFS read markers use the two 32x32 cells at y=2208: index 16 (green) means the first successful READ(10), and index 17 (red) means the first failed read. The failure also prints `error=0x...`, LBA, and block count in the top console. The stage strip at y=2240 remains separate.
 
 ## Panic text region
 

@@ -1,0 +1,119 @@
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -57,6 +57,7 @@
+ extern void sweet_keys_init(void);
+ extern void sweet_touch_init(void);
+ extern void sweet_usb_probe(void);
++extern void veux_bsd_stage(unsigned int stage);
+ 
+ #define REG_CAP         0x00
+ #define REG_IS          0x20
+@@ -268,7 +269,15 @@
+ static int
+ ufs_read_blocks(uint64_t lba, uint32_t count)
+ {
++	static bool veux_first_read_seen, veux_read_failure_seen;
+ 	if (lba > UINT32_MAX || count > BOUNCE_SIZE / UFS_BLOCK) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		if (!veux_read_failure_seen) {
++			veux_read_failure_seen = true;
++			veux_bsd_stage(17);
++			printf("VEUX UFS: block read failed error=0x%x lba=0x%llx count=0x%x\n", EINVAL, lba, count);
++		}
++#endif
+ 		return EINVAL;
+ 	}
+ 	uint8_t cdb[10] = {
+@@ -276,7 +285,23 @@
+ 		(uint8_t)(lba >> 24), (uint8_t)(lba >> 16), (uint8_t)(lba >> 8), (uint8_t)lba,
+ 		0, (uint8_t)(count >> 8), (uint8_t)count, 0
+ 	};
+-	return ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK, false);
++	int error = ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK, false);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (error) {
++		if (!veux_read_failure_seen) {
++			veux_read_failure_seen = true;
++			veux_bsd_stage(17); /* first UFS block-read failure */
++			printf("VEUX UFS: block read failed error=0x%x lba=0x%llx count=0x%x\n",
++			    error, lba, count);
++		}
++	} else if (!veux_first_read_seen) {
++		veux_first_read_seen = true;
++		veux_bsd_stage(16); /* first successful UFS block read */
++		printf("VEUX UFS: first block read OK lun=0x%x lba=0x%llx count=0x%x\n",
++		    su.lun, lba, count);
++	}
++#endif
++	return error;
+ }
+ 
+ /*
+@@ -670,8 +695,8 @@
+ 	devfs_make_node(makedev(su.cmajor, 0), DEVFS_CHAR, UID_ROOT, GID_OPERATOR, 0640, "rufsroot0");
+ 	/* Only now, with the partition bounds known, can writes be allowed. */
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+-	/* First VEUX bring-up is strictly read-only; ignore ufsrw even if passed. */
+-	su.writable = false;
++	/* Read-only by default; rw requires both rootrw=1 and ufsrw=1. */
++	su.writable = (rw == 1);
+ #else
+ 	su.writable = (rw != 0);
+ #endif
+diff --git a/bsd/sweet_hfs/core/hfs_vfsops.c b/bsd/sweet_hfs/core/hfs_vfsops.c
+--- a/bsd/sweet_hfs/core/hfs_vfsops.c
++++ b/bsd/sweet_hfs/core/hfs_vfsops.c
+@@ -1537,7 +1537,15 @@ hfs_mountfs(struct vnode *devvp, struct mount *mp, struct hfs_mount_args *args,
+ 		if (args != NULL && (args->flags & HFSFSMNT_EXTENDED_ARGS) && 
+ 		    args->journal_disable) {
+ 		    jnl_disable = 1;
+ 		}
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		/*
++		 * A first VEUX root mount must not replay or initialize an HFS journal.
++		 * Keep journaled roots read-only and inspect their metadata without
++		 * opening the journal; rootrw=1 opts into the normal journal path.
++		 */
++		if (isroot && ronly) jnl_disable = 1;
++#endif
+ 				
+ 		//
+ 		// We only initialize the journal here if the last person
+diff --git a/bsd/sweet_hfs/core/hfs_vfsutils.c b/bsd/sweet_hfs/core/hfs_vfsutils.c
+--- a/bsd/sweet_hfs/core/hfs_vfsutils.c
++++ b/bsd/sweet_hfs/core/hfs_vfsutils.c
+@@ -734,7 +734,12 @@
+ 	//
+ 	if (   (vcb->vcbAtrb & kHFSVolumeJournaledMask)
+ 		&& (SWAP_BE32(vhp->lastMountedVersion) != kHFSJMountVersion)
+-		&& (hfsmp->jnl == NULL)) {
++		&& (hfsmp->jnl == NULL)
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		&& !((hfsmp->hfs_flags & HFS_READ_ONLY) &&
++		    (vfs_flags(hfsmp->hfs_mp) & MNT_ROOTFS))
++#endif
++		) {
+ 
+ 		retval = hfs_late_journal_init(hfsmp, vhp, args);
+ 		if (retval != 0) {
+
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
+--- a/osfmk/arm64/veux_early.c
++++ b/osfmk/arm64/veux_early.c
+@@ -779,9 +779,11 @@ veux_bsd_stage(unsigned int stage)
+ {
+- static const uint32_t colors[16] = {0xffffffff,0xffffff00,0xff00ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffff0000,0xff0080ff,0xff80ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffffffff,0xff4040ff,0xff40ff40,0xffff4040};
+- if (stage >= 16) return;
++ static const uint32_t colors[18] = {0xffffffff,0xffffff00,0xff00ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffff0000,0xff0080ff,0xff80ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffffffff,0xff4040ff,0xff40ff40,0xffff4040,0xff40ff40,0xffff2020};
++ if (stage >= 18) return;
+  vw_bsd_mask |= 1ULL << stage;
+  volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
+- for (unsigned y=2080;y<2112;++y)
+-  for (unsigned x=32+64*stage;x<64+64*stage;++x) fb[y*1080+x]=colors[stage];
++ unsigned cell = stage < 16 ? stage : stage - 16;
++ unsigned y0 = stage < 16 ? 2080 : 2208;
++ for (unsigned y=y0;y<y0+32;++y)
++  for (unsigned x=32+64*cell;x<64+64*cell;++x) fb[y*1080+x]=colors[stage];
+  veux_stage_flush();
+ }

@@ -155,6 +155,12 @@ jobs:
             grep -Fq 'veux_log_append(&c, 1)' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'static void veux_log_start(bool userdata_partition)' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'on != 1' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'veux_bsd_stage(16); /* first successful UFS block read */' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'veux_bsd_stage(17); /* first UFS block-read failure */' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'error=0x%x lba=0x%llx count=0x%x' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'su.writable = (rw == 1);' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'if (isroot && ronly) jnl_disable = 1;' xnu/bsd/sweet_hfs/core/hfs_vfsops.c
+            grep -Fq 'vfs_flags(hfsmp->hfs_mp) & MNT_ROOTFS' xnu/bsd/sweet_hfs/core/hfs_vfsutils.c
             grep -Fq 'veux_fb_console_putc(c)' xnu/pexpert/arm/pe_kprintf.c
             grep -Fq 'PE_parse_boot_argn("veuxsandbox"' xnu/bsd/kern/sweet_amfi.c
             grep -Fq 'veuxiolog' xnu/iokit/Kernel/IOUserClient.cpp

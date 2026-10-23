@@ -1,32 +1,30 @@
-## >>> UPDATE 2026-10-23 (0110 VEUX root/boot candidate prepared; CI pending) <<<
+## >>> UPDATE 2026-10-23 (0110 CI running; 0111 safety follow-up prepared) <<<
 
-- User requested VEUX-specific extension of patch 0021, full SWEET-gate audit,
-  root source/ADT/INITRD analysis, post-root stage markers and readable panic
-  screen. Updated patches 0021/0022 with VEUX-only no-IOBlockStorageDriver and
-  no-IOMedia handling; added 0110 for audit-backed root/exec/HFS/entropy gates,
-  mountroot/launchd cells, and panic caller/frame rendering.
-- Kept VEUX storage changes gated by ARM64_BOARD_CONFIG_VEUX. No blanket IOKit
-  skip. Expanded HFS dirty-root and pid_hibernate support because VEUX runs the
-  iOS root/userland; added short root/launchd diagnostics and same SWEET HFS
-  read-write-root policy. Early alias and fault dumps retained.
-- Added docs/VEUX-ROOT-BOOT-AUDIT.md. mkadt.py SWEET/VEUX both produce an empty
-  /chosen/memory-map (no RAMDisk) and no /chosen/boot-args. Current payload args
-  say rd=ufsroot0. Android header ramdisk is 16,518,272 bytes, load address
-  0x01000000; live INITRD lo/hi come from ABL linux,initrd-start/end, and that
-  segment starts SWEETXNU, not HFS+/mockfs or /sbin/launchd. UFS userdata's
-  actual contents are not established by the kernel artifact.
-- Added BSD cells 6-15 for mountroot callback, vfs_mountroot, bsd_utaskbootstrap,
-  and launchd exec. Reserved panic text region y1816-2071; reduced wait viewport
-  to four threads per page ending at y1815 so panels do not overlap. Panic shows
-  formatted text, caller and up to eight bounded frame-chain RAs in hex.
-- Local xnu-cc syntax checks passed for all 16 modified C/C++ units, using the
-  39929665498 buildtree/log. The old generated sysproto.h needed the VEUX
-  pid_hibernate gate applied locally for this check; the source syscall table
-  now carries the gate for regeneration in CI. Console, saved-frame, VM-walk
-  and recovery host tests pass; those synthetic tests do not validate hardware.
-- No CI run or flash yet. Next: commit/push candidate, dispatch VEUX DEVELOPMENT
-  CI and wait for success. Do not flash unless CI passes; this candidate has not
-  been flashed.
+- Current run `39940219041` is still in progress on committed source
+  `1a4c49db408763557127ba295a07b0cc87043631` (VEUX DEVELOPMENT). Its source is
+  patch 0110 plus the 0021/0022 VEUX-only gates. Do not cancel this run. Kernel
+  and packaged image hashes are pending artifact upload; no flash of this
+  candidate has happened in this session.
+- The 0110 candidate has BSD cells 6-15 for mountroot/vfs/bootstrap/launchd,
+  panic text at y1816-2071 with caller/eight bounded frames, and the prior dump
+  and alias. Its root defaults MNT_RDONLY, but review found XNU can still open
+  and replay a journaled HFS root. I am holding that safety gap for follow-up
+  patch 0111 rather than treating read-only mount flags as journal protection.
+- Added follow-up 0111 locally, not yet dispatched: VEUX read-only HFS root
+  disables early and legacy late journal initialization/replay; read-write
+  requires both rootrw=1 and ufsrw=1. It adds y2208 first-success/read-error
+  cells; errors print errno in hex. All changes remain VEUX-gated.
+- Updated docs/VEUX-ROOT-BOOT-AUDIT.md with the gate table, UFS flow/error
+  semantics, root-image provenance and backup state. Historical phone state
+  records the 16 GiB HFSX iOS root image v15 on userdata and prior successful
+  HFS mount/launchd; it was flashed from a sparse image. No full userdata
+  partition backup is present; Android userdata was explicitly expendable and
+  was replaced by the reproducible iOS root. Only a 4 MiB tail backup exists.
+- Local 0111 patch application, repository validation, four changed-unit
+  xnu-cc syntax checks, and console/frame/recovery/VM host tests pass. These
+  host tests use RAM/synthetic data and do not validate actual UFS, HFS journal
+  replay behavior, hardware cacheability, or phone scanout. Do not flash until
+  the relevant CI build passes.
 
 ## >>> UPDATE 2026-10-23 (0109 CI passed, flashed to boot_b) <<<
 
