@@ -1,3 +1,25 @@
+## >>> UPDATE 2026-10-22 (0108 CI passed, one image flashed) <<<
+
+- CI 39896881721 SUCCESS for 2c3f478de5b4f1f3f61e3c1af741a3436e65106e.
+  Downloaded xnu-kernel to xnu/out-39896881721; SHA256SUMS passed.
+  Kernel SHA256 6c7af2598b4b850d65c29929de5d700b6664dae0a8ca798c762029f77427a8ae.
+- Packaged one image: shim/out/veux-xnu-39896881721/shim-boot-veux-xnu-39896881721.img
+  size 17100800, SHA256 e3c25c54967a5fe1a96b61bec6f991ff08c3cea6b763a75efd60eb27cd8343c5.
+  Fresh highmem VEUX ADT/cpus=1 payload, unchanged tested shim and selected DTB.
+  Unpacked shim/payload/DTB byte-compare passes. Manifest/package.py beside image.
+- Verified exact CI binary diagnostic symbols. Disassembly confirms immediate
+  post-VM AT/ISB/PAR has no preceding full barrier, and real DC/DSB plus
+  TLBI/DSB/ISB instructions are present. instruction-check.txt/disassembly and
+  symbol map are saved beside ignored image. No pmap changes in this build.
+- User confirmed built, fastboot, ready to flash. Product veux, B and boot_b
+  0x8000000 verified. Flash boot_b, select/verify B, reboot all OKAY. Recording
+  cue followed by 20-second delay before reboot. Slot A/userdata image untouched.
+- CURRENT: 0108 on boot_b, B active. Await panel/recording result. Priority rows:
+  0A first PAR/result, 22 fix step/occurrence, 2B first-pair count/call; also
+  latest 21, walks 0E-14, experiment 25-2F and timer 20/23. Full legend is
+  docs/VEUX-VM-FAULT-AUDIT.md. Do not reboot before observation. Hardware
+  cache/barrier behavior remains unproven until these results are read.
+
 ## >>> UPDATE 2026-10-22 (0108 phase-safe VM diagnostics prepared) <<<
 
 - User requested counters/latest hex, fixed status cells, pre/post TTBR1 walks,
