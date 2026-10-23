@@ -1,3 +1,21 @@
+## >>> UPDATE 2026-10-22 (0107 console proven; data-abort return audit) <<<
+
+- Latest user photo proves XNU text now displays, with Skywalk self-tests
+  through "memcmp mask ... PASSED". Original/second strips and first-fault
+  rows remain visible. No panic text observed. Device unchanged in this audit.
+- Inspected exact sleh path shared by 0106/0107: exception paint/dump does
+  not return out of handling. DABORT_EL1 calls handle_abort ->
+  handle_kernel_abort. Translation faults skip arm_fast_fault, call vm_fault;
+  KERN_SUCCESS returns with saved PC unchanged, retrying the instruction.
+  Failed resolution without copyio recovery reaches panic_with_thread_kernel_state.
+- Thus repeated successful vm_fault returns with an ineffective mapping could
+  retrap forever, but absence of panic does not establish that. Could also be
+  blocked inside vm_fault or have moved beyond the retained first exception.
+  The first-fault dump is sticky and is not necessarily the current PC.
+- Next discriminating instrumentation: count repeated PC/FAR entries and mark
+  before/after vm_fault plus its return code, and the normal sleh-return point.
+  No source patch/build/flash performed for this question.
+
 ## >>> UPDATE 2026-10-22 (0107 console route fix flashed) <<<
 
 - CI 39891452278 SUCCESS at 729dc6f16b07605707a7856bdb8ce684ebaee1b4.
