@@ -1,0 +1,100 @@
+From: ios-veux
+Subject: [PATCH] Preserve VEUX console tail in a non-overlapping panic screen
+
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1450,6 +1450,24 @@
+ #define VEUX_FB_CONSOLE_FG         0xffffffffu
+ 
+ extern unsigned char iso_font[256 * 16];
++#define VEUX_PANIC_TAIL_LINES 20u
++#define VEUX_PANIC_TAIL_COLS (VEUX_FB_WIDTH / (8u * VEUX_FB_CONSOLE_SCALE))
++static char veux_panic_tail[VEUX_PANIC_TAIL_LINES][VEUX_PANIC_TAIL_COLS];
++static uint32_t veux_panic_tail_head, veux_panic_tail_count = 1, veux_panic_tail_col;
++static void
++veux_panic_tail_capture(char c)
++{
++	if (c == '\r') { veux_panic_tail_col = 0; return; }
++	if (c == '\n' || veux_panic_tail_col >= VEUX_PANIC_TAIL_COLS) {
++		veux_panic_tail_head = (veux_panic_tail_head + 1) % VEUX_PANIC_TAIL_LINES;
++		for (uint32_t i = 0; i < VEUX_PANIC_TAIL_COLS; ++i) veux_panic_tail[veux_panic_tail_head][i] = 0;
++		veux_panic_tail_col = 0;
++		if (veux_panic_tail_count < VEUX_PANIC_TAIL_LINES) veux_panic_tail_count++;
++		if (c == '\n') return;
++	}
++	if ((unsigned char)c < 0x20 || (unsigned char)c > 0x7e) c = '?';
++	veux_panic_tail[veux_panic_tail_head][veux_panic_tail_col++] = c;
++}
+ static volatile uint32_t *veux_fb_console_base;
+ static uint32_t veux_fb_console_stride;
+ static uint32_t veux_fb_console_col, veux_fb_console_row;
+@@ -1470,6 +1488,7 @@
+ 	if (!veux_fb_console_ready || veux_fb_console_base == NULL) {
+ 		return;
+ 	}
++	veux_panic_tail_capture(c);
+ 	const uint32_t cols = VEUX_FB_WIDTH / (8u * VEUX_FB_CONSOLE_SCALE);
+ 	const uint32_t rows = (VEUX_FB_HEIGHT - VEUX_FB_CONSOLE_TOP) / (16u * VEUX_FB_CONSOLE_SCALE);
+ 	if (c == '\r') {
+@@ -1544,6 +1562,6 @@
+ 	if (!veux_fb_console_ready || veux_fb_console_base == NULL) return;
+ 	veux_fb_panic_col = veux_fb_panic_row = 0;
+-	for (uint32_t y = 1816; y < 2072; ++y)
++	for (uint32_t y = VEUX_FB_CONSOLE_TOP; y < 2072; ++y)
+ 		for (uint32_t x = 0; x < VEUX_FB_WIDTH; ++x)
+ 			veux_fb_console_base[y * (veux_fb_console_stride / 4u) + x] = 0xff000000;
+ }
+@@ -1578,5 +1596,5 @@
+ 	if (!veux_fb_console_ready || veux_fb_console_base == NULL) return;
+ 	const uint32_t cols = VEUX_FB_WIDTH / 8u;
+-	const uint32_t rows = (2072u - 1816u) / 16u;
++	const uint32_t rows = (2072u - VEUX_FB_CONSOLE_TOP) / 16u;
+ 	if (c == '\r') { veux_fb_panic_col = 0; return; }
+ 	if (c == '\n' || veux_fb_panic_col >= cols) {
+@@ -1587,8 +1605,8 @@
+ 	unsigned char ch = (unsigned char)c;
+ 	if (ch < 0x20 || ch > 0x7e) ch = '?';
+ 	const unsigned char *glyph = iso_font + (uint32_t)ch * 16u;
+ 	uint32_t x0 = veux_fb_panic_col * 8u;
+-	uint32_t y0 = 1816u + veux_fb_panic_row * 16u;
++	uint32_t y0 = VEUX_FB_CONSOLE_TOP + veux_fb_panic_row * 16u;
+ 	for (uint32_t gy = 0; gy < 16; ++gy) {
+ 		volatile uint32_t *line = veux_fb_console_base + (y0 + gy) * (veux_fb_console_stride / 4u) + x0;
+ 		for (uint32_t gx = 0; gx < 8; ++gx)
+@@ -1597,4 +1613,22 @@
+ 	}
+ 	veux_fb_panic_col++;
+ }
++
++void
++veux_fb_panic_console_tail(void)
++{
++	static const char header[] = "Last console lines (oldest first; includes mount stderr):\n";
++	for (unsigned int i = 0; header[i]; ++i) veux_fb_panic_putc(header[i]);
++	uint32_t first = (veux_panic_tail_head + VEUX_PANIC_TAIL_LINES + 1 - veux_panic_tail_count) % VEUX_PANIC_TAIL_LINES;
++	for (uint32_t line = 0; line < veux_panic_tail_count; ++line) {
++		uint32_t index = (first + line) % VEUX_PANIC_TAIL_LINES;
++		veux_fb_panic_putc('C');
++		veux_fb_panic_putc('0' + (line / 10));
++		veux_fb_panic_putc('0' + (line % 10));
++		veux_fb_panic_putc(':');
++		for (uint32_t col = 0; col < VEUX_PANIC_TAIL_COLS && veux_panic_tail[index][col]; ++col)
++			veux_fb_panic_putc(veux_panic_tail[index][col]);
++		veux_fb_panic_putc('\n');
++	}
++}
+ #endif /* ARM64_BOARD_CONFIG_VEUX */
+--- a/osfmk/arm64/veux_early.c
++++ b/osfmk/arm64/veux_early.c
+@@ -62,4 +62,5 @@
+ extern void veux_fb_panic_begin(void);
+ extern void veux_fb_panic_putc(char c);
++extern void veux_fb_panic_console_tail(void);
+ static void
+ veux_panic_hex(uint64_t value)
+@@ -114,4 +115,5 @@
+ 		frame = (uintptr_t *)next;
+ 	}
++	veux_fb_panic_console_tail();
+ 	veux_stage_flush();
+ }

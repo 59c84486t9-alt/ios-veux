@@ -92,7 +92,8 @@ jobs:
             grep -Fq '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/iokit/Kernel/IOService.cpp
             grep -Fq '!defined(ARM64_BOARD_CONFIG_SWEET) && !defined(ARM64_BOARD_CONFIG_VEUX)' xnu/iokit/Kernel/IOService.cpp
             grep -Fq 'veux_panic_screen(panic_format_str, panic_args, panic_caller)' xnu/osfmk/kern/debug.c
-            grep -Fq '1816u + veux_fb_panic_row * 16u' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'VEUX_FB_CONSOLE_TOP + veux_fb_panic_row * 16u' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'veux_fb_panic_console_tail(void)' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/bsd/sweet_hfs/core/hfs_vfsutils.c
             grep -Fq 'defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/bsd/vm/vm_unix.c
             grep -Fq 'defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/osfmk/prng/entropy.c
@@ -163,6 +164,10 @@ jobs:
             grep -Fq 'veux_bsd_stage(17); /* first UFS block-read failure */' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'error=0x%x lba=0x%llx count=0x%x' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'su.writable = (rw == 1);' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'first successful UFS write' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'first UFS write failure' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'VEUX ROOT mode=' xnu/bsd/vfs/vfs_subr.c
+            grep -Fq 'VEUX MOUNT helper exit' xnu/bsd/kern/kern_exit.c
             grep -Fq 'if (isroot && ronly) jnl_disable = 1;' xnu/bsd/sweet_hfs/core/hfs_vfsops.c
             grep -Fq 'vfs_flags(hfsmp->hfs_mp) & MNT_ROOTFS' xnu/bsd/sweet_hfs/core/hfs_vfsutils.c
             grep -Fq 'veux_fb_console_putc(c)' xnu/pexpert/arm/pe_kprintf.c

@@ -1,0 +1,97 @@
+From: ios-veux
+Subject: [PATCH] Report VEUX mount mode and first UFS writes
+
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -301,6 +301,21 @@ ufs_write_blocks(uint64_t lba, uint32_t count)
+ 		0, (uint8_t)(count >> 8), (uint8_t)count, 0
+ 	};
+-	return ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK, true);
++	int error = ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK, true);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	static bool veux_first_write_seen, veux_first_write_error_seen;
++	if (error && !veux_first_write_error_seen) {
++		veux_first_write_error_seen = true;
++		veux_bsd_stage(21); /* first UFS write failure */
++		printf("VEUX UFS: first UFS write failure error=0x%x lba=0x%llx count=0x%x\n",
++		    error, lba, count);
++	} else if (!error && !veux_first_write_seen) {
++		veux_first_write_seen = true;
++		veux_bsd_stage(20); /* first successful UFS write */
++		printf("VEUX UFS: first successful UFS write lba=0x%llx count=0x%x\n",
++		    lba, count);
++	}
++#endif
++	return error;
+ }
+ 
+ static int
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -4880,5 +4880,12 @@ execve(proc_t p, struct execve_args *uap, int32_t *retval)
+ {
+ 	struct __mac_execve_args muap;
+ 	int err;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (strncmp(p->p_comm, "mount", 5) == 0) {
++		extern void veux_bsd_stage(unsigned int stage);
++		veux_bsd_stage(18); /* mount helper exec entry */
++		printf("VEUX MOUNT helper start name=%s\n", p->p_comm);
++	}
++#endif
+ 
+ 	memoryshot(VM_EXECVE, DBG_FUNC_NONE);
+diff --git a/bsd/kern/kern_exit.c b/bsd/kern/kern_exit.c
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -1836,4 +1836,15 @@ proc_prepareexit(proc_t p, int rv, boolean_t perf_notify)
+ 	int kr = 0;
+ 	int create_corpse = FALSE;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (strncmp(p->p_comm, "mount", 5) == 0) {
++		extern void veux_bsd_stage(unsigned int stage);
++		veux_bsd_stage(19); /* mount helper exit */
++		if (WIFEXITED(rv)) {
++			printf("VEUX MOUNT helper exit status=0x%x\n", WEXITSTATUS(rv));
++		} else {
++			printf("VEUX MOUNT helper exit signal=0x%x raw=0x%x\n", WTERMSIG(rv), rv);
++		}
++	}
++#endif
+ 
+ 	if (p->p_crash_behavior != 0 || p == initproc) {
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -889,1 +889,2 @@
+ 		veux_bsd_stage(9); /* vfs_mountroot exit */
++		printf("VEUX ROOT mount result errno=0x%x\n", err);
+diff --git a/bsd/vfs/vfs_subr.c b/bsd/vfs/vfs_subr.c
+--- a/bsd/vfs/vfs_subr.c
++++ b/bsd/vfs/vfs_subr.c
+@@ -1215,2 +1215,9 @@ vfs_mountroot(void)
+ {
+ 	veux_bsd_stage(8); /* vfs_mountroot entry */
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	uint32_t rootrw = 0, ufsrw = 0;
++	PE_parse_boot_argn("rootrw", &rootrw, sizeof(rootrw));
++	PE_parse_boot_argn("ufsrw", &ufsrw, sizeof(ufsrw));
++	printf("VEUX ROOT mode=%s ufs_write=%s\n", rootrw == 1 ? "rw" : "ro",
++	    ufsrw == 1 ? "enabled" : "disabled");
++#endif
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
+--- a/osfmk/arm64/veux_early.c
++++ b/osfmk/arm64/veux_early.c
+@@ -779,9 +779,9 @@ veux_bsd_stage(unsigned int stage)
+- static const uint32_t colors[18] = {0xffffffff,0xffffff00,0xff00ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffff0000,0xff0080ff,0xff80ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffffffff,0xff4040ff,0xff40ff40,0xffff4040,0xff40ff40,0xffff2020};
+- if (stage >= 18) return;
++ static const uint32_t colors[22] = {0xffffffff,0xffffff00,0xff00ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffff0000,0xff0080ff,0xff80ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffffffff,0xff4040ff,0xff40ff40,0xffff4040,0xff40ff40,0xffff2020,0xff00ffff,0xffff00ff,0xff40ff40,0xffff2020};
++ if (stage >= 22) return;
+  vw_bsd_mask |= 1ULL << stage;
+  volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
+  unsigned cell = stage < 16 ? stage : stage - 16;
+  unsigned y0 = stage < 16 ? 2080 : 2208;
+  for (unsigned y=y0;y<y0+32;++y)
+   for (unsigned x=32+64*cell;x<64+64*cell;++x) fb[y*1080+x]=colors[stage];
+  veux_stage_flush();

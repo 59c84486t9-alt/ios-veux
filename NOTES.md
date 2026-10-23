@@ -1,3 +1,33 @@
+## >>> UPDATE 2026-10-23 (mount/UFS diagnostics and image geometry) <<<
+
+- User confirms the old userdata contents need not be preserved; the iOS sparse
+  root image can be reflashed if a writable-root experiment damages it. The
+  pre-flash raw copy is `/Volumes/savedrive/veux_userdata.img`, 109,156,577,280
+  bytes. I did not spend time hashing the full old copy.
+- Decoded `/Users/vivien/Downloads/ios16-root-20H392.simg`: logical raw image
+  17,179,869,184 bytes / 33,554,432 512-byte sectors; HFSX header says
+  blockSize 4096, totalBlocks 4,194,304, 16 GiB total. Expanded raw SHA-256 is
+  `7ed18fac9b9ecdab38ca3c3adc8a6abac3086e41235ba91d2d82788587bb760d`.
+- The pre-flash userdata partition is 213,196,440 512-byte sectors. The tail
+  ring is relative to partition end: 4 KiB LBAs `0x1969fd2..0x196a3d2`
+  (header then 1024 data blocks), or 512-byte sectors `0xcb4fe90..0xcb51e97`.
+  The alternate HFS volume header begins at relative byte `0x3fffffc00`,
+  sector `0x1fffffe`. The intended 4 MiB tail ring is in slack after the 16
+  GiB HFSX volume and does not overlap its alternate header or allocation file.
+- Geometry discrepancy to verify against current GPT when recovery is available:
+  Android's saved sysfs start is 23,961,920 512-byte sectors, but an older XNU
+  line reports start block `0x2b8c00` and `109643 MiB`. Since the ring writer
+  derives its absolute LUN address from its parsed GPT, only partition-relative
+  tail placement is certain. No recovery readback of the first 16 GiB is saved;
+  `adb devices` and `fastboot devices` currently show no phone.
+- Added uncommitted patches 0113/0114: preserve the last 20 console lines in
+  the panic region; report rootrw/ufsrw mode and vfs_mountroot errno; add mount
+  helper exec/exit status cells; add first UFS write success/error cells.
+  Read-only remains the default. A writable-root test requires both
+  `rootrw=1 ufsrw=1`; use `veuxlog=0` to disable the separate tail write so the
+  first-write cells isolate filesystem writes. Local patch/build checks and a
+  fresh CI run are pending; do not flash this candidate yet.
+
 ## >>> UPDATE 2026-10-23 (VEUX launchd wrong-platform diagnosis and test image) <<<
 
 - The 0112 phone photos show HFS mounted and launchd exec reached. UFS success cell 16 is green; adjacent UFS read-failure cell 17 is dark, with no UFS error line. Far-right red BSD cell 15 means `execve("/sbin/launchd")` returned an error.
@@ -32,9 +62,10 @@
 - Updated docs/VEUX-ROOT-BOOT-AUDIT.md with the gate table, UFS flow/error
   semantics, root-image provenance and backup state. Historical phone state
   records the 16 GiB HFSX iOS root image v15 on userdata and prior successful
-  HFS mount/launchd; it was flashed from a sparse image. No full userdata
-  partition backup is present; Android userdata was explicitly expendable and
-  was replaced by the reproducible iOS root. Only a 4 MiB tail backup exists.
+  HFS mount/launchd; it was flashed from a sparse image. The full pre-flash
+  userdata copy is at `/Volumes/savedrive/veux_userdata.img` (109,156,577,280
+  bytes, matching 213,196,440 512-byte sectors). User confirms the old contents
+  need not be preserved because the iOS image can be reflashed.
 - Run `39942134414` completed SUCCESS on source
   `6c8760871b89b9bb64f28d9b987c000cd1af0730` (VEUX DEVELOPMENT), including
   synthetic host diagnostic checks. Run URL:
