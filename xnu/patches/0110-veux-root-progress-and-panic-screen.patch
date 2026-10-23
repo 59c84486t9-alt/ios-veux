@@ -1,0 +1,656 @@
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -228,7 +228,7 @@
+ 		uint64_t now = mach_absolute_time();
+ 		if (now > deadline) {
+ 			ufs_wr(REG_UTRLCLR, ~1u);
+-			printf("SWEET UFS: command 0x%02x timed out\n", cdb[0]);
++			printf("SWEET/VEUX UFS: command 0x%02x timed out\n", cdb[0]);
+ 			return ETIMEDOUT;
+ 		}
+ 		if (sleepable && now >= spin_until) {
+@@ -257,7 +257,7 @@
+ 
+ 	uint32_t ocs = utrd->dw2 & 0xff;
+ 	if (ocs || ucd->resp[0] != 0x21 || ucd->resp[6] || ucd->resp[7]) {
+-		printf("SWEET UFS: command 0x%02x failed: ocs 0x%x upiu 0x%x response 0x%x status 0x%x\n",
++		printf("SWEET/VEUX UFS: command 0x%02x failed: ocs 0x%x upiu 0x%x response 0x%x status 0x%x\n",
+ 		    cdb[0], ocs, ucd->resp[0], ucd->resp[6], ucd->resp[7]);
+ 		return EIO;
+ 	}
+@@ -296,7 +296,7 @@
+ 	    count > BOUNCE_SIZE / UFS_BLOCK || lba < su.first_block ||
+ 	    lba - su.first_block >= su.nblocks || count > su.nblocks - (lba - su.first_block) ||
+ 	    lba + count - 1 > UINT32_MAX) {
+-		printf("SWEET UFS: refusing write of %u blocks at 0x%llx\n", count, lba);
++		printf("SWEET/VEUX UFS: refusing write of %u blocks at 0x%llx\n", count, lba);
+ 		return EPERM;
+ 	}
+ 	uint8_t cdb[10] = {
+@@ -323,7 +323,7 @@
+ 		return error;
+ 	}
+ 	if (memcmp(b, "EFI PART", 8) != 0) {
+-		printf("SWEET UFS: LUN %u has no GPT\n", su.lun);
++		printf("SWEET/VEUX UFS: LUN %u has no GPT\n", su.lun);
+ 		return ENXIO;
+ 	}
+ 	uint64_t entry_lba;
+@@ -332,7 +332,7 @@
+ 	memcpy(&nent, b + 80, 4);
+ 	memcpy(&esz, b + 84, 4);
+ 	if (esz != 128 || nent == 0 || nent * esz > BOUNCE_SIZE) {
+-		printf("SWEET UFS: unsupported GPT entries %u x %u\n", nent, esz);
++		printf("SWEET/VEUX UFS: unsupported GPT entries %u x %u\n", nent, esz);
+ 		return ENXIO;
+ 	}
+ 	error = ufs_read_blocks(entry_lba, (nent * esz + UFS_BLOCK - 1) / UFS_BLOCK);
+@@ -364,7 +364,7 @@
+ 		su.nblocks = last - first + 1;
+ 		return 0;
+ 	}
+-	printf("SWEET UFS: no GPT partition named \"%s\"\n", want);
++	printf("SWEET/VEUX UFS: no GPT partition named \"%s\"\n", want);
+ 	return ENOENT;
+ }
+ 
+@@ -373,16 +373,16 @@
+ {
+ 	uint32_t hce = ufs_rd(REG_HCE), hcs = ufs_rd(REG_HCS);
+ 	if (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
+-		printf("SWEET UFS: host not ready (hce 0x%x hcs 0x%x)\n", hce, hcs);
++		printf("SWEET/VEUX UFS: host not ready (hce 0x%x hcs 0x%x)\n", hce, hcs);
+ 		return ENXIO;
+ 	}
+ 	if (ufs_rd(REG_UTRLDBR)) {
+-		printf("SWEET UFS: requests outstanding from the bootloader\n");
++		printf("SWEET/VEUX UFS: requests outstanding from the bootloader\n");
+ 		return EBUSY;
+ 	}
+ 	/* With RAM above 4 GiB (mkadt.py --highmem) the DMA memory can be there too. */
+ 	if (((su.dma_pa + DMA_SIZE - 1) >> 32) && !(ufs_rd(REG_CAP) & CAP_64AS)) {
+-		printf("SWEET UFS: DMA memory at 0x%llx but the host has no 64-bit addressing\n",
++		printf("SWEET/VEUX UFS: DMA memory at 0x%llx but the host has no 64-bit addressing\n",
+ 		    su.dma_pa);
+ 		return ENXIO;
+ 	}
+@@ -396,7 +396,7 @@
+ 	/* Never ring a doorbell unless the host uses our list. */
+ 	if (ufs_rd(REG_UTRLBA) != (uint32_t)list || ufs_rd(REG_UTRLBAU) != (uint32_t)(list >> 32) ||
+ 	    !(ufs_rd(REG_UTRLRSR) & 1)) {
+-		printf("SWEET UFS: host did not take our request list\n");
++		printf("SWEET/VEUX UFS: host did not take our request list\n");
+ 		return EIO;
+ 	}
+ 	return 0;
+@@ -615,7 +615,7 @@
+ 	if (SecureDTLookupEntry(NULL, ufs_node_path, &node) != kSuccess ||
+ 	    SecureDTGetProperty(node, "reg", (void const **)&reg, &size) != kSuccess ||
+ 	    size < 2 * sizeof(uintptr_t)) {
+-		printf("SWEET UFS: no /sweet-ufs node in the device tree\n");
++		printf("SWEET/VEUX UFS: no /sweet-ufs node in the device tree\n");
+ 		return ENXIO;
+ 	}
+ 	PE_parse_boot_argn("ufsroot", want, sizeof(want));
+@@ -630,7 +630,7 @@
+ 	su.regs = ml_io_map(reg[0], reg[1]);
+ 	if (kmem_alloc_contig(kernel_map, &su.dma, DMA_SIZE, PAGE_MASK, 0, 0,
+ 	    KMA_DATA | KMA_ZERO | KMA_PERMANENT, VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
+-		printf("SWEET UFS: no contiguous DMA memory\n");
++		printf("SWEET/VEUX UFS: no contiguous DMA memory\n");
+ 		return ENOMEM;
+ 	}
+ 	ppnum_t pn = pmap_find_phys(kernel_pmap, (addr64_t)su.dma);
+@@ -676,7 +676,7 @@
+ 	su.writable = (rw != 0);
+ #endif
+ 	su.ready = true;
+-	printf("SWEET UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, %s, DMA at 0x%llx\n",
++	printf("SWEET/VEUX UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, %s, DMA at 0x%llx\n",
+ 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20,
+ 	    su.writable ? "read-write" : "read-only", su.dma_pa);
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+@@ -773,7 +773,7 @@
+ 	uint64_t flushed = 0, seq = 0;
+ 	void *bounce = (void *)(su.dma + DMA_BOUNCE);
+ 
+-	printf("SWEET LOG: console log to the last %u KiB of the partition (block 0x%llx)\n",
++	printf("SWEET/VEUX LOG: console log to the last %u KiB of the partition (block 0x%llx)\n",
+ 	    SWEET_LOG_BLOCKS * UFS_BLOCK >> 10, base);
+ 	for (;;) {
+ 		(void)tsleep(&sweet_log_chan, PZERO, "sweetlog", hz * (int)sweet_log_secs);
+@@ -809,7 +809,7 @@
+ 		}
+ 		lck_mtx_unlock(&sweet_ufs_lock);
+ 		if (error) {
+-			printf("SWEET LOG: write failed (%d), stopping\n", error);
++			printf("SWEET/VEUX LOG: write failed (%d), stopping\n", error);
+ 			return;
+ 		}
+ 		flushed = total;
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -701,7 +701,7 @@
+ #endif
+ 
+ #if SWEET_HFS
+-	/* HFS is built in on SWEET: register it like its kext would, before mounting root. */
++	/* HFS is built in on SWEET/VEUX: register it like its kext would, before mounting root. */
+ 	extern void sweet_hfs_register(void);
+ 	sweet_hfs_register();
+ #endif
+@@ -885,7 +885,14 @@
+ #endif
+ 
+ 		bsd_init_kprintf("vfs_mountroot\n");
+-		if (0 == (err = vfs_mountroot())) {
++		err = vfs_mountroot();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_bsd_stage(9); /* vfs_mountroot exit */
++#endif
++		if (0 == err) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++			veux_bsd_stage(13); /* vfs_mountroot succeeded; root device mounted */
++#endif
+ 			break;
+ 		}
+ 		rootdevice[0] = '\0';
+@@ -939,14 +946,14 @@
+ 		if (require_rootauth) {
+ 			/* enforce sealedness */
+ 			int autherr = VNOP_IOCTL(rootvnode, FSIOC_KERNEL_ROOTAUTH, NULL, 0, vfs_context_kernel());
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 			/*
+-			 * SWEET has no chain of trust to extend: the kernel itself is
++			 * SWEET/VEUX have no chain of trust to extend: the kernel itself is
+ 			 * booted unsigned and there is no Image4/AMFI, and its HFS root
+ 			 * cannot be a sealed volume. Report it instead of panicking.
+ 			 */
+ 			if (autherr) {
+-				printf("SWEET: root volume is not authenticated (error %d); continuing unsealed\n", autherr);
++				printf("SWEET/VEUX: root volume is not authenticated (error %d); continuing unsealed\n", autherr);
+ 			}
+ #else
+ 			if (autherr) {
+@@ -1051,6 +1058,9 @@
+ 
+ 	bsd_init_kprintf("calling bsd_utaskbootstrap\n");
+ 	bsd_utaskbootstrap();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(10); /* bsd_utaskbootstrap returned */
++#endif
+ 
+ 	pal_kernel_announce();
+ 
+@@ -1084,6 +1094,9 @@
+ 	proc_t p = current_proc();
+ 
+ 	process_name("init", p);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(11); /* init task starts launchd exec sequence */
++#endif
+ 
+ 	/* Set up exception-to-signal reflection */
+ 	ux_handler_setup();
+@@ -1105,6 +1118,9 @@
+ 	bsd_init_kprintf("bsd_do_post - done");
+ 
+ 	load_init_program(p);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(12); /* load_init_program returned */
++#endif
+ 	lock_trace = 1;
+ }
+ 
+diff --git a/bsd/kern/kern_core.c b/bsd/kern/kern_core.c
+--- a/bsd/kern/kern_core.c
++++ b/bsd/kern/kern_core.c
+@@ -117,9 +117,9 @@
+     thread_state_t tstate, mach_msg_type_number_t *count);
+ void task_act_iterate_wth_args(task_t, void (*)(thread_t, void *), void *);
+ 
+-#if defined(SECURE_KERNEL) || defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(SECURE_KERNEL) || defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ /*
+- * SWEET: off by default (sysctl kern.coredump=1 enables it). A crashing iOS
++ * SWEET/VEUX: off by default (sysctl kern.coredump=1 enables it). A crashing iOS
+  * daemon maps the whole shared region, so one core is gigabytes on the root
+  * volume and takes minutes on the phone's UFS.
+  */
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -99,6 +99,9 @@
+ #include <sys/uio_internal.h>
+ #include <sys/acct.h>
+ #include <sys/exec.h>
++#if defined(__arm64__)
++#include <arm64/sweet_early.h>
++#endif
+ #include <sys/kdebug.h>
+ #include <sys/signal.h>
+ #include <sys/aio_kern.h>
+@@ -6753,6 +6756,7 @@
+ {
+ 	int retval[2];
+ 	int error;
++	int exec_error;
+ 	struct execve_args init_exec_args;
+ 	user_addr_t argv0 = USER_ADDR_NULL, argv1 = USER_ADDR_NULL;
+ 
+@@ -6828,7 +6832,14 @@
+ 	 */
+ 	set_security_token(p);
+ 
+-	return execve(p, &init_exec_args, retval);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(14); /* launchd execve entry */
++#endif
++	exec_error = execve(p, &init_exec_args, retval);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (exec_error) veux_bsd_stage(15); /* execve returned an error */
++#endif
++	return exec_error;
+ }
+ 
+ static const char * init_programs[] = {
+@@ -7411,8 +7422,8 @@
+ 				error = EACCES;
+ 				goto done;
+ 			}
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
+-			/* SWEET runs every iOS binary this way: one short line per exec. */
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
++			/* SWEET/VEUX run every iOS binary this way: one short line per exec. */
+ 			printf("exec %s\n", p->p_name);
+ #else
+ 			printf("Allowing spawn of iOS binary %s since it has "
+diff --git a/bsd/kern/kern_mib.c b/bsd/kern/kern_mib.c
+--- a/bsd/kern/kern_mib.c
++++ b/bsd/kern/kern_mib.c
+@@ -518,7 +518,7 @@
+ 		 * Deprecated variables.  We still support these for
+ 		 * backwards compatibility purposes only.
+ 		 */
+-#if XNU_TARGET_OS_OSX && defined(__arm64__) && !defined(ARM64_BOARD_CONFIG_SWEET)
++#if XNU_TARGET_OS_OSX && defined(__arm64__) && !defined(ARM64_BOARD_CONFIG_SWEET) && !defined(ARM64_BOARD_CONFIG_VEUX)
+ 	/* SWEET: the macOS config runs the iOS userland, which wants the
+ 	 * device-tree names (hw.machine iPhone10,3, hw.model D22AP). */
+ 	/* The following two are kludged for backward
+diff --git a/bsd/kern/syscalls.master b/bsd/kern/syscalls.master
+--- a/bsd/kern/syscalls.master
++++ b/bsd/kern/syscalls.master
+@@ -650,7 +650,7 @@
+ 432	AUE_NULL	ALL	{ int audit_session_port(au_asid_t asid, user_addr_t portnamep); }
+ 433	AUE_NULL	ALL	{ int pid_suspend(int pid); }
+ 434	AUE_NULL	ALL	{ int pid_resume(int pid); }
+-#if CONFIG_EMBEDDED || defined(ARM64_BOARD_CONFIG_SWEET)
++#if CONFIG_EMBEDDED || defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 435	AUE_NULL	ALL	{ int pid_hibernate(int pid); }
+ #else
+ 435     AUE_NULL        ALL     { int nosys(void); }
+diff --git a/bsd/sweet_hfs/core/hfs_catalog.c b/bsd/sweet_hfs/core/hfs_catalog.c
+--- a/bsd/sweet_hfs/core/hfs_catalog.c
++++ b/bsd/sweet_hfs/core/hfs_catalog.c
+@@ -757,9 +757,9 @@
+ }
+ 
+ 
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
+-/*
+- * SWEET: hard links made by Linux tools lack kHFSHasLinkChainBit and every
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
++/*
++ * SWEET/VEUX: hard links made by Linux tools lack kHFSHasLinkChainBit and every
+  * lookup of them repairs (in memory) and reports it again; the console
+  * output slows boot down. Report the first few only.
+  */
+diff --git a/bsd/sweet_hfs/core/hfs_vfsutils.c b/bsd/sweet_hfs/core/hfs_vfsutils.c
+--- a/bsd/sweet_hfs/core/hfs_vfsutils.c
++++ b/bsd/sweet_hfs/core/hfs_vfsutils.c
+@@ -202,20 +202,20 @@
+ 	/* don't mount a writable volume if its dirty, it must be cleaned by fsck_hfs */
+ 	if ((hfsmp->hfs_flags & HFS_READ_ONLY) == 0 && hfsmp->jnl == NULL &&
+ 	    (SWAP_BE32(vhp->attributes) & kHFSVolumeUnmountedMask) == 0) {
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 		/*
+-		 * SWEET never unmounts its root (no clean shutdown yet), and
++		 * SWEET/VEUX do not yet unmount their root (no clean shutdown yet), and
+ 		 * there is no fsck_hfs before the root mount: take it anyway.
+ 		 */
+ 		if (vfs_flags(hfsmp->hfs_mp) & MNT_ROOTFS) {
+-			printf("hfs_mounthfsplus: SWEET: mounting dirty non-journaled root read-write\n");
++			printf("hfs_mounthfsplus: SWEET/VEUX: mounting dirty non-journaled root read-write\n");
+ 		} else {
+ #endif
+ 		if (HFS_MOUNT_DEBUG) {
+ 			printf("hfs_mounthfsplus: cannot mount dirty non-journaled volumes\n");
+ 		}
+ 		return (EINVAL);
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 		}
+ #endif
+ 	}
+diff --git a/bsd/sweet_hfs/sweet_hfs_iokit.c b/bsd/sweet_hfs/sweet_hfs_iokit.c
+--- a/bsd/sweet_hfs/sweet_hfs_iokit.c
++++ b/bsd/sweet_hfs/sweet_hfs_iokit.c
+@@ -80,7 +80,7 @@
+ 
+ 	int ret = vfs_fsadd(&vfe, &sweet_hfs_vfs_handle);
+ 	if (ret) {
+-		panic("SWEET HFS: vfs_fsadd failed: %d", ret);
++		panic("SWEET/VEUX HFS: vfs_fsadd failed: %d", ret);
+ 	}
+ 
+ 	hfs_init_zones();
+@@ -98,7 +98,7 @@
+ 		}
+ 	}
+ 
+-	printf("SWEET HFS: hfs-627.100.6 registered\n");
++	printf("SWEET/VEUX HFS: hfs-627.100.6 registered\n");
+ }
+ 
+ /* Built in, not a loadable kext: there is no kext to retain per mount. */
+diff --git a/bsd/vfs/vfs_subr.c b/bsd/vfs/vfs_subr.c
+--- a/bsd/vfs/vfs_subr.c
++++ b/bsd/vfs/vfs_subr.c
+@@ -77,6 +77,9 @@
+  * External virtual filesystem routines
+  */
+ 
++#if defined(__arm64__)
++#include <arm64/sweet_early.h>
++#endif
+ #include <sys/param.h>
+ #include <sys/systm.h>
+ #include <sys/proc_internal.h>
+@@ -1209,6 +1212,9 @@
+ int
+ vfs_mountroot(void)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(8); /* vfs_mountroot entry */
++#endif
+ #if CONFIG_MACF
+ 	struct vnode *vp;
+ #endif
+@@ -1232,7 +1238,13 @@
+ 		/*
+ 		 * used for netboot which follows a different set of rules
+ 		 */
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_bsd_stage(6); /* selected mountroot callback entry */
++#endif
+ 		error = (*mountroot)();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_bsd_stage(7); /* selected mountroot callback returned */
++#endif
+ 
+ 		KDBG_RELEASE(DBG_MOUNTROOT | DBG_FUNC_END, error, 0);
+ 		return error;
+@@ -1257,9 +1269,9 @@
+ 
+ 		mp = vfs_rootmountalloc_internal(vfsp, "root_device");
+ 		mp->mnt_devvp = rootvp;
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 		/*
+-		 * SWEET has no data volume: /private/var lives on the root, so
++		 * SWEET/VEUX have no data volume: /private/var lives on the root, so
+ 		 * boot-arg rootrw=1 mounts it read-write from the start.
+ 		 */
+ 		{
+@@ -1271,7 +1283,13 @@
+ #endif
+ 
+ 		if (vfsp->vfc_mountroot) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++			veux_bsd_stage(6); /* filesystem mountroot callback entry */
++#endif
+ 			error = (*vfsp->vfc_mountroot)(mp, rootvp, ctx);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++			veux_bsd_stage(7); /* filesystem mountroot callback returned */
++#endif
+ 		} else {
+ 			error = VFS_MOUNT(mp, rootvp, 0, ctx);
+ 		}
+diff --git a/bsd/vm/vm_unix.c b/bsd/vm/vm_unix.c
+--- a/bsd/vm/vm_unix.c
++++ b/bsd/vm/vm_unix.c
+@@ -1755,9 +1755,9 @@
+ 	return error;
+ }
+ 
+-#if !XNU_TARGET_OS_OSX || defined(ARM64_BOARD_CONFIG_SWEET)
++#if !XNU_TARGET_OS_OSX || defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ /*
+- * SWEET runs the iOS userland on the macOS config: SpringBoard calls
++ * SWEET/VEUX run the iOS userland on the macOS config: SpringBoard calls
+  * pid_hibernate when an app leaves the foreground, and nosys (SIGSYS)
+  * killed it. Without CONFIG_FREEZE this returns 0, as on iOS.
+  */
+diff --git a/iokit/bsddev/IOKitBSDInit.cpp b/iokit/bsddev/IOKitBSDInit.cpp
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -775,7 +775,7 @@
+ 		OSSafeReleaseNULL(matching);
+ 		int ufs_error = sweet_ufs_rootdev(root);
+ 		if (ufs_error) {
+-			panic("IOFindBSDRoot: SWEET UFS root %s unavailable: %d", rdBootVar, ufs_error);
++			panic("IOFindBSDRoot: SWEET/VEUX UFS root %s unavailable: %d", rdBootVar, ufs_error);
+ 		}
+ 		strlcpy(rootName, rdBootVar, rootNameSize);
+ 		IOLog("BSD root: %s, major %d, minor %d\n", rootName, major(*root), minor(*root));
+diff --git a/osfmk/arm64/sweet_early.h b/osfmk/arm64/sweet_early.h
+--- a/osfmk/arm64/sweet_early.h
++++ b/osfmk/arm64/sweet_early.h
+@@ -32,6 +32,7 @@
+ void veux_diag_vm_after(uint64_t pc, uint64_t far, int result, const struct veux_diag_vm_snapshot *snapshot);
+ void veux_diag_return(uint64_t pc, uint64_t far);
+ void veux_diag_panic(uint64_t pc);
++void veux_panic_screen(const char *fmt, va_list *args, unsigned long caller);
+ void veux_diag_tick(uint64_t pc);
+ void veux_wait_monitor_start(void);
+ void veux_bsd_stage(unsigned int stage);
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
+--- a/osfmk/arm64/veux_early.c
++++ b/osfmk/arm64/veux_early.c
+@@ -59,6 +59,48 @@
+ 	}
+ }
+ 
++
++
++extern void veux_fb_panic_begin(void);
++extern void veux_fb_panic_putc(char c);
++static void
++veux_panic_hex(uint64_t value)
++{
++	static const char digits[] = "0123456789abcdef";
++	for (int shift = 60; shift >= 0; shift -= 4) veux_fb_panic_putc(digits[(value >> shift) & 15]);
++}
++void
++veux_panic_screen(const char *fmt, va_list *args, unsigned long caller)
++{
++	veux_fb_panic_begin();
++	veux_fb_panic_putc('P'); veux_fb_panic_putc('A'); veux_fb_panic_putc('N');
++	veux_fb_panic_putc('I'); veux_fb_panic_putc('C'); veux_fb_panic_putc(':'); veux_fb_panic_putc(' ');
++	va_list copy;
++	va_copy(copy, *args);
++	_doprnt(fmt, &copy, veux_fb_panic_putc, 16);
++	va_end(copy);
++	veux_fb_panic_putc('\n');
++	const char *label = "caller=0x"; while (*label) veux_fb_panic_putc(*label++);
++	veux_panic_hex((uint64_t)caller); veux_fb_panic_putc('\n');
++	thread_t thread = current_thread();
++	uintptr_t low = thread ? (uintptr_t)thread->kernel_stack : 0;
++	uintptr_t high = low + kernel_stack_size;
++	uintptr_t *frame = (uintptr_t *)__builtin_frame_address(0);
++	for (unsigned int i = 0; i < 8; ++i) {
++		char prefix[8] = {'f','r','a','m','e','0','=',0};
++		prefix[5] = (char)('0' + i);
++		for (unsigned int j = 0; prefix[j]; ++j) veux_fb_panic_putc(prefix[j]);
++		veux_fb_panic_putc('0'); veux_fb_panic_putc('x');
++		if (!thread || (uintptr_t)frame < low || (uintptr_t)frame > high - 2 * sizeof(uintptr_t) || ((uintptr_t)frame & 15)) {
++			veux_panic_hex(0); veux_fb_panic_putc('\n'); break;
++		}
++		uintptr_t next = frame[0], ret = frame[1];
++		veux_panic_hex(ret); veux_fb_panic_putc('\n');
++		if (next <= (uintptr_t)frame || next >= high || next - (uintptr_t)frame > kernel_stack_size) break;
++		frame = (uintptr_t *)next;
++	}
++	veux_stage_flush();
++}
+ 
+ /* Low splash RAM is outside the high-bank physmap. start.s provides a
+  * narrow identity alias; arm_vm_init switches us to a permanent kernel VA. */
+@@ -587,7 +629,7 @@
+  * A dedicated 100ms callout avoids relying on a tickless scheduler's tick rate.
+  * It changes wakeup frequency, not pmap barriers. */
+ #define VW_MAX 128u
+-#define VW_PER_PAGE 6u
++#define VW_PER_PAGE 4u
+ struct vw_thread {
+  uint64_t thread, state, event, result, hint, continuation, stack, fp, flags, ra[8];
+ };
+@@ -628,7 +670,7 @@
+  if (vd_busy || vd_phase == 1 || vd_phase == 3 || vd_full_shown) return;
+  vd_busy = true;
+  volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
+- for (unsigned y = 868; y < 2072; ++y)
++ for (unsigned y = 868; y < 1816; ++y)
+   for (unsigned x = 0; x < 1080; ++x) fb[y * 1080 + x] = 0xff101010;
+  /* Header row IDs F0..F4; body IDs 00..35, fixed 20px pitch. */
+  unsigned int y = 872;
+@@ -737,8 +779,8 @@
+ void
+ veux_bsd_stage(unsigned int stage)
+ {
+- static const uint32_t colors[6] = {0xffffffff,0xffffff00,0xff00ff00,0xffff8000,0xff00ffff,0xffff00ff};
+- if (stage >= 6) return;
++ static const uint32_t colors[16] = {0xffffffff,0xffffff00,0xff00ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffff0000,0xff0080ff,0xff80ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffffffff,0xff4040ff,0xff40ff40,0xffff4040};
++ if (stage >= 16) return;
+  vw_bsd_mask |= 1ULL << stage;
+  volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
+  for (unsigned y=2080;y<2112;++y)
+diff --git a/osfmk/kern/debug.c b/osfmk/kern/debug.c
+--- a/osfmk/kern/debug.c
++++ b/osfmk/kern/debug.c
+@@ -1073,6 +1073,10 @@
+ #pragma clang diagnostic pop
+ 
+ #if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
++	/* Preserve panic text outside the scrolling console and diagnostics panel. */
++	#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_panic_screen(panic_format_str, panic_args, panic_caller);
++	#endif
+ 	/* No CPU/thread/debugger state is required for this first panic copy. */
+ 	sweet_early_panic(panic_format_str, panic_args);
+ #endif
+diff --git a/osfmk/prng/entropy.c b/osfmk/prng/entropy.c
+--- a/osfmk/prng/entropy.c
++++ b/osfmk/prng/entropy.c
+@@ -40,7 +40,7 @@
+ #include <machine/machine_routines.h>
+ #include <libkern/section_keywords.h>
+ #include <sys/cdefs.h>
+-#if defined(SWEET)
++#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include <corecrypto/ccdigest.h>
+ #include <corecrypto/ccsha2.h>
+ #endif
+@@ -97,7 +97,7 @@
+ 	// State for a SHA256 computation. This is used to accumulate
+ 	// entropy samples from across all CPUs. It is finalized when
+ 	// entropy is provided to the consumer of this module.
+-#if defined(SWEET)
++#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 	ccdigest_ctx_decl(CCSHA256_STATE_SIZE, CCSHA256_BLOCK_SIZE, sha256_ctx);
+ #else
+ 	SHA256_CTX sha256_ctx;
+@@ -482,7 +482,7 @@
+ static void
+ entropy_hash_init(void)
+ {
+-#if defined(SWEET)
++#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 	ccdigest_init(&ccsha256_ltc_di, entropy_data.sha256_ctx);
+ #else
+ 	SHA256_Init(&entropy_data.sha256_ctx);
+@@ -492,7 +492,7 @@
+ static void
+ entropy_hash_update(const void *data, size_t nbytes)
+ {
+-#if defined(SWEET)
++#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 	ccdigest_update(&ccsha256_ltc_di, entropy_data.sha256_ctx, nbytes, data);
+ #else
+ 	SHA256_Update(&entropy_data.sha256_ctx, data, nbytes);
+@@ -502,7 +502,7 @@
+ static void
+ entropy_hash_final(void *out)
+ {
+-#if defined(SWEET)
++#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ 	ccdigest_final(&ccsha256_ltc_di, entropy_data.sha256_ctx, out);
+ 	ccdigest_ctx_clear(CCSHA256_STATE_SIZE, CCSHA256_BLOCK_SIZE, entropy_data.sha256_ctx);
+ #else
+@@ -524,7 +524,7 @@
+ 
+ 	// Apple platforms need the corecrypto kext's SHA256 implementation.
+ 	// SWEET links the digest into the kernel instead.
+-#if !defined(SWEET)
++#if !defined(SWEET) && !defined(ARM64_BOARD_CONFIG_VEUX)
+ 	if (__improbable(!crypto_init)) {
+ 		return sample_count;
+ 	}
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1544,4 +1544,40 @@
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ 	veux_fb_console_col++;
+ }
++
++static uint32_t veux_fb_panic_col, veux_fb_panic_row;
++void
++veux_fb_panic_begin(void)
++{
++	if (!veux_fb_console_ready || veux_fb_console_base == NULL) return;
++	veux_fb_panic_col = veux_fb_panic_row = 0;
++	for (uint32_t y = 1816; y < 2072; ++y)
++		for (uint32_t x = 0; x < VEUX_FB_WIDTH; ++x)
++			veux_fb_console_base[y * (veux_fb_console_stride / 4u) + x] = 0xff000000;
++}
++
++void
++veux_fb_panic_putc(char c)
++{
++	if (!veux_fb_console_ready || veux_fb_console_base == NULL) return;
++	const uint32_t cols = VEUX_FB_WIDTH / 8u;
++	const uint32_t rows = (2072u - 1816u) / 16u;
++	if (c == '\r') { veux_fb_panic_col = 0; return; }
++	if (c == '\n' || veux_fb_panic_col >= cols) {
++		veux_fb_panic_col = 0;
++		if (++veux_fb_panic_row >= rows) return;
++		if (c == '\n') return;
++	}
++	unsigned char ch = (unsigned char)c;
++	if (ch < 0x20 || ch > 0x7e) ch = '?';
++	const unsigned char *glyph = iso_font + (uint32_t)ch * 16u;
++	uint32_t x0 = veux_fb_panic_col * 8u;
++	uint32_t y0 = 1816u + veux_fb_panic_row * 16u;
++	for (uint32_t gy = 0; gy < 16; ++gy) {
++		volatile uint32_t *line = veux_fb_console_base + (y0 + gy) * (veux_fb_console_stride / 4u) + x0;
++		for (uint32_t gx = 0; gx < 8; ++gx)
++			line[gx] = (glyph[gy] & (1u << gx)) ? 0xffffffffu : 0xff000000u;
++	}
++	veux_fb_panic_col++;
++}
+ #endif /* ARM64_BOARD_CONFIG_VEUX */

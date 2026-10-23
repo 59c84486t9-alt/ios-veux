@@ -80,6 +80,22 @@ jobs:
             grep -Fq 'vw_capture(void)' xnu/osfmk/arm64/veux_early.c
             grep -Fq 'Clear the new line on every advance' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'veux_bsd_stage(5);' xnu/bsd/kern/bsd_init.c
+            grep -Fq 'veux_bsd_stage(13)' xnu/bsd/kern/bsd_init.c
+            grep -Fq 'veux_bsd_stage(8)' xnu/bsd/vfs/vfs_subr.c
+            grep -Fq '#define VW_PER_PAGE 4u' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'for (unsigned y = 868; y < 1816; ++y)' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'veux_bsd_stage(6)' xnu/bsd/vfs/vfs_subr.c
+            grep -Fq 'veux_bsd_stage(7)' xnu/bsd/vfs/vfs_subr.c
+            grep -Fq 'ARM64_BOARD_CONFIG_VEUX' xnu/bsd/kern/syscalls.master
+            grep -Fq 'frame[1]' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'veux_bsd_stage(14)' xnu/bsd/kern/kern_exec.c
+            grep -Fq '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/iokit/Kernel/IOService.cpp
+            grep -Fq '!defined(ARM64_BOARD_CONFIG_SWEET) && !defined(ARM64_BOARD_CONFIG_VEUX)' xnu/iokit/Kernel/IOService.cpp
+            grep -Fq 'veux_panic_screen(panic_format_str, panic_args, panic_caller)' xnu/osfmk/kern/debug.c
+            grep -Fq '1816u + veux_fb_panic_row * 16u' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/bsd/sweet_hfs/core/hfs_vfsutils.c
+            grep -Fq 'defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/bsd/vm/vm_unix.c
+            grep -Fq 'defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/osfmk/prng/entropy.c
             # The upstream builder can warn and skip an incompatible patch
             # while still returning success. Require the VEUX bring-up edits
             # in the actual tree before accepting the kernel artifact.
