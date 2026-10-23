@@ -201,6 +201,26 @@ static uint64_t counter(void)
     __asm__ volatile("isb; mrs %0, cntvct_el0" : "=r"(ticks));
     return ticks;
 }
+#if PROBE_SCREEN
+static struct probe_info *probe_screen_info;
+static void probe_countdown_mark(unsigned int elapsed)
+{
+    if (!probe_screen_info || !probe_screen_info->fb.base) return;
+    volatile uint32_t *fb = (volatile uint32_t *)(uintptr_t)probe_screen_info->fb.base;
+    const struct probe_display *f = &probe_screen_info->fb;
+    /* Five visible progress cells at the top edge: one lights each second. */
+    for (unsigned y = 16; y < 48 && y < f->height; ++y) {
+        for (unsigned i = 0; i < 5; ++i) {
+            unsigned x0 = 32 + i * 48;
+            if (x0 + 32 > f->width) continue;
+            uint32_t color = i < elapsed ? 0xff00ff00 : 0xffffffff;
+            for (unsigned x = x0; x < x0 + 32; ++x)
+                fb[y * (f->stride / 4) + x] = color;
+        }
+    }
+    barrier();
+}
+#endif
 static void timed_reset(void)
 {
     uint64_t freq;
@@ -210,9 +230,15 @@ static void timed_reset(void)
         log_text("stage=4 invalid counter frequency; halt without reset\n");
         return;
     }
-    log_text("stage=4 counter wait 10 seconds\n");
+    log_text("stage=4 visible counter wait 5 seconds; watchdog bark=11 seconds\n");
     uint64_t start = counter();
-    while (counter() - start < freq * 10) __asm__ volatile("yield");
+    for (unsigned second = 1; second <= 5; ++second) {
+        while (counter() - start < freq * second) __asm__ volatile("yield");
+#if PROBE_SCREEN
+        probe_countdown_mark(second);
+#endif
+        log_hex("counter_second=", second);
+    }
     log_hex("elapsed_ticks=", counter() - start);
     log_text("stage=5 PSCI SYSTEM_RESET request\n");
     barrier();
@@ -250,7 +276,9 @@ void probe_main(uintptr_t fdt)
             log_hex("width=", info.fb.width); log_hex("height=", info.fb.height);
             log_hex("stride=", info.fb.stride); log_hex("bgr=", info.fb.bgr);
             log_text("stage=2 starting RGB fill\n");
+            probe_screen_info = &info;
             probe_pattern((volatile uint32_t *)(uintptr_t)info.fb.base, &info.fb);
+            probe_countdown_mark(0);
             barrier();
             log_text("stage=3 RGB fill complete\n");
         }

@@ -81,7 +81,7 @@ def main():
     image.write_bytes(packed)
     print(f'{image}\n{len(packed)} bytes; SHA-256 {hashlib.sha256(packed).hexdigest()}')
     print('Mode:', 'screen + marker' if args.screen else 'marker only (no framebuffer/FDT access)')
-    print('Requests standard PSCI reset after a 10-second counter wait; active slot stays unchanged.')
+    print('Requests standard PSCI reset after a visible 5-second counter wait; active slot stays unchanged.')
 
 
 if __name__ == '__main__':

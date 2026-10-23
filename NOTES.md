@@ -25,8 +25,45 @@
   helper exec/exit status cells; add first UFS write success/error cells.
   Read-only remains the default. A writable-root test requires both
   `rootrw=1 ufsrw=1`; use `veuxlog=0` to disable the separate tail write so the
-  first-write cells isolate filesystem writes. Local patch/build checks and a
-  fresh CI run are pending; do not flash this candidate yet.
+  first-write cells isolate filesystem writes. CI run `39959731804` passed on
+  commit `c3ec01fd9ad06c30d062ffd95e56bfa70c328f7a`; the kernel SHA-256 is
+  `e80f43181543ab7ba018b9f147365c55362a402958aef58c35838cbfdddc0f2c`.
+  Packaged `shim/out/veux-xnu-39959731804/shim-boot-veux-xnu-39959731804.img`
+  (17,121,280 bytes, SHA-256
+  `256a97332c5ae7f7235f01f8410572e6aa618aa82042a6a37fc05904924ecc27`). Its
+  extracted payload and outer shim kernel/DTB compare byte-for-byte. It boots
+  `rd=ufsroot0`, `cpus=1`, `veuxlog=0`, and opt-in `rootrw=1 ufsrw=1`.
+  Fastboot verified product `veux`, unlocked, slot B; flashing `boot_b` and
+  reboot both returned OKAY. The phone has not enumerated through ADB or
+  fastboot 10 seconds after reboot; later photos show the known launchd
+  wrong-platform panic (`namespace 9, code 0xe`). The first RW image omitted
+  `unentitled_ios_sim_launch=1`, so it did not reach mountroot. Repacked the
+  same CI kernel with that argument added:
+  `shim/out/veux-xnu-39959731804/shim-boot-veux-xnu-39959731804-rw-platform.img`
+  (17,121,280 bytes, SHA-256
+  `702225fbe827448ac5d6cae990b4d5037df64902968dc3c5be404c28fae20388`). The
+  payload, shim kernel and DTB compare byte-for-byte. The corrected image was
+  then flashed to `boot_b` and booted. It used `rootrw=1 ufsrw=1` (RW root).
+  Photos show `IOPlatformExpert.cpp:884 Halt/Restart Timed Out` after the
+  bsd_autoconf/Skywalk output. The logged timeout caller is the 30-second
+  `IOShutdownNotificationsTimedOut` fallback, so its printed frames do not
+  identify the original requester. The latest console tail has no mount-helper
+  result. Patch 0115 now records the originating `reboot_kernel` howto,
+  requestor, and stack, snapshots the actual `haltRestart` entry frames, and
+  reads the VEUX `/psci` SMC/HVC method before reset.
+
+- The live VEUX DTB has `/soc/psci { compatible = "arm,psci-1.0"; method =
+  "smc"; }` and `/soc/qcom,wdt@f410000` reports `qcom,bark-time = 11000` ms.
+  `tools/mkadt.py` now emits normalized `/psci { method = "smc"; }` only for
+  VEUX. A standalone RGB/countdown probe was rebuilt against the known VEUX
+  template: `shim/out/veux-psci-probe-20261023/shim-boot-veux-rgb-reset.img`,
+  446,464 bytes, SHA-256
+  `67382ebf4227f82328af1e14ed623eed8a997927fa77389bffe78678ef47189f`. It
+  marks five seconds on-screen, then issues PSCI SYSTEM_RESET; a reset near the
+  five-second mark (well before the 11-second watchdog bark) is the test
+  criterion. This probe has not been flashed: `fastboot devices` currently
+  returns no device. Do not flash the kernel reset implementation until the
+  standalone timing test confirms PSCI reset on this phone.
 
 ## >>> UPDATE 2026-10-23 (VEUX launchd wrong-platform diagnosis and test image) <<<
 

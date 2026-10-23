@@ -89,6 +89,19 @@ jobs:
             grep -Fq 'ARM64_BOARD_CONFIG_VEUX' xnu/bsd/kern/syscalls.master
             grep -Fq 'frame[1]' xnu/osfmk/arm64/veux_early.c
             grep -Fq 'veux_bsd_stage(14)' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'veux_lifecycle_stage(0)' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'veux_lifecycle_stage(1)' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'veux_lifecycle_stage(2)' xnu/bsd/kern/kern_exit.c
+            grep -Fq 'veux_lifecycle_stage(3)' xnu/bsd/kern/kern_exit.c
+            grep -Fq 'veux_reboot_request((uint32_t)howto' xnu/bsd/kern/kern_shutdown.c
+            grep -Fq 'VEUX reboot requested howto=0x%x' xnu/bsd/kern/kern_shutdown.c
+            grep -Fq 'VEUX PSCI: conduit=%s function=0x%llx' xnu/iokit/Kernel/IOPlatformExpert.cpp
+            grep -Fq 'IORegistryEntry::fromPath("/psci", gIODTPlane)' xnu/iokit/Kernel/IOPlatformExpert.cpp
+            grep -Fq 'smc #0' xnu/iokit/Kernel/IOPlatformExpert.cpp
+            grep -Fq 'hvc #0' xnu/iokit/Kernel/IOPlatformExpert.cpp
+            grep -Fq 'veux_lifecycle_stage(5)' xnu/iokit/Kernel/IOPlatformExpert.cpp
+            grep -Fq 'reboot howto=0x' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'veux_reboot_frames' xnu/osfmk/arm64/veux_early.c
             grep -Fq '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/iokit/Kernel/IOService.cpp
             grep -Fq '!defined(ARM64_BOARD_CONFIG_SWEET) && !defined(ARM64_BOARD_CONFIG_VEUX)' xnu/iokit/Kernel/IOService.cpp
             grep -Fq 'veux_panic_screen(panic_format_str, panic_args, panic_caller)' xnu/osfmk/kern/debug.c
@@ -228,6 +241,7 @@ jobs:
         run: |
           python3 tools/test-veux-console.py dxb/xnu diag-host
           python3 tools/test-veux-frames.py dxb/xnu diag-host
+          python3 tools/test-veux-psci-adt.py
 
       - name: Package build tree for local compiles
         if: always()

@@ -257,6 +257,14 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
     # identity for its platform expert.
     board_compatible = (cstr('xiaomi,veux') + cstr('qcom,sm6375')) if veux else (
         cstr('xiaomi,sweet') + cstr('qcom,sm7150'))
+    root_children = [chosen, defaults, cpus, arm_io] + ([] if veux else [fbcon]) + \
+       ([veux_ramoops] if veux else []) + [buttons] + product + ([] if qemu else [ufs])
+    if veux:
+        # The live SM6375 DTB's /soc/psci node advertises SMC conduit.
+        # XNU's VEUX restart implementation consumes this normalized ADT node.
+        root_children.append(node('psci', [ph(),
+            ('compatible', cstr('arm,psci-1.0')),
+            ('method', cstr('smc'))]))
     return node('device-tree', [
         ph(),
         ('compatible', cstr('D22AP') + cstr('iPhone10,3') + board_compatible + cstr('AppleARM')),
@@ -266,8 +274,7 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
         ('manufacturer', cstr('Apple Inc.')),
         ('#address-cells', u32(2)),
         ('#size-cells', u32(2)),
-    ], [chosen, defaults, cpus, arm_io] + ([] if veux else [fbcon]) +
-       ([veux_ramoops] if veux else []) + [buttons] + product + ([] if qemu else [ufs]))
+    ], root_children)
 
 
 if __name__ == '__main__':
