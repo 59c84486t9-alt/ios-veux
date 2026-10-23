@@ -48,7 +48,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
 +		bool use_hvc = method && method->getLength() == 4 &&
 +		    memcmp(method->getBytesNoCopy(), "hvc", 4) == 0;
 +		if (use_smc || use_hvc) {
-+			uint64_t x0 = (type == kPEHaltCPU) ? 0x84000008ULL : 0x84000009ULL;
++			register uint64_t x0 __asm__("x0") = (type == kPEHaltCPU) ? 0x84000008ULL : 0x84000009ULL;
 +			veux_lifecycle_stage(5);
 +			IOLog("VEUX PSCI: conduit=%s function=0x%llx type=0x%x before call\n",
 +			    use_smc ? "smc" : "hvc", x0, type);

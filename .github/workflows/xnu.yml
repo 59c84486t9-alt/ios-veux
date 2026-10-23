@@ -97,6 +97,7 @@ jobs:
             grep -Fq 'VEUX reboot requested howto=0x%x' xnu/bsd/kern/kern_shutdown.c
             grep -Fq 'VEUX PSCI: conduit=%s function=0x%llx' xnu/iokit/Kernel/IOPlatformExpert.cpp
             grep -Fq 'IORegistryEntry::fromPath("/psci", gIODTPlane)' xnu/iokit/Kernel/IOPlatformExpert.cpp
+            grep -Fq 'register uint64_t x0 __asm__("x0")' xnu/iokit/Kernel/IOPlatformExpert.cpp
             grep -Fq 'smc #0' xnu/iokit/Kernel/IOPlatformExpert.cpp
             grep -Fq 'hvc #0' xnu/iokit/Kernel/IOPlatformExpert.cpp
             grep -Fq 'veux_lifecycle_stage(5)' xnu/iokit/Kernel/IOPlatformExpert.cpp
