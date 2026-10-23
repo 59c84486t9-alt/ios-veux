@@ -2,9 +2,9 @@
 #include <stdint.h>
 
 #ifdef DEVICE_VEUX
-#define FB_BASE		0x85200000UL	/* VEUX simple-framebuffer node */
+#define FB_BASE		0x85200000UL	/* VEUX RGB probe: visible scanout */
 #define FB_W		1080
-#define FB_H		2520
+#define FB_H		2400
 #define FB_STRIDE	4320		/* a8r8g8b8 */
 #define FB_SIZE		0x00c00000UL
 #else

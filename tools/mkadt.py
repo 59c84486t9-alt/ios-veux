@@ -97,7 +97,7 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
         # ADT encodes each root-level address and size cell as a u64.
         ('reg', u64(0x85200000, 0x00c00000)),
         ('width', u32(1080)),
-        ('height', u32(2520)),
+        ('height', u32(2400)),
         ('stride', u32(4320)),
         ('format', cstr('a8r8g8b8')),
     ])

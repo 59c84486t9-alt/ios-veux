@@ -376,7 +376,12 @@ void shim_main(uint64_t dtb)
 
 	/* An xnu payload in the ramdisk means: boot it (MMU stays off). */
 	stage = "loader";
+#ifdef DEVICE_VEUX
+	loader_early_marker("\n--- SHIM VEUX entry before framebuffer ---\n");
+	con_clear(0xff000000u); /* Contrast for the XNU stage cells. */
+#else
 	con_clear(RED);
+#endif
 	con_str("SHIM", "sweet milestone 4: xnu loader");
 	con_skip();
 	const char *why = loader_boot(dtb);

@@ -93,7 +93,11 @@ jobs:
             grep -Fq 'vaddr = ml_io_map(paddr, *pmsg_size);' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'XNU VEUX pmsg device-map v2' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'veux_fb_init();' xnu/pexpert/arm/pe_kprintf.c
-            grep -Fq 'VEUX_FB_HEIGHT             2520u' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'veux_mark_block 0, 0xffff0000' xnu/osfmk/arm64/start.s
+            grep -Fq 'veux_early_relocate(VEUX_EARLY_ALIAS + 0x1200000)' xnu/osfmk/arm64/arm_vm_init.c
+            grep -Fq 'veux_stage_mark(4)' xnu/pexpert/arm/pe_fiq.c
+            grep -Fq 'veux_stage_mark(5)' xnu/pexpert/arm/pe_kprintf.c
+            grep -Fq 'VEUX_FB_HEIGHT             2400u' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'VEUX_FB_STRIDE             4320u' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'format=a8r8g8b8' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'PE_parse_boot_argn("veuxfb"' xnu/pexpert/arm/pe_serial.c
@@ -133,7 +137,7 @@ jobs:
           assert "veux_fb_init();" in pmsg_init, "initialize the VEUX framebuffer after early I/O tables are ready"
           assert "PE_parse_boot_argn(\"veuxfb\"" in probe and "PE_parse_boot_argn(\"veuxfbconsole\"" in probe, "marker and console remain opt-in"
           assert "VEUX_FB_BASE               0x85200000ULL" in region and "VEUX_FB_SIZE               0x00c00000u" in region, "use the supplied simple-framebuffer region"
-          assert "VEUX_FB_WIDTH              1080u" in region and "VEUX_FB_HEIGHT             2520u" in region, "use the supplied simple-framebuffer geometry"
+          assert "VEUX_FB_WIDTH              1080u" in region and "VEUX_FB_HEIGHT             2400u" in region, "use the RGB-probe-validated geometry"
           assert "VEUX_FB_STRIDE             4320u" in region and "format=a8r8g8b8" in region, "use the supplied stride and pixel format"
           assert "ml_io_map_wcomb((vm_offset_t)VEUX_FB_BASE, VEUX_FB_SIZE)" in probe, "map the firmware-declared framebuffer directly"
           assert "address != VEUX_FB_BASE" not in region and "dsi_active" not in region and "VEUX_SDE_BASE" not in region, "do not gate writes on live SDE register checks"

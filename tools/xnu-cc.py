@@ -17,12 +17,13 @@ Env: XNU_CC_EXTRA   extra flags (e.g. "-DKPERF -DKPC" for config changes)
      XNU_CC_OBJDIR  emit real objects there instead of a syntax-only check
                     (then: llvm-nm for undefined symbols = link errors)
 """
-import concurrent.futures as cf, os, re, shlex, subprocess, sys
+import concurrent.futures as cf, os, re, shlex, shutil, subprocess, sys
 from collections import Counter
 
-CI_DXB = '/Users/runner/work/ios-sweet/ios-sweet/dxb'
+CI_DXB = os.environ.get('XNU_CC_CI_ROOT', '/Users/runner/work/ios-sweet/ios-sweet/dxb')
 CI_SDK_PLATFORM = re.compile(r'/Applications/Xcode[^ ]*?\.sdk/+System/Library/Frameworks/Kernel\.framework/Versions/A/PrivateHeaders/platform')
-CLANG = os.path.expanduser('~/swift/usr/bin/clang')
+CLANG = os.environ.get('XNU_CC_CLANG') or (os.path.expanduser('~/swift/usr/bin/clang')
+    if os.path.isfile(os.path.expanduser('~/swift/usr/bin/clang')) else shutil.which('clang'))
 DROP = {'-c', '-g', '-MD', '-MMD'}
 DROP_WITH_ARG = {'-MF', '-MT', '-o', '-arch'}
 COMPONENTS = ('osfmk', 'bsd', 'iokit', 'libkern', 'pexpert', 'security', 'san', 'libsa')
@@ -120,7 +121,17 @@ def run(item, bt, cdirs):
 
 
 def main():
+    global CI_DXB
     log, bt = sys.argv[1], os.path.abspath(sys.argv[2])
+    if 'XNU_CC_CI_ROOT' not in os.environ:
+        with open(log, errors='replace') as stream:
+            for line in stream:
+                match = re.search(r'(/Users/runner/work/[^/\s]+/[^/\s]+/dxb)/xnu/', line)
+                if match:
+                    CI_DXB = match.group(1)
+                    break
+    if os.environ.get('XNU_CC_OBJDIR'):
+        os.makedirs(os.environ['XNU_CC_OBJDIR'], exist_ok=True)
     per_file = '--per-file' in sys.argv
     filters = [a for a in sys.argv[3:] if a != '--per-file']
     cmds = commands(log)

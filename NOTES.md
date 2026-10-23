@@ -1,3 +1,45 @@
+## >>> UPDATE 2026-10-22 (probe tests, fastboot log loss, XNU stage patch) <<<
+
+- Executed requested marker-only control: flashed only boot_b with the verified
+  edd94c... v3 marker image, selected B, rebooted; all fastboot operations OKAY.
+  User observed repeating Xiaomi logo / black / restart cycles, interval not
+  measured. Returned through physical fastboot to slot A recovery: pstore empty.
+- Linux /dev/pmsg0 direct-recovery control PASSED: exact marker
+  VEUX_LINUX_PMSG_CONTROL_20261022_V3 recovered in pmsg-ramoops-0 (1206 bytes,
+  SHA256 a0894894df57d7d4defe06349cdfc132bb86455a76a9df707d5b1bfe9d012d77).
+  Repeated with marker VEUX_LINUX_FASTBOOT_CONTROL_20261022_V3 and a warm
+  recovery -> fastboot -> recovery transition on A: pstore EMPTY. Thus that
+  recovery route loses even a Linux-written marker; empty XNU logs through
+  it cannot localize failure. Bare-metal pmsg execution remains unproven.
+- Actual recovery device-node properties agree with the 1 MiB record/pmsg
+  split at d0000000/d0100000. A console-ramoops filename is not evidence of
+  a different split: inspected Qualcomm source calls its record zone console.
+- Flashed the verified be0134... RGB-reset image to boot_b next. User reports
+  "RGB pattern visible, then restart". This validates visible output from the
+  fallback using live splash reservation / assumed 1080x2400 stride4320.
+  Returned via fastboot to slot-A recovery; RGB probe remains on boot_b.
+  No userdata image or slot-A partition was flashed during either test.
+- Raw control captures and flash logs are in ignored research/veux-logs/
+  marker-reset-v3-test/ and rgb-reset-v3-test/. Preserve Linux successful pmsg
+  dump as the comparison; no fabricated last XNU line is available.
+- Added 0105-veux-early-stage-cells.patch after the successful pattern test:
+  six cells for _start, MMU on, arm_init, platform/DT, GIC/timer config and
+  console. Exact 12 MiB L3 mapping (16K pages) has a persistent kernel alias
+  across TTBR0 teardown. The ordinary high-bank physmap excludes splash RAM.
+  Text console leaves the footer untouched; GIC color is not proof of IRQ
+  delivery. Use cpus=1 for the candidate.
+- Corrected shim/ADT/late-console height to the tested 2400; shim now emits
+  an entry pmsg marker before clearing the screen black. Earlier c27fda0
+  enabled clearing before the handoff marker: plausible regression candidate,
+  not established cause. No new XNU image has been flashed in this update.
+- Six changed XNU files emitted local arm64 objects, including assembly;
+  three changed shim files cross-compiled. Refreshed downloaded exported
+  sweet_early.h before pexpert checks. Standard git apply and all CI source
+  assertions pass; 105-patch validation and seven probe tests pass. Updated
+  xnu-cc.py to detect fork CI paths/use installed clang/create object dir.
+  One final full CI build is next; exact run ID will be recorded separately.
+- Flash sequence and outcome matrix: docs/VEUX-BOOT-DIAGNOSTICS.md.
+
 ## >>> UPDATE 2026-10-22 (positive-control marker/reset probes prepared) <<<
 
 - Current root slot-A recovery live tree contains splash_region@0x85200000,

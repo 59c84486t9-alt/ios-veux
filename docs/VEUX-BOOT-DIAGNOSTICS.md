@@ -98,4 +98,93 @@ selection priority, fallback refusal, RGB/BGR layout and untouched row padding.
 Both freestanding AArch64 builds and boot-v2 payload/DTB/image-ID verification
 pass. C objects contain no ABS64 pointers; marker binary symbol/disassembly
 inspection confirms no parser/renderer and the counter/SMC sequence.
-Both v3 probes are prepared but unflashed. Phone remains in slot-A recovery.
+Both v3 probes were tested; see measured outcomes below. Phone is back in slot-A recovery, with the RGB probe still on boot_b.
+
+## Ordered device tests and interpretation
+
+| Order | Image / action | Evidence sought |
+| --- | --- | --- |
+| 1 | Marker-only + 10-second counter + PSCI reset, boot_b | Recover exact `VEUX POSCTRL v3` marker in slot-A recovery after observing reset. No display dependency. |
+| 2 | RGB screen probe, boot_b, only after control is understood | Log selected address/geometry; compare bars and corner with recorded fill-complete stage. |
+| 3 | XNU with cpus=1 and incremental stage breadcrumbs | First failing boundary using a display/log channel already exercised independently. |
+
+| Result | What it supports / does not prove |
+| --- | --- |
+| Exact marker + elapsed-ticks + reset-request records recovered | Probe C entry, pmsg writes, counter wait and reset request executed; recovery preserved those records. Does not validate XNU mapping or UFS logger. |
+| Marker recovered but no reset-request record | Probe reached logging but may have stopped earlier; inspect last complete stage. Truncation or reset loss is also possible. |
+| Reboots near expected interval, marker absent | Some reset path is active, but PSCI vs watchdog still needs evidence; log transport is unvalidated, so an empty XNU log cannot locate a stop. |
+| Neither marker nor reset observed | Still ambiguous: image entry, entry-state guard, pmsg access, counter access, or retention. Do not call this proof of XNU failure. |
+| Pattern visible and fill-complete record recovered | The selected buffer/layout can produce a visible image; inspect RGB order, border and row pitch. |
+| Fill-complete recorded but no visible pattern | CPU stores completed; active plane, format, compression, display state or refresh still needs investigation. |
+| Source/starting-fill logged but no completion | Suspect framebuffer access or interruption during fill; compare reset interval and preserved records. |
+| SKIP plus later counter/reset records | Probe works but rejects its descriptors; inspect logged source/count/geometry before changing validation. |
+
+### XNU breadcrumb patch 0105 (implemented after visible RGB result)
+
+Keep cpus=1 and avoid userspace/UFS dependencies for the first stage test.
+Retains existing early-text milestones and adds six 32x32 color cells at
+y=2304, x=32+64*cell (zero-based), using the now-tested buffer:
+
+| Cell | Boundary | Color |
+| --- | --- | --- |
+| 1 | earliest `_start` entry | red |
+| 2 | MMU enabled, verified mapping usable | orange |
+| 3 | `arm_init` entry | yellow |
+| 4 | DT parsing completed | green |
+| 5 | GIC/timer initialization completed | cyan |
+| 6 | console ready | magenta |
+
+Use the verified physical address before the MMU and an explicitly valid mapping
+after it; a generic physmap need not include low reserved splash RAM when XNU
+manages only the high DDR bank. Log matching stage IDs through the proven channel.
+Do not overwrite Linux persistent-RAM header words with an arbitrary counter.
+Move the shim's own marker ahead of any optional screen clear when returning to
+XNU. Compile changed C files with tools/xnu-cc.py, check assembly separately,
+then perform one full kernel build for the tested candidate.
+
+## Device results from this session
+
+1. Marker-only image flashed to boot_b and booted successfully by fastboot.
+   User observed repeated Xiaomi-logo/black-screen/restart cycles. Exact interval
+   was not measured, so watchdog vs requested PSCI reset is not independently
+   proven. After manual fastboot and slot-A recovery, pstore was empty.
+2. Wrote `VEUX_LINUX_PMSG_CONTROL_20261022_V3` through Linux /dev/pmsg0 and
+   used `adb reboot recovery`. The exact marker survived in pmsg-ramoops-0.
+3. Wrote `VEUX_LINUX_FASTBOOT_CONTROL_20261022_V3`, then used adb reboot
+   bootloader and fastboot reboot recovery, keeping A selected. Pstore was
+   empty. This establishes loss across the fastboot recovery route even with
+   Linux's own writer. It does not prove the bare-metal writer executed.
+4. RGB probe flashed next. User explicitly observed the RGB pattern followed
+   by restart. The live-DT splash fallback can drive a visible pattern on this
+   phone. Returned to slot-A recovery; no XNU breadcrumb image flashed yet.
+
+The current recovery device-node properties independently confirm record-size
+0x100000, pmsg-size 0x100000, reg=<0 0xd0000000 0 0x200000>. The console file
+seen after a Linux reboot is not evidence for a different pmsg offset; this
+Qualcomm source names the record zone "console". The actual recovery kernel
+source is not fully matched, so retain the live DT and successful control as
+stronger evidence than the filename.
+
+Patch 0105 uses a dedicated L3 table with exactly 768 16KiB framebuffer pages,
+leaving the rest of the containing 32MiB block unmapped. It walks the existing
+bootstrap L1 table, then shares that L3 table via a reserved kernel alias before
+TTBR0 teardown. No reliance on low splash RAM being in the high-bank physmap.
+Console rows stop above the marker footer. The ADT/shim/late-console geometry
+is corrected from the earlier 2520 assumption to the tested 2400 lines.
+Cells show named boundaries, not necessarily chronological numeric order:
+console routing and GIC initialization may occur in a different order. Cyan
+means GIC/timer-PPI configuration completed, not proven timer IRQ delivery.
+
+The unchanged diagnostic ADT was also checked: /chosen DRAM base 0x100000000,
+size 0xf8600000; /cpus MPIDRs 0x0..0x700; /arm-io translation base 0x01000000;
+GICD 0x0f200000/0x10000; GICR 0x0f240000/0x100000; virtual timer INTID 19.
+These agree with recorded board data but do not validate XNU's runtime use.
+
+Local validation: six changed XNU translation units emitted arm64 objects
+(including start.s), three changed shim translation units compiled freestanding,
+patch 0105 applies with standard git apply, all CI source assertions pass, and
+seven probe tests pass. The exported sweet_early.h in the downloaded build tree
+was refreshed for the two pexpert compile checks; full CI handles header export.
+The helper xnu-cc.py now detects the fork's CI root, finds installed clang when
+~/swift is absent, and creates the requested object directory. Full XNU link
+and device breadcrumb results remain separate pending checks.

@@ -83,7 +83,7 @@ typedef void (*xnu_entry_t)(uint64_t boot_args_pa);
  * This proves the shim can touch the reserved region and gives Android a
  * marker even if XNU stops before PE_init_kprintf runs.
  */
-static void veux_pmsg_handoff_marker(void)
+void loader_early_marker(const char *marker)
 {
 	#define PMSG_PA   0xd0100000UL
 	#define PMSG_SIG  0x43474244u
@@ -92,7 +92,6 @@ static void veux_pmsg_handoff_marker(void)
 	volatile uint32_t *hdr = (volatile uint32_t *)PMSG_PA;
 	volatile uint8_t *data = (volatile uint8_t *)(PMSG_PA + PMSG_HDR);
 	const uint32_t capacity = PMSG_SIZE - PMSG_HDR;
-	static const char marker[] = "\n--- SHIM VEUX ramoops: XNU handoff ---\n";
 	uint32_t start, size;
 
 	if (hdr[0] != PMSG_SIG || hdr[1] >= capacity ||
@@ -103,7 +102,7 @@ static void veux_pmsg_handoff_marker(void)
 	}
 	start = hdr[1];
 	size = hdr[2];
-	for (unsigned int i = 0; i < sizeof(marker) - 1; i++) {
+	for (unsigned int i = 0; marker[i]; i++) {
 		data[start] = (uint8_t)marker[i];
 		start = (start + 1) % capacity;
 		if (size < capacity)
@@ -181,7 +180,7 @@ const char *loader_boot(uintptr_t dtb)
 	con_hex("JUMP", entry_pa);
 	con_str("XNU", "jumping (fbcon clears screen)");
 	#ifdef DEVICE_VEUX
-	veux_pmsg_handoff_marker();
+	loader_early_marker("\n--- SHIM VEUX ramoops: XNU handoff ---\n");
 	#endif
 
 	/* Everything was written with the MMU and caches off; drop any stale I-cache lines too. */
