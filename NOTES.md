@@ -18,7 +18,9 @@
 - Found later PE_init_kprintf overwrites the VEUX sink with UART/discard.
   Added 0107 preserving VEUX sink plus direct routing banner; local arm64
   object and 107-patch validation pass. Early alias and diagnostics retained.
-  Full CI is next; no 0107 image flashed yet. Current B still 0106.
+  CI 39891452278 started for 729dc6f:
+  https://github.com/59c84486t9-alt/ios-veux/actions/runs/39891452278
+  No 0107 image flashed yet. Current B still 0106.
 
 ## >>> UPDATE 2026-10-22 (0106 CI passed, packaged and booted) <<<
 
