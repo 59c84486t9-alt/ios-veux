@@ -1,3 +1,27 @@
+## >>> UPDATE 2026-10-23 (0109 idle wait candidate prepared) <<<
+
+- User requests wait-state diagnosis after handled first fault and idle samples.
+  Added 0109: console y64..799 clears on init/advance/wrap and opaque glyphs;
+  handled faults get two compact status rows, full panel only unresolved/panic.
+- Bootstrap identity + 100ms timer, five seconds consecutive single-core idle
+  samples -> one immutable validated global-thread snapshot capped128. Captures
+  state/options, wait_event/result, block hints, continuation, bounded saved FP
+  trace up to8 RAs; flags unavailable traces. Six threads/page frozen rotating
+  every2sec for filming. Pset runqueue/realtime counts, sched_tick start/end and
+  native timer count. No IRQ sleeping locks; cpus=1 only. Adds periodic wakeups.
+- BSD strip y2080 cells0..5: postnet, IOKit entry/exit, rootlookup entry/exit,
+  bsd_utaskbootstrap. Existing first-fault bit rows/alias/stage strips unchanged.
+- Local all4 object compiles pass, actual console and frame core host tests pass,
+  VM walk/recovery tests pass, workflow source checks and109-patch checks pass.
+  Synthetic tests do NOT prove cache/barrier/live stack behavior. Pmap unchanged.
+- Added exact CI-kernel nm helper and docs/VEUX-IDLE-WAITS.md with screen legend,
+  capture limitations and root analysis. Bootargs rd=ufsroot0, not ramdisk; outer
+  INITRD is XNU payload. Root bypasses generic Stillwaiting loop, initial IOBSD
+  resource wait up to30sec; UFS commands5sec each. Need0109 photos to classify waits.
+- Not yet dispatched/booted at this milestone. Preserve0108 phone observation
+  state. CI success required before new image/flash. Next: finalpatchreview,
+  commit/push, dispatch and await exact success.
+
 ## >>> UPDATE 2026-10-22 (0108 photos: resolved first fault, idle sample) <<<
 
 - Photo 1 is early: abort/VM counters zero, first PAR/result all-ones means

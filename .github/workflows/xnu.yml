@@ -76,6 +76,10 @@ jobs:
         run: |
           bash build.sh
           if [[ "$MACHINE_CONFIG" == "VEUX" ]]; then
+            grep -Fq 'veux_wait_monitor_start();' xnu/osfmk/kern/startup.c
+            grep -Fq 'vw_capture(void)' xnu/osfmk/arm64/veux_early.c
+            grep -Fq 'Clear the new line on every advance' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'veux_bsd_stage(5);' xnu/bsd/kern/bsd_init.c
             # The upstream builder can warn and skip an incompatible patch
             # while still returning success. Require the VEUX bring-up edits
             # in the actual tree before accepting the kernel artifact.
@@ -169,7 +173,7 @@ jobs:
           assert "address != VEUX_FB_BASE" not in region and "dsi_active" not in region and "VEUX_SDE_BASE" not in region, "do not gate writes on live SDE register checks"
           assert "VEUX simplefb marker wrote white 32x32 at 0x85200000" in region, "successful screen marker must remain uniquely identifiable"
           assert "veux_fb_console_base = fb" in probe and "veux_fb_console_ready = true" in probe, "enable console after the direct map succeeds"
-          assert "Transparent overlay: preserve the existing splash." in fbcon and "VEUX_FB_CONSOLE_FG" in region, "console must write only white foreground glyph pixels"
+          assert "Clear the new line on every advance" in fbcon and "VEUX_FB_CONSOLE_FG" in region, "clear console lines on wrap; keep foreground glyphs"
           assert "veux_fb_console_putc(c)" in kprintf, "route VEUX printk to the simple-framebuffer console"
           assert "veux_log_append(&c, 1)" in serial, "mirror the active VEUX pmsg printk path into the UFS log ring"
           assert "os_atomic_store(&veux_log_total, at + 1, release)" in ufs, "publish log bytes only after storing them"
@@ -187,6 +191,12 @@ jobs:
           PY
             echo "Verified VEUX CPU, bounded opt-in userdata logging, direct simple-framebuffer console, AMFI, and opt-in userspace diagnostics"
           fi
+
+      - name: Host diagnostic bounds checks (synthetic memory only)
+        if: inputs.machine_config == 'VEUX'
+        run: |
+          python3 tools/test-veux-console.py dxb/xnu diag-host
+          python3 tools/test-veux-frames.py dxb/xnu diag-host
 
       - name: Package build tree for local compiles
         if: always()

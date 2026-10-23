@@ -1,0 +1,365 @@
+--- a/osfmk/arm64/veux_early.c
++++ b/osfmk/arm64/veux_early.c
+@@ -9,6 +9,11 @@
+ #include <vm/vm_kern.h>
+ #include <arm/machine_routines.h>
+ #include <kern/misc_protos.h>
++#include <kern/thread.h>
++#include <kern/processor.h>
++#include <kern/sched.h>
++#include <kern/timer_call.h>
++#include <kern/clock.h>
+ #include <pexpert/arm/protos.h>
+ 
+ #define VEUX_EARLY_PENDING_SIZE 2048u
+@@ -158,6 +163,7 @@
+ static uint64_t vd_tick_shown, vd_latest_esr, vd_latest_sp;
+ static unsigned int vd_phase; /* 0 outside, 1 VM pending, 2 experiments done, 3 experimenting, 4 terminal panic */
+ static bool vd_busy, vd_dirty;
++static bool vd_full_shown;
+ static uint64_t vd_first_par, vd_first_result, vd_first_pc, vd_first_far, vd_first_call, vd_first_pair_count;
+ static bool vd_first_valid;
+ static uint64_t vd_exp_par[4] = {UINT64_MAX, UINT64_MAX, UINT64_MAX, UINT64_MAX};
+@@ -408,9 +414,19 @@
+ {
+  if (vd_busy || !vd_dirty || vd_phase == 1 || vd_phase == 3) return;
+  vd_busy = true;
++ bool full = vd_panics || (vd_aborts && (!vd_first_valid || vd_report.result ||
++     (vd_report.par & 1) || vd_run > 1));
++ if (!full) {
++  /* Compact: count, first PAR.F (all-ones = not captured), repeat flag. */
++  vd_row(0, vd_aborts, vd_first_valid ? vd_first_par & 1 : UINT64_MAX);
++  vd_row(1, vd_run > 1, vd_first_valid ? vd_first_result : UINT64_MAX);
++  vd_dirty = false; veux_stage_flush(); vd_busy = false; return;
++ }
++ vd_full_shown = true;
+  vd_row(0, vd_latest_esr, vd_last_pc); vd_row(1, vd_last_far, vd_latest_sp);
+  vd_row(2, vd_aborts, vd_run); vd_row(3, vd_last_pc, vd_last_far);
+  if (vd_run >= 8) { vd_cell(5); vd_row(4, vd_run, vd_aborts); }
++ vd_row(7, vd_vm_done, vd_report.result);
+  vd_row(0x0a, vd_first_valid ? vd_first_par : UINT64_MAX,
+      vd_first_valid ? vd_first_result : UINT64_MAX);
+  vd_row(0x0b, vd_report.tcr, vd_report.sctlr); vd_row(0x0c, vd_report.ttbr, vd_report.mair);
+@@ -455,7 +471,7 @@
+ veux_diag_kernel_entry(uint64_t pc, uint64_t far)
+ {
+  (void)far;
+- vd_cell(0); vd_row(5, vd_aborts, pc); /* NB marker/status, no publish */
++ vd_cell(0); (void)pc; /* NB marker/status, no publish */
+ }
+ void
+ veux_diag_vm_before(uint64_t pc, uint64_t far, struct veux_diag_vm_snapshot *snapshot)
+@@ -469,7 +485,7 @@
+  snapshot->ttbr = __builtin_arm_rsr64("TTBR1_EL1");
+  snapshot->mair = __builtin_arm_rsr64("MAIR_EL1");
+  for (unsigned int i = 0; i < 3; i++) snapshot->pa[i] = snapshot->desc[i] = snapshot->par[i] = 0;
+- vd_cell(1); vd_row(6, vd_vm_calls, far);
++ vd_cell(1);
+  volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
+  for (unsigned int y = 2240; y < 2272; y++)
+   for (unsigned int x = 160; x < 192; x++) fb[y * 1080 + x] = 0xff101010;
+@@ -542,7 +558,7 @@
+ veux_diag_return(uint64_t pc, uint64_t far)
+ {
+  (void)far;
+- ++vd_returns; vd_cell(3); vd_row(8, vd_returns, pc);
++ ++vd_returns; vd_cell(3); (void)pc;
+  vd_phase = 0; vd_dirty = true; vd_publish();
+ }
+ void
+@@ -562,8 +578,172 @@
+  if (vd_busy) return;
+  /* During a VM block, these NB writes remain visible without completing PTE
+   * stores. Full panel publication/flush is deferred until experiments finish. */
+- vd_row(0x20, vd_ticks, pc); vd_row(0x23, vd_tick_same, vd_tick_different);
++ if (vd_full_shown) { vd_row(0x20, vd_ticks, pc); vd_row(0x23, vd_tick_same, vd_tick_different); }
+  if (vd_phase != 1 && vd_phase != 3) { vd_dirty = true; vd_publish(); }
+ }
+ 
++/* Idle observer: one immutable, bounded snapshot; no sleeping locks in IRQ.
++ * cpus=1 + interrupted idle thread prevents global-list mutation while copied.
++ * A dedicated 100ms callout avoids relying on a tickless scheduler's tick rate.
++ * It changes wakeup frequency, not pmap barriers. */
++#define VW_MAX 128u
++#define VW_PER_PAGE 6u
++struct vw_thread {
++ uint64_t thread, state, event, result, hint, continuation, stack, fp, flags, ra[8];
++};
++static struct vw_thread vw_threads[VW_MAX];
++static unsigned int vw_count, vw_page, vw_pages, vw_page_ticks;
++static uint64_t vw_boot, vw_idle_since, vw_idle_samples, vw_tick_start, vw_tick_end;
++static uint64_t vw_runq, vw_rt, vw_truncated, vw_native_ticks;
++static bool vw_started, vw_captured;
++static struct timer_call vw_call;
++static uint64_t vw_bsd_mask;
++
++static bool
++vw_readable(uint64_t address, uint64_t size)
++{
++ if (!size || address < VM_MIN_KERNEL_ADDRESS || address + size < address) return false;
++ for (uint64_t p = address & ~16383ULL; p <= ((address + size - 1) & ~16383ULL); p += 16384)
++  if (vd_at(p, false) & 1) return false;
++ return true;
++}
++/* BEGIN VEUX FRAME CORE -- host test executes this actual bounded walker. */
++static void
++vw_unwind(struct vw_thread *t, uint64_t fp, uint64_t lr, uint64_t low, uint64_t high)
++{
++ t->fp = fp; t->ra[0] = lr;
++ for (unsigned int n = 1; n < 8 && fp; ++n) {
++  if ((fp & 15) || fp < low || high < 16 || fp > high - 16 || !vw_readable(fp, 16)) { t->flags |= 16; break; }
++  const volatile uint64_t *frame = (const void *)fp;
++  uint64_t next = frame[0]; t->ra[n] = frame[1];
++  if (next && next <= fp) { t->flags |= 32; break; }
++  fp = next;
++ }
++}
++/* END VEUX FRAME CORE */
++/* Each thread uses 9 rows: metadata x4, continuation/FP, then 8 RAs x4. */
++static void
++vw_show(void)
++{
++ if (vd_busy || vd_phase == 1 || vd_phase == 3 || vd_full_shown) return;
++ vd_busy = true;
++ volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
++ for (unsigned y = 868; y < 2072; ++y)
++  for (unsigned x = 0; x < 1080; ++x) fb[y * 1080 + x] = 0xff101010;
++ /* Header row IDs F0..F4; body IDs 00..35, fixed 20px pitch. */
++ unsigned int y = 872;
++ #define VW_ROW(id,a,b) do { vd_digit(16,y,(id)>>4); vd_digit(26,y,(id)); \
++  vd_hex(96,y,(uint64_t)(a)); vd_hex(512,y,(uint64_t)(b)); y += 20; } while (0)
++ VW_ROW(0xf0, vw_page, vw_pages);
++ VW_ROW(0xf1, vw_count, vw_truncated);
++ VW_ROW(0xf2, vw_tick_start, vw_tick_end);
++ VW_ROW(0xf3, vw_runq, vw_rt);
++ VW_ROW(0xf4, vw_idle_samples, vw_native_ticks);
++ unsigned int first = vw_page * VW_PER_PAGE;
++ for (unsigned int i = first; i < vw_count && i < first + VW_PER_PAGE; ++i) {
++  struct vw_thread *t = &vw_threads[i];
++  unsigned int id = (i - first) * 9;
++  VW_ROW(id, t->thread, t->state);
++  VW_ROW(id+1, t->event, t->result);
++  VW_ROW(id+2, t->hint, t->flags);
++  VW_ROW(id+3, t->continuation, t->fp);
++  VW_ROW(id+4, t->stack, i);
++  for (unsigned int j=0;j<4;++j) { VW_ROW(id+5+j,t->ra[2*j],t->ra[2*j+1]); }
++ }
++ #undef VW_ROW
++ veux_stage_flush(); /* all NB stores, one publication barrier per frozen page */
++ vd_busy = false;
++}
++static void
++vw_capture(void)
++{
++ processor_t cpu = current_processor();
++ vw_tick_end = sched_tick; vw_native_ticks = vd_ticks;
++ vw_rt = cpu->processor_set->rt_runq.count;
++#if CONFIG_SCHED_CLUTCH
++ vw_runq = cpu->processor_set->pset_clutch_root.scr_thr_count;
++#elif defined(CONFIG_SCHED_TRADITIONAL) || defined(CONFIG_SCHED_MULTIQ)
++ vw_runq = cpu->processor_set->pset_runq.count;
++#else
++ vw_runq = UINT64_MAX;
++#endif
++ queue_entry_t head = (queue_entry_t)&threads;
++ queue_entry_t link = queue_first(&threads);
++ while (link != head && vw_count < VW_MAX) {
++  uint64_t address = (uint64_t)link - __builtin_offsetof(struct thread, threads);
++  if (!vw_readable(address, sizeof(struct thread))) { vw_truncated = 2; break; }
++  thread_t th = (thread_t)address;
++  struct vw_thread *t = &vw_threads[vw_count++];
++  t->thread = address; t->state = (uint32_t)th->state | ((uint64_t)th->options << 32); t->event = th->wait_event;
++  t->result = (uint32_t)th->wait_result;
++  t->hint = (uint64_t)th->block_hint | ((uint64_t)th->pending_block_hint << 32);
++  t->continuation = (uint64_t)th->continuation; t->stack = th->kernel_stack;
++  if (address == vw_boot) t->flags |= 1;
++  if (th == cpu->idle_thread) t->flags |= 2;
++  /* Active idle context is not a saved blocked-thread stack. A continuation
++   * dispatch can discard the old stack: record it, never invent a backtrace. */
++  if (th == current_thread()) t->flags |= 4;
++  else if (th->continuation) t->flags |= 8;
++  else {
++   uint64_t low = t->stack, high = low + kernel_stack_size;
++   uint64_t context = th->machine.kstackptr;
++   if (low && high > low && context >= low && context <= high - sizeof(struct arm_kernel_saved_state) &&
++       vw_readable(context, sizeof(struct arm_kernel_saved_state))) {
++    const struct arm_kernel_saved_state *ss = (const void *)context;
++    vw_unwind(t, ss->fp, ss->lr, low, high);
++   } else t->flags |= 64;
++  }
++  queue_entry_t next = queue_next(&th->threads);
++  if (next == link) { vw_truncated = 3; break; }
++  link = next;
++ }
++ if (link != head && !vw_truncated) vw_truncated = 1;
++ vw_pages = (vw_count + VW_PER_PAGE - 1) / VW_PER_PAGE;
++ if (!vw_pages) vw_pages = 1;
++ vw_captured = true; vw_show();
++}
++static void
++vw_timer(timer_call_param_t unused0, timer_call_param_t unused1)
++{
++ (void)unused0; (void)unused1;
++ uint64_t saved_par = __builtin_arm_rsr64("PAR_EL1");
++ /* Timer interrupt context: no global thread-list mutex (could be held by
++  * interrupted code). Copy only on single CPU and interrupted idle thread. */
++ if (vd_phase != 1 && vd_phase != 3 && !vd_full_shown) {
++  if (!vw_captured) {
++   uint64_t now = __builtin_arm_rsr64("CNTVCT_EL0");
++   if (processor_count == 1 && current_thread() == current_processor()->idle_thread) {
++    if (!vw_idle_since) { vw_idle_since = now; vw_tick_start = sched_tick; vw_idle_samples = 0; }
++    ++vw_idle_samples;
++    if (now - vw_idle_since >= 5 * __builtin_arm_rsr64("CNTFRQ_EL0")) vw_capture();
++   } else vw_idle_since = 0;
++  } else if (++vw_page_ticks >= 20) {
++   vw_page_ticks = 0; vw_page = (vw_page + 1) % vw_pages; vw_show();
++  }
++ }
++ __builtin_arm_wsr64("PAR_EL1", saved_par);
++ uint64_t deadline; clock_interval_to_deadline(100, 1000000, &deadline);
++ timer_call_enter(&vw_call, deadline, TIMER_CALL_LOCAL);
++}
++void
++veux_wait_monitor_start(void)
++{
++ if (vw_started) return;
++ vw_started = true; vw_boot = (uint64_t)current_thread();
++ timer_call_setup(&vw_call, vw_timer, NULL);
++ uint64_t deadline; clock_interval_to_deadline(100, 1000000, &deadline);
++ timer_call_enter(&vw_call, deadline, TIMER_CALL_LOCAL);
++}
++void
++veux_bsd_stage(unsigned int stage)
++{
++ static const uint32_t colors[6] = {0xffffffff,0xffffff00,0xff00ff00,0xffff8000,0xff00ffff,0xffff00ff};
++ if (stage >= 6) return;
++ vw_bsd_mask |= 1ULL << stage;
++ volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
++ for (unsigned y=2080;y<2112;++y)
++  for (unsigned x=32+64*stage;x<64+64*stage;++x) fb[y*1080+x]=colors[stage];
++ veux_stage_flush();
++}
++
+ #endif /* ARM64_BOARD_CONFIG_VEUX */
+--- a/osfmk/arm64/sweet_early.h
++++ b/osfmk/arm64/sweet_early.h
+@@ -33,6 +33,8 @@
+ void veux_diag_return(uint64_t pc, uint64_t far);
+ void veux_diag_panic(uint64_t pc);
+ void veux_diag_tick(uint64_t pc);
++void veux_wait_monitor_start(void);
++void veux_bsd_stage(unsigned int stage);
+ void veux_irq_probe(void);
+ int veux_probe_interrupt(unsigned int group);
+ static inline void sweet_early_disable(void) {}
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1479,6 +1479,9 @@
+ 		veux_fb_console_base = fb;
+ 		veux_fb_console_stride = VEUX_FB_STRIDE;
+ 		veux_fb_console_col = veux_fb_console_row = 0;
++		/* Erase stale shim/previous console glyphs only inside the console box. */
++		for (unsigned y = VEUX_FB_CONSOLE_TOP; y < 800u; ++y)
++			for (unsigned x = 0; x < VEUX_FB_WIDTH; ++x) fb[y * 1080u + x] = 0xff000000;
+ 		veux_fb_console_ready = true;
+ 		veux_fb_log("VEUX simplefb console 1080x2400 stride=4320 format=a8r8g8b8\n");
+ 	}
+@@ -1509,7 +1512,13 @@
+ 	if (c == '\n' || veux_fb_console_col >= cols) {
+ 		veux_fb_console_col = 0;
+ 		veux_fb_console_row = (veux_fb_console_row + 1) % rows;
++		/* Clear the new line on every advance, including wrap. No stale text. */
++		uint32_t top = VEUX_FB_CONSOLE_TOP + veux_fb_console_row * 16u * VEUX_FB_CONSOLE_SCALE;
++		for (uint32_t y = top; y < top + 16u * VEUX_FB_CONSOLE_SCALE; ++y)
++			for (uint32_t x = 0; x < VEUX_FB_WIDTH; ++x)
++				veux_fb_console_base[y * (veux_fb_console_stride / 4u) + x] = 0xff000000;
+ 		if (c == '\n') {
++			__asm__ volatile("dsb sy" ::: "memory");
+ 			return;
+ 		}
+ 	}
+@@ -1525,11 +1534,9 @@
+ 			volatile uint32_t *line = veux_fb_console_base +
+ 			    (y0 + gy * VEUX_FB_CONSOLE_SCALE + sy) * (veux_fb_console_stride / 4u) + x0;
+ 			for (uint32_t gx = 0; gx < 8; gx++) {
+-				if ((glyph[gy] & (1u << gx)) == 0) {
+-					continue; /* Transparent overlay: preserve the existing splash. */
+-				}
++				uint32_t color = (glyph[gy] & (1u << gx)) ? VEUX_FB_CONSOLE_FG : 0xff000000;
+ 				for (uint32_t sx = 0; sx < VEUX_FB_CONSOLE_SCALE; sx++) {
+-					line[gx * VEUX_FB_CONSOLE_SCALE + sx] = VEUX_FB_CONSOLE_FG;
++					line[gx * VEUX_FB_CONSOLE_SCALE + sx] = color;
+ 				}
+ 			}
+ 		}
+--- a/osfmk/kern/startup.c
++++ b/osfmk/kern/startup.c
+@@ -709,6 +709,9 @@
+ 	ml_spin_debug_clear_self();
+ #endif
+ 	(void) spllo();         /* Allow interruptions */
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_wait_monitor_start(); /* boot thread identity; timers/callouts now ready */
++#endif
+ 
+ 	/*
+ 	 * This will start displaying progress to the user, start as early as possible
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -1,3 +1,6 @@
++#if defined(__arm64__)
++#include <arm64/sweet_early.h>
++#endif
+ /*
+  * Copyright (c) 2000-2021 Apple Inc. All rights reserved.
+  *
+@@ -863,6 +866,9 @@
+ 	 */
+ 	bsd_init_kprintf("calling net_init_run\n");
+ 	net_init_run();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(0);
++#endif
+ #endif /* NETWORKING */
+ 
+ 	bsd_init_kprintf("calling inittodr\n");
+@@ -1119,7 +1125,14 @@
+ 		}
+ 	}
+ 
+-	return IOKitBSDInit();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(1);
++#endif
++	kern_return_t result = IOKitBSDInit();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(2);
++#endif
++	return result;
+ }
+ 
+ 
+@@ -1131,7 +1144,13 @@
+ 	u_int32_t       flags;
+ 	kern_return_t   err;
+ 
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(3);
++#endif
+ 	err = IOFindBSDRoot(rootdevice, sizeof(rootdevice), &rootdev, &flags);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(4);
++#endif
+ 	if (err) {
+ 		printf("setconf: IOFindBSDRoot returned an error (%d);"
+ 		    "setting rootdevice to 'sd0a'.\n", err);     /* XXX DEBUG TEMP */
+@@ -1165,6 +1184,9 @@
+ void
+ bsd_utaskbootstrap(void)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_bsd_stage(5);
++#endif
+ 	thread_t thread;
+ 	struct uthread *ut;
+ 
