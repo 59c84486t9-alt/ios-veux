@@ -1,0 +1,19 @@
+From: ios-veux
+Subject: [PATCH] Stop after one VEUX root-mount failure
+
+The generic BSD root-mount loop retries a failed mount. For the VEUX
+bring-up, report the terminal failure and panic rather than repeating UFS
+traffic against the same damaged or unsupported root volume.
+
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -901,5 +901,9 @@
+ #endif
+ 		printf("cannot mount root, errno = %d\n", err);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		printf("VEUX MOUNTROOT: failure; no retry errno=0x%x\n", err);
++		panic("VEUX root mount failed; no retry errno=0x%x", err);
++#endif
+ 	}
+ 
+ 	IOSecureBSDRoot(rootdevice);

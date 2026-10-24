@@ -2,12 +2,18 @@ From: ios-veux
 Subject: [PATCH] Sample VEUX process liveness after launchd early boot
 
 After launchd reports early boot complete, periodically print a bounded
-process/thread snapshot to the framebuffer console and persistent ring.
+process/thread snapshot to the framebuffer console. Console output is mirrored
+into the in-memory ring, but this sampler does not flush storage.
 
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -106,0 +107,1 @@ bsd/dev/memdev.c			standard
+@@ -112,5 +112,6 @@ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
+ bsd/dev/sweet_usb.c			standard
+ bsd/dev/mem.c				standard
 +bsd/dev/veux_liveness.c		standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
 
 --- a/osfmk/console/serial_console.c
 +++ b/osfmk/console/serial_console.c
@@ -43,7 +49,7 @@ process/thread snapshot to the framebuffer console and persistent ring.
 
 --- /dev/null
 +++ b/bsd/dev/veux_liveness.c
-@@ -0,0 +1,161 @@
+@@ -0,0 +1,159 @@
 +#include <sys/param.h>
 +#include <sys/proc.h>
 +#include <sys/proc_internal.h>
@@ -60,7 +66,6 @@ process/thread snapshot to the framebuffer console and persistent ring.
 +extern uint64_t get_saved_state_pc(arm_saved_state_t *);
 +extern boolean_t is_saved_state64(arm_saved_state_t *);
 +extern void veux_idle_sample_report(void);
-+extern int veux_log_flush_sync(void);
 +
 +#define VEUX_LIVE_MAX 16
 +#define VEUX_SEEN_MAX 1024
@@ -188,8 +193,6 @@ process/thread snapshot to the framebuffer console and persistent ring.
 +			    e->threads, (unsigned long long)e->user_pc, mark, is_new ? " NEW" : "");
 +		}
 +		veux_live_launchd();
-+		printf("VEUX LIVE: sync ring flush follows\n");
-+		(void)veux_log_flush_sync();
 +		(void)tsleep(&live_chan, PWAIT, "veuxlive", 10 * hz);
 +	}
 +}
@@ -199,6 +202,7 @@ process/thread snapshot to the framebuffer console and persistent ring.
 +{
 +	thread_t thread;
 +	if (!os_atomic_cmpxchg(&live_started, 0, 1, relaxed)) return;
++	printf("VEUX BUILD: ID=__VEUX_BUILD_ID__\n");
 +	if (kernel_thread_start(veux_liveness_thread, NULL, &thread) == KERN_SUCCESS) {
 +		thread_deallocate(thread);
 +	} else {
