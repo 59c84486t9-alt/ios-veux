@@ -75,7 +75,10 @@ diff --git a/bsd/sweet_hfs/core/hfs_vfsops.c b/bsd/sweet_hfs/core/hfs_vfsops.c
 +		 * Keep journaled roots read-only and inspect their metadata without
 +		 * opening the journal; rootrw=1 opts into the normal journal path.
 +		 */
-+		if (isroot && ronly) jnl_disable = 1;
++		if (isroot && ronly) {
++			jnl_disable = 1;
++			printf("VEUX HFS: read-only root journal replay disabled\n");
++		}
 +#endif
  				
  		//

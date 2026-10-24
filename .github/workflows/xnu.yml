@@ -21,6 +21,7 @@ on:
       - "xnu/patches/**"
       - "tools/kernel-manifest.py"
       - "tools/strictify-dxb.py"
+      - "tools/verify-veux-wrapper.py"
       - ".github/workflows/xnu.yml"
 
 concurrency:
@@ -60,6 +61,7 @@ jobs:
           PY
           # 12.5-14.3 use the top-level patches dir; ours go next to blacktop's
           cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/
+          cp xnu/patches/SKIP_ALLOWLIST.txt patch-skip-allowlist.txt
           # libfirehose_kernel is built arm64e-only; the SWEET/VEUX kernels are plain arm64
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           python3 tools/strictify-dxb.py dxb/build.sh
@@ -86,6 +88,7 @@ jobs:
         working-directory: dxb
         env:
           PATCH_STATUS_FILE: ${{ github.workspace }}/patch-status.txt
+          PATCH_ALLOWLIST_FILE: ${{ github.workspace }}/patch-skip-allowlist.txt
           # make -k gathers compiler diagnostics; patch application itself is fail-fast.
           MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
         run: |
@@ -207,7 +210,8 @@ jobs:
             grep -Fq 'first UFS write failure' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'VEUX ROOT mode=' xnu/bsd/vfs/vfs_subr.c
             grep -Fq 'VEUX MOUNT helper exit' xnu/bsd/kern/kern_exit.c
-            grep -Fq 'if (isroot && ronly) jnl_disable = 1;' xnu/bsd/sweet_hfs/core/hfs_vfsops.c
+            grep -Fq 'if (isroot && ronly) {' xnu/bsd/sweet_hfs/core/hfs_vfsops.c
+            grep -Fq 'VEUX HFS: read-only root journal replay disabled' xnu/bsd/sweet_hfs/core/hfs_vfsops.c
             grep -Fq 'vfs_flags(hfsmp->hfs_mp) & MNT_ROOTFS' xnu/bsd/sweet_hfs/core/hfs_vfsutils.c
             grep -Fq 'veux_fb_console_putc(c)' xnu/pexpert/arm/pe_kprintf.c
             grep -Fq 'PE_parse_boot_argn("veuxsandbox"' xnu/bsd/kern/sweet_amfi.c

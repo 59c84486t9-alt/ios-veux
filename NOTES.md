@@ -1,3 +1,67 @@
+## >>> UPDATE 2026-10-24 (strict patch audit, build identity, wrapper verification) <<<
+
+- Kept macOS 13.5 / XNU 8796. The SWEET/VEUX staging scripts 0019, 0020,
+  and 0026 explicitly pin to XNU 8796.141.3; moving to an older XNU would
+  require a separate source/patch port and would not improve this audited base.
+- GitHub logs were checked for runs 39805058203, 39940219041, 39942134414,
+  39945294859, 39952064511, 39973136957, 40051486458, 40092567840,
+  40103755855, and 40129031828. The only recurring non-VEUX skips are
+  `iobuffermemd_monterey.patch` (context mismatch at
+  `iokit/Kernel/IOBufferMemoryDescriptor.cpp:332`), `skywalk_sonoma.patch`
+  (`bsd/skywalk/packet/os_packet.h:883`), `syntax_checker_sonoma.patch`
+  (`tools/lldbmacros/core/syntax_checker.py:1`), and `TrustCache.patch`
+  (its TrustCache headers already exist in XNU 8796). These have no VEUX
+  behavior/build/symbol effect; they are version-specific upstream patches or
+  duplicate upstream headers. All four are now explicit, signature-checked
+  entries in `xnu/patches/SKIP_ALLOWLIST.txt`; if any starts applying, ceases
+  to be skipped, changes failure signature, or disappears, the build fails.
+- The same logs show accidental VEUX skips: 0113 and 0114 in run 39952064511,
+  and 0117 in 40103755855. Those runs still passed upstream patch handling.
+  Run 39952064511 had no documented packaged/flashed image; any package from
+  it lacked 0113/0114. The later flashed images from 39973136957,
+  40051486458, and 40092567840 show 0113/0114 applied; run 40103755855
+  lacked 0117 because its first hunk did not apply. The associated observations
+  (old panic photos without the dedicated 0113 console tail, and mount/UFS
+  photos without 0114 helper and write status) cannot be used to infer those
+  missing diagnostics. Historical 0111 read-only journal guard was present in
+  39942134414 and later; the newer no-retry change 0118 was absent from all
+  those images because it was added later. No historical log found a skipped
+  flush/rw safeguard patch.
+- `tools/strictify-dxb.py` now replaces the upstream permissive patch loop with
+  zero-fuzz `git apply --check` + apply, fails on all unallowlisted failures,
+  validates allowlist reason/signatures and freshness, records each patch
+  outcome, and rejects any `.rej` / `.orig` file. Bash syntax was checked with
+  the host `/bin/bash`; the transformed pinned builder also passes `bash -n`.
+- Fixed the 0111 workflow assertion to match its new VEUX journal-guard log.
+  Regenerated/updated 0117 against the current patched source shape, including
+  the ring-first and screen build ID; applied/reversed it cleanly against the
+  40103755855 buildtree files. It starts the process sampler after launchd's
+  early-boot completion, so the build ID is visible on the framebuffer during
+  early userland startup and is prepended as the persistent ring's first line.
+  This is kernel text evidence only until a new photo/ring confirms hardware
+  output.
+- `tools/kernel-manifest.py` requires 0111/0113/0114/0117/0118 and verifies
+  their final-kernel strings, build ID, panic console tail, mount diagnostics,
+  no-retry message, journal guard, and synchronous ring flush. The workflow
+  uploads this manifest with patch status and the kernel SHA-256.
+  `tools/verify-veux-wrapper.py` rebuilds the SWEETXNU payload from the exact
+  CI kernel and the ADT carried in the payload, then compares that payload and
+  the outer DTB byte-for-byte with the wrapper. It records CI run/build IDs,
+  kernel/payload/wrapper/DTB hashes, boot args, and patch statuses next to the
+  wrapper image. Because `mkpayload.py` resolves chained Mach-O fixups, the
+  payload bytes are not a raw Mach-O hash; provenance is proven by exact
+  deterministic reconstruction from the CI kernel, and both hashes are
+  recorded.
+- Local Python compilation, shell syntax checks, strictifier transformation,
+  and 0117 apply/reverse validation pass. Commit `357a59a` and run
+  `40129031828` were canceled before the wrapper/allowlist follow-ups landed;
+  that run is not validation. Current follow-up changes are uncommitted. No new
+  strict CI has been dispatched, no wrapper manifest exists, and no image has
+  been flashed. Next: finish diff review, commit/push, dispatch macOS 13.5 VEUX
+  CI, wait for strict checks, assemble/verify the host wrapper with the phone
+  DTB, then flash only if both records match. Expected display build ID is the
+  new successful workflow run ID.
+
 ## >>> UPDATE 2026-10-23 (mount/UFS diagnostics and image geometry) <<<
 
 - User confirms the old userdata contents need not be preserved; the iOS sparse

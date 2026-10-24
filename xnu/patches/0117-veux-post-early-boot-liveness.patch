@@ -5,6 +5,7 @@ After launchd reports early boot complete, periodically print a bounded
 process/thread snapshot to the framebuffer console. Console output is mirrored
 into the in-memory ring, but this sampler does not flush storage.
 
+diff --git a/bsd/conf/files b/bsd/conf/files
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
 @@ -112,5 +112,6 @@ bsd/dev/sweet_rpmh.c			standard
@@ -15,9 +16,14 @@ into the in-memory ring, but this sampler does not flush storage.
  bsd/dev/munge.c 			optional config_requires_u32_munging
  bsd/dev/unix_startup.c			standard
 
+diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
 --- a/osfmk/console/serial_console.c
 +++ b/osfmk/console/serial_console.c
-@@ -534,6 +534,12 @@
+@@ -537,9 +537,15 @@
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	/* /dev/console writes otherwise bypass the PE_kputc framebuffer sink. */
+ 	extern void veux_fb_console_putc(char);
+ 	extern void veux_fb_console_hello_block(void);
  	static const char marker[] = "VEUX_FB_GREEN_BLOCK\n";
  	static unsigned marker_pos;
 +	static const char boot_done[] = "Early boot complete. Continuing system boot.";
@@ -29,14 +35,40 @@ into the in-memory ring, but this sampler does not flush storage.
 +			if (++boot_done_pos == sizeof(boot_done) - 1) { veux_liveness_start(); boot_done_pos = 0; }
 +		} else boot_done_pos = (c == boot_done[0]) ? 1 : 0;
  		if (c == marker[marker_pos]) {
- 			marker_pos++;
-
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -76,5 +76,6 @@
+ static char veux_log_ring[VEUX_LOG_SIZE];
+ static uint64_t _Atomic veux_log_total;
+ static uint32_t _Atomic veux_log_lock;
++static uint32_t _Atomic veux_log_build_id_written;
+ static int veux_log_chan;
+ static bool veux_log_started;
+@@ -83,6 +84,19 @@
+ veux_log_append(const char *c, int size)
+ {
+ 	if (size <= 0) {
+ 		return;
+ 	}
++	/* The first persistent-ring line identifies the exact kernel build. */
++	if (os_atomic_load(&veux_log_build_id_written, relaxed) == 0) {
++		if (!os_atomic_cmpxchg(&veux_log_lock, 0, 1, acquire)) return;
++		if (os_atomic_cmpxchg(&veux_log_build_id_written, 0, 1, relaxed)) {
++			static const char build_id_line[] = "VEUX BUILD: ID=__VEUX_BUILD_ID__\n";
++			for (unsigned int i = 0; i < sizeof(build_id_line) - 1; ++i) {
++				uint64_t at = os_atomic_load(&veux_log_total, relaxed);
++				veux_log_ring[at % VEUX_LOG_SIZE] = build_id_line[i];
++				os_atomic_store(&veux_log_total, at + 1, release);
++			}
++		}
++		os_atomic_store(&veux_log_lock, 0, release);
++	}
+ 	/* Console output may arrive in panic or interrupt context. Drop a byte
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 --- a/osfmk/arm64/veux_early.c
 +++ b/osfmk/arm64/veux_early.c
-@@ -237,6 +237,12 @@
-  timer_call_setup(&vw_call, vw_timer, NULL);
-  uint64_t deadline; clock_interval_to_deadline(100, 1000000, &deadline);
-  timer_call_enter(&vw_call, deadline, TIMER_CALL_LOCAL);
+@@ -851,3 +851,9 @@
  }
 +void
 +veux_idle_sample_report(void)
@@ -46,7 +78,8 @@ into the in-memory ring, but this sampler does not flush storage.
 +}
  void
  veux_bsd_stage(unsigned int stage)
-
+diff --git a/bsd/dev/veux_liveness.c b/bsd/dev/veux_liveness.c
+new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/veux_liveness.c
 @@ -0,0 +1,159 @@

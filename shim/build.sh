@@ -8,12 +8,22 @@ mode=sweet
 dtb=../dtb/boot_unpacked/dtb
 output=out/shim-boot.img
 payload=
+ci_kernel=
+ci_run_id=
+build_id=
+boot_args=
+patch_status=
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--veux) mode=veux; shift ;;
 		--dtb) dtb=$2; shift 2 ;;
 		--output) output=$2; shift 2 ;;
-		-*) echo "usage: $0 [--veux] [--dtb DTB] [--output IMAGE] [PAYLOAD]" >&2; exit 2 ;;
+		--ci-kernel) ci_kernel=$2; shift 2 ;;
+		--ci-run-id) ci_run_id=$2; shift 2 ;;
+		--build-id) build_id=$2; shift 2 ;;
+		--boot-args) boot_args=$2; shift 2 ;;
+		--patch-status) patch_status=$2; shift 2 ;;
+		-*) echo "usage: $0 [--veux] [--dtb DTB] [--output IMAGE] [--ci-kernel KERNEL --ci-run-id ID --build-id ID --boot-args ARGS --patch-status FILE] [PAYLOAD]" >&2; exit 2 ;;
 		*) [ -z "$payload" ] || { echo "only one payload may be specified" >&2; exit 2; }; payload=$1; shift ;;
 	esac
 done
@@ -48,3 +58,13 @@ mkbootimg --header_version 2 --kernel out/Image --ramdisk out/ramdisk.bin \
 # Host render of the console layout.
 gcc -O1 -Wall -o out/host_test console.c host_test.c && ./out/host_test
 ls -l out/Image "$output"
+if [ -n "$ci_kernel" ]; then
+	[ -n "$payload" ] && [ -n "$ci_run_id" ] && [ -n "$build_id" ] && [ -n "$boot_args" ] && [ -n "$patch_status" ] || {
+		echo "wrapper verification requires payload, CI kernel, run/build IDs, boot args, and patch status" >&2
+		exit 2
+	}
+	python3 ../tools/verify-veux-wrapper.py \
+		--image "$output" --payload "$payload" --ci-kernel "$ci_kernel" \
+		--dtb "$dtb" --run-id "$ci_run_id" --build-id "$build_id" \
+		--boot-args "$boot_args" --patch-status "$patch_status"
+fi
