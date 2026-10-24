@@ -209,7 +209,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
  #endif /* ARM64_BOARD_CONFIG_VEUX */
 --- a/bsd/kern/kern_shutdown.c
 +++ b/bsd/kern/kern_shutdown.c
-@@ -178,6 +178,26 @@
+@@ -178,6 +178,27 @@
  {
  	int hostboot_option = 0;
  	uint64_t startTime;
@@ -217,6 +217,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
 +	{
 +		extern void veux_reboot_request(uint32_t, const char *, int, uintptr_t *);
 +		extern void veux_lifecycle_stage(unsigned int);
++		extern int veux_log_flush_sync(void);
 +		proc_t requestor = current_proc();
 +		veux_reboot_request((uint32_t)howto, requestor ? requestor->p_comm : "kernel",
 +		    requestor ? requestor->p_pid : 0, (uintptr_t *)__builtin_frame_address(0));
