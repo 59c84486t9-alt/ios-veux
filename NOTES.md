@@ -2072,3 +2072,147 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - Flashed the verified image to `boot_b`, selected slot B (fastboot confirmed), and rebooted. Awaiting screen/console observation to determine whether the liveness sampler and cached hello job ran. Recovery/ADB had no mount of userdata during the block update.
 - Launchd binary recognizes only the coalition verbosity args above; no general verbose-job boot arg is present. Its boot-task messages already reach `/dev/console`; the patched console mirror carries them to the framebuffer and ring. The raw SWEET log files referenced by `../ios-sweet/NOTES.md` are absent from this checkout, so a definitive job-by-job SWEET/VEUX post-early-boot comparison and first missing job remain unverified.
 - The PRNG seed file exists in the edited root. The device clock has not been set: earlier launchd lines show 1969/1970, and recovery provides no known RTC/time source for this boot.
+## >>> UPDATE 2026-10-24 (HFS mount failure and userdata restore) <<<
+
+- Latest phone photos show the HFS+ root mount failing before launchd:
+  `hfs_mountfsplus: encountered error 5`, `hfs_mountroot failed: 5`,
+  `VEUX ROOT mount result errno=0x13`, and `cannot mount root, errno = 19`.
+  The log also reports catalog key #27 with invalid length (0) and
+  `hfs_mark_inconsistent: Runtime corruption detected on ., fsck will be
+  forced on next mount`. These are direct screen observations; the precise
+  cause of the catalog corruption is not yet established.
+- Slot-A recovery was reachable over ADB using SDK platform-tools 37.0.0
+  (`adb` Homebrew 37.0.1 had a local server ACK failure). Recovery confirmed
+  `_a`; userdata is `/dev/block/sda22`, 109,156,577,280 bytes. No `fsck_hfs`
+  utility is present in that recovery environment.
+- Restored userdata with the known original sparse image
+  `/Users/vivien/Downloads/ios16-root-20H392-keybag-noop.simg`, SHA-256
+  `5da713f38323460f33b20679368fc97f808b40eb1b5129ad8d84f51e01cabd0d`.
+  Fastboot product was `veux`; all 16 sparse chunks returned OKAY. This
+  overwrote only userdata. The later fastboot set-active/reboot command did
+  not execute: the device disconnected from USB after the flash, and neither
+  ADB nor fastboot currently enumerates it. Replug and confirm fastboot
+  enumeration before selecting slot B and booting the already-installed
+  liveness kernel. No new kernel build or CI run was made in this step.
+- The restored source image is clean with respect to the saved source hash but
+  does not contain the newer host-side hello plist/cache edits; those edits
+  existed only in the prior device-side sector delta and were overwritten by
+  this restore. Do not claim the hello daemon is installed in the current
+  userdata image.
+- Follow-up phone photo after the restore shows launchd output, including
+  `Early boot complete. Continuing system boot.`, validated-cache delivery,
+  and boot tasks `finish-restore`, `finish-demo-restore`, and `sysstatuscheck`.
+  This confirms the restored HFS root mounted and launchd progressed beyond
+  early boot; it does not confirm SpringBoard or that the hello job ran. No
+  ADB or fastboot device is currently enumerated, so leave the phone running
+  and request another screen capture rather than rebooting it.
+- A later photo after several minutes still shows the same launchd cache and
+  boot-task lines, with no `VEUX LIVE:` process snapshot, task completion,
+  panic, or SpringBoard. The 0117 sampler is intended to report within 10
+  seconds of early-boot completion; this observation means the live sampler
+  is not visibly reporting (whether because the flashed kernel differs or
+  its worker failed to run is unproven). Further passive waiting on this
+  screen is unlikely to resolve that diagnostic gap.
+
+## >>> UPDATE 2026-10-24 (passive sysstatuscheck investigation; no reboot) <<<
+
+- No phone interaction that can change state was performed. Both `adb devices`
+  and `fastboot devices` currently return no device; the screen photo is the
+  only evidence for the current live boot. Do not claim a current PID list,
+  thread count, wait event, idle-PC sample, or UFS lifetime counters: the photo
+  shows the kernel register/diagnostic panel, not the `VEUX LIVE:` format, and
+  the kernel has no issued/completed/outstanding UFS counter panel.
+- Existing saved ring `research/veux-logs/recovery-slot-a-20261024/xnu-ring.txt`
+  contains `Doing boot task` then `exec sysstatuscheck` at 16:01:12.329415;
+  14 ms later it logs `exec prng_seedctl`, followed by cache delivery and
+  `Early boot complete. Continuing system boot.` Thus launchd did exec the
+  helper and moved on in that captured boot. The current photo lacking the
+  `exec` line is a different/incomplete console capture and does not establish
+  that this current attempt executed or is still running.
+- Read-only host inspection of the restored clean root image found the
+  `sysstatuscheck` check marker absent at
+  `/private/var/mobile/Library/MemoryMaintenance/sysstatuscheck_should_check`.
+  `sysstatuscheck` is arm64 Mach-O (109,280 bytes), SHA-256
+  `c2ca9544e4a141c9e7dea2f493f12c6305f7def277445839196a970209d2fa57`.
+  Ghidra analysis of its entry path shows it first stats and removes that
+  marker; when absent it returns status 1 immediately. When present, it checks
+  debug/KASAN boot args and jetsam properties, samples kernel memory, and
+  compares against `KernelHighWaterMark`. On the low-memory branch it rechecks
+  after a 60-second delay, checking in to `IOWatchdog` during that delay; if
+  still over the threshold it writes `/var/mobile/Library/Logs/khwm.log`,
+  syncs, then requests `_reboot_np(0x1c00, message)` (and has a dark-boot/
+  `_reboot(0)` fallback). The only explicit child wait in the examined entry
+  call tree is `wait4()` for `/usr/bin/zprint`, on the low-memory measurement
+  path. This entry path does not wait on a Mach service; IOWatchdog check-in is
+  a scalar IOKit call and its failure is printed to stderr. Static evidence
+  does not prove which branch ran on the current phone.
+- The extracted launchd boot-task configuration at
+  `research/veux-logs/launchd-config-keybag-noop.plist` specifies
+  `PerformAfterUserspaceReboot = true`, `Program = /usr/libexec/sysstatuscheck`,
+  and `RebootOnSuccess = true`; it has no task execution timeout. The global
+  `SIGTERMTimeout = 3` is only a termination grace period, not a boot-task
+  timeout. The captured ring's continuation proves the helper did not hold up
+  boot in that run. Because the marker is absent from the restored host image,
+  an optional/absent task configuration or a zero-exit stub is premature; first
+  obtain the live PID/wait/counter snapshot with the correct kernel running.
+- The UFS code issues one polled transfer at a time and gives a command a
+  5-second deadline; it clears the transfer-list doorbell and reports
+  `ETIMEDOUT` on expiry, or logs OCS/UPIU/response/status and returns `EIO` on
+  controller/protocol failure. The captured ring proves a successful initial
+  read, successful write, HFS journal replay, and root mount errno 0. It does
+  not prove all later reads completed, nor expose current queue/interrupt state.
+  A paging read stuck for minutes is therefore not supported by the captured
+  evidence; current counters are still needed to rule it out conclusively.
+- No image or source changes were made for this investigation, so there is no
+  new root-image diff, CI run, or image hash. Last liveness candidate remains CI
+  `40103755855`, kernel SHA-256
+  `600ff2842699f5e0b92565f37f811e14446f7725487f4607bafaa55b5fba8874`, payload
+  SHA-256 `991c02b2d6b4d65fb3fc74656ae721e7f815e273a1a64983cdbada6160034e64`,
+  and boot image SHA-256
+  `984cbdcbcd17c340aa48e56195de462b1a4a2704fa2fe7002975fe0664d0b294`. The
+  recorded userdata restore source SHA-256 is
+  `5da713f38323460f33b20679368fc97f808b40eb1b5129ad8d84f51e01cabd0d`.
+
+## >>> UPDATE 2026-10-24 (verified B readback and controlled boot) <<<
+
+- User reported ADB enabled; connected to slot-A recovery as root. Read-only
+  slot-B image readback of exactly 17,121,280 bytes SHA-256 matched the
+  recorded CI image `984cbdcbcd17c340aa48e56195de462b1a4a2704fa2fe7002975fe0664d0b294`
+  byte-for-byte. The boot header's 184,320-byte kernel is the unchanged shim
+  (`09e0955c...`); the ramdisk payload is the XNU payload and matched
+  `991c02b2d6b4d65fb3fc74656ae721e7f815e273a1a64983cdbada6160034e64`.
+  The liveness XNU build in the payload was produced by successful CI run
+  `40103755855` (commit `b8c37de23d8bfeb238ef282c72f246eab091e1e8`), kernel
+  SHA-256 `600ff2842699f5e0b92565f37f811e14446f7725487f4607bafaa55b5fba8874`.
+- Pulled the persistent ring in recovery to
+  `research/veux-logs/xnu-veux-20261024-after-fastboot-recovery.txt` (36,048
+  bytes, 5 flushes). It records `exec sysstatuscheck`, `exec prng_seedctl`,
+  `exec launchd_cache_loader`, successful cache delivery, and
+  `Early boot complete. Continuing system boot.` No later panic/reboot or
+  `VEUX LIVE:` sample appears in this ring capture. It does record missing
+  PRNG seed errors and the incorrect 1969/1970 wall clock. This establishes
+  launchd progressed through early boot, but not the live process list or
+  SpringBoard state.
+- From recovery A, rebooted to bootloader, confirmed current slot A, set active
+  slot B, confirmed current slot B, then issued `fastboot reboot`. No ADB or
+  fastboot enumeration appeared during the first 45 seconds. No image was
+  flashed in this step; no new CI run was needed. Await screen observation.
+
+## >>> UPDATE 2026-10-24 (liveness patch was skipped by CI) <<<
+
+- New screen photo shows the same launchd early-boot-complete text with a
+  changing register/diagnostic panel and no later console messages. This proves
+  continuing kernel-side activity, not launchd job progress. ADB and fastboot
+  are not enumerating while the phone is in this state.
+- Investigated why `VEUX LIVE` was absent: GitHub run `40103755855` explicitly
+  logged `Skipping patch 0117-veux-post-early-boot-liveness.patch ... error:
+  patch failed: bsd/conf/files:105`. The builder treated it as a warning and
+  CI nevertheless succeeded. The actual boot-B readback matches image hash
+  `984cbdcbcd17c340aa48e56195de462b1a4a2704fa2fe7002975fe0664d0b294`, but
+  that image contains no `VEUX LIVE:` / `VEUX IDLE:` strings or liveness
+  symbols in its XNU payload. So the liveness instrumentation was not present;
+  the lack of its output says nothing about whether launchd is blocked.
+- Corrected patch 0117's `bsd/conf/files` insertion hunk and added required
+  CI greps for its registration, console trigger, and output string. This
+  change is not yet built or flashed; the prior run must not be treated as
+  validating the liveness patch.

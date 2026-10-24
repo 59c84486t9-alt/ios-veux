@@ -93,6 +93,9 @@ jobs:
             grep -Fq 'veux_lifecycle_stage(1)' xnu/bsd/kern/kern_exec.c
             grep -Fq 'veux_lifecycle_stage(2)' xnu/bsd/kern/kern_exit.c
             grep -Fq 'veux_lifecycle_stage(3)' xnu/bsd/kern/kern_exit.c
+            grep -Fq 'bsd/dev/veux_liveness.c' xnu/bsd/conf/files
+            grep -Fq 'veux_liveness_start();' xnu/osfmk/console/serial_console.c
+            grep -Fq 'VEUX LIVE: processes=' xnu/bsd/dev/veux_liveness.c
             grep -Fq 'veux_reboot_request((uint32_t)howto' xnu/bsd/kern/kern_shutdown.c
             grep -Fq 'VEUX reboot requested howto=0x%x' xnu/bsd/kern/kern_shutdown.c
             grep -Fq 'message_hex=' xnu/bsd/kern/kern_shutdown.c

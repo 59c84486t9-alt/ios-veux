@@ -6,11 +6,8 @@ process/thread snapshot to the framebuffer console and persistent ring.
 
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -105,3 +105,4 @@
- bsd/dev/memdev.c			standard
- bsd/dev/sweet_ufs.c		standard
+@@ -106,0 +107,1 @@ bsd/dev/memdev.c			standard
 +bsd/dev/veux_liveness.c		standard
- bsd/dev/mem.c			standard
 
 --- a/osfmk/console/serial_console.c
 +++ b/osfmk/console/serial_console.c
