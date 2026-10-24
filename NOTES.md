@@ -1959,3 +1959,28 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   hash `ee68fe5f...`; the superseded hello sparse candidate hash
   `45eeb1e576ce7d9732b2d96b61c4f48739854b057c512f32b2b88ce91c54f3b8` is not
   suitable for flashing.
+- Final hello candidate was rebuilt from the preserved keybag-noop sparse root
+  image through its expanded HFS+ working copy. Added only
+  `com.veux.hello.plist` and `veux-hello`; plist lint, arm64 Mach-O ad-hoc
+  signature verification, file contents and 0444/0555 modes passed. The
+  resulting 17,179,869,184-byte Android sparse image is
+  `/Users/vivien/Downloads/ios16-root-20H392-veux-hello.simg`, sparse size
+  5,813,887,544 bytes, SHA-256
+  `cfbd130cc77fb7bbd67ea3b902b6584318f9be572229a8d8fbf945a5d3693488`.
+  The preserved source is
+  `/Users/vivien/Downloads/ios16-root-20H392-keybag-noop.simg`, SHA-256
+  `5da713f38323460f33b20679368fc97f808b40eb1b5129ad8d84f51e01cabd0d`.
+  HFS+ mounted read/write on the host and was unmounted after sync. The mount
+  used `noowners`; UID/GID could not be verified, and `fsck_hfs -fn` was
+  cancelled after several minutes without output. This remains a packaging
+  limitation. Complete edit/hash record: `research/veux-logs/veux-hello-root-image.diff`.
+- CI for commit `832f02d353201b76f93c68e4f0754b479a574929` passed in run
+  `40092567840`: https://github.com/59c84486t9-alt/ios-veux/actions/runs/40092567840.
+  Kernel artifact SHA-256 `76128eb5f03dc234ad09c2e93c0e44a023237f357c58edfb37c270d2b75edb8b`.
+  Repacked Android boot-v2 image at
+  `shim/out/veux-xnu-40092567840/shim-boot.img`, 17,121,280 bytes,
+  SHA-256 `0ac083af37c44833afb9a622ee91da48e838dbdbe89d57e11504ce47df3ae8aa`.
+  In-memory unpack validation confirmed the v2 header, unchanged shim kernel
+  and VEUX DTB, exact CI payload and image ID. The phone enumerated in
+  fastboot as product `veux`, unlocked, current slot B; ADB was absent. No
+  image has been flashed yet at this note's timestamp.
