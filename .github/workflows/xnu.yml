@@ -178,7 +178,7 @@ jobs:
             grep -Fq 'VEUX simplefb marker wrote white 32x32 at 0x85200000' xnu/pexpert/arm/pe_serial.c
             grep -Eq 'IORPCMessage[[:space:]]*\*[[:space:]]*kernelContent;' xnu/iokit/IOKit/IORPC.h
             grep -Eq 'IORPCMessage[[:space:]]*\*[[:space:]]*kernelContent;' xnu/iokit/DriverKit/IORPC.h
-            grep -Fq 'veux_log_append(&c, 1)' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'veux_log_append(c, size)' xnu/osfmk/console/serial_console.c
             grep -Fq 'static void veux_log_start(bool userdata_partition)' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'on != 1' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'veux_bsd_stage(16); /* first successful UFS block read */' xnu/bsd/dev/sweet_ufs.c
@@ -201,6 +201,7 @@ jobs:
           from pathlib import Path
 
           serial = Path("xnu/pexpert/arm/pe_serial.c").read_text()
+          console = Path("xnu/osfmk/console/serial_console.c").read_text()
           region = serial.split("#if defined(ARM64_BOARD_CONFIG_VEUX)\n/*\n * Static simple-framebuffer", 1)[1].split("#endif /* ARM64_BOARD_CONFIG_VEUX */", 1)[0]
           probe = region.split("veux_fb_init(void)", 1)[1]
           fbcon = region.split("void\nveux_fb_console_putc(char c)", 1)[1]
@@ -229,7 +230,7 @@ jobs:
           assert "veux_fb_console_base = fb" in probe and "veux_fb_console_ready = true" in probe, "enable console after the direct map succeeds"
           assert "Clear the new line on every advance" in fbcon and "VEUX_FB_CONSOLE_FG" in region, "clear console lines on wrap; keep foreground glyphs"
           assert "veux_fb_console_putc(c)" in kprintf, "route VEUX printk to the simple-framebuffer console"
-          assert "veux_log_append(&c, 1)" in serial, "mirror the active VEUX pmsg printk path into the UFS log ring"
+          assert "veux_log_append(c, size)" in console, "mirror the active XNU console printk path into the UFS log ring"
           assert "os_atomic_store(&veux_log_total, at + 1, release)" in ufs, "publish log bytes only after storing them"
           assert "!PE_parse_boot_argn(\"veuxlog\", &on, sizeof(on)) || on != 1" in ufs, "userdata writes must require veuxlog=1 explicitly"
           assert "!userdata_partition || su.lun != 0" in ufs, "persistent logs are limited to userdata on LUN 0"

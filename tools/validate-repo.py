@@ -5,7 +5,8 @@
 
 Checks:
   1. Patch sequence in xnu/patches/:
-     - Sequential numbering starting at 0001 with no duplicates or gaps.
+     - Sequential numbering starting at 0001 with no duplicates or gaps,
+       except 0097, which was merged into 0088.
      - Patch files are non-empty and have valid unified diff markers.
   2. Python script syntax:
      - All tools/*.py compile cleanly via py_compile.
@@ -59,6 +60,11 @@ def validate_patches(verbose=False):
         sorted_nums = sorted(seen_numbers.keys())
         expected = 1
         for num in sorted_nums:
+            # Patch 0097 was intentionally folded into 0088 after both patches
+            # targeted sweet_ufs.c. Keep the historical numbering of later
+            # patches so notes and diagnostics remain stable.
+            if expected == 97 and num == 98:
+                expected = num
             if num != expected:
                 errors.append(f"Gap in patch sequence: expected {expected:04d}, found {num:04d} ({seen_numbers[num]})")
                 expected = num + 1
@@ -71,7 +77,7 @@ def validate_patches(verbose=False):
             print(f"    - {err}")
         return False
 
-    print(green(f"[✓] Validated {len(patch_files)} patches (0001-{len(patch_files):04d} contiguous, format OK)"))
+    print(green(f"[✓] Validated {len(patch_files)} patches (0001-{max(seen_numbers):04d}; 0097 merged into 0088; format OK)"))
     return True
 
 
