@@ -30,9 +30,12 @@ Edits made this turn:
      recovery host's noowners mount mode cannot leave the file unreadable to
      iOS. SHA-256 is recorded in NOTES.md. Revert by deleting this file.
 
-No edits were made to the original .simg source or the phone in this turn.
-The current mounted HFS working image is a temporary expanded copy whose
-backing file was unlinked by an earlier failed packaging attempt. Its changes
-are observable and verified while mounted, but they are not yet packaged into
-a flashable image. Do not detach disk3 until a copy of these changes has been
-preserved or the changes have been recreated from the recorded instructions.
+The original .simg source remains untouched. Since the expanded image backing
+file was unlinked, the exact HFS block delta was captured from /dev/disk3 and
+applied to the phone’s unmounted userdata partition after CI passed. Only 1,675
+4 KiB blocks that differed from the edited host target were written (285 extents,
+6,860,800 bytes). Readback of all 2,155 target blocks matched exactly; target
+readback SHA-256: 9f4ba7897a62c750fc5ba33c78dfbfb485d650867c9e4b66dae425ae2519bba7.
+The phone can be restored by reflashing the unchanged source .simg. The root edit
+set itself remains the two files listed above plus the pre-existing hello plist
+and executable.

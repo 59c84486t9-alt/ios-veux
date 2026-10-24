@@ -2062,3 +2062,13 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   failed repack. Its current changes are verified in place but must be
   preserved or recreated before detaching the mount. No flashable image hash
   or new CI run is claimed yet.
+
+
+## >>> UPDATE 2026-10-24 (liveness CI and boot test) <<<
+
+- CI run `40103755855` built commit `b8c37de23d8bfeb238ef282c72f246eab091e1e8`; all workflow steps passed. The earlier run `40102803176` checked out stale remote SHA `1e1196722b11f33ec86bba85fd0af702e01af4e8`, was cancelled, and was not used for the build result.
+- Kernel artifact SHA-256: `600ff2842699f5e0b92565f37f811e14446f7725487f4607bafaa55b5fba8874`. Reused the existing 18.0.0 VEUX shim boot-image layout and replaced the equal-size XNU payload only; verified the packed boot image unpacks to the new payload and the existing DTB. Payload SHA-256 `991c02b2d6b4d65fb3fc74656ae721e7f815e273a1a64983cdbada6160034e64`; boot image SHA-256 `984cbdcbcd17c340aa48e56195de462b1a4a2704fa2fe7002975fe0664d0b294`. Payload boot args retain the known `rootrw=1 ufsrw=1` configuration and add `launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128`.
+- The host working HFS target was applied from recovery to `/dev/block/by-name/userdata` as 1,675 changed 4 KiB blocks in 285 writes (6,860,800 bytes); no other userdata ranges were written. Readback covered all 2,155 host-target delta blocks and exactly matched the prepared target (SHA-256 `9f4ba7897a62c750fc5ba33c78dfbfb485d650867c9e4b66dae425ae2519bba7`). The original sparse source is still unchanged. Changes and reversal steps are listed in `research/veux-logs/veux-postboot-liveness-root-image.diff`.
+- Flashed the verified image to `boot_b`, selected slot B (fastboot confirmed), and rebooted. Awaiting screen/console observation to determine whether the liveness sampler and cached hello job ran. Recovery/ADB had no mount of userdata during the block update.
+- Launchd binary recognizes only the coalition verbosity args above; no general verbose-job boot arg is present. Its boot-task messages already reach `/dev/console`; the patched console mirror carries them to the framebuffer and ring. The raw SWEET log files referenced by `../ios-sweet/NOTES.md` are absent from this checkout, so a definitive job-by-job SWEET/VEUX post-early-boot comparison and first missing job remain unverified.
+- The PRNG seed file exists in the edited root. The device clock has not been set: earlier launchd lines show 1969/1970, and recovery provides no known RTC/time source for this boot.
