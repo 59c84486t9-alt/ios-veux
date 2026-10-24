@@ -2280,3 +2280,8 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   CI greps for its registration, console trigger, and output string. This
   change is not yet built or flashed; the prior run must not be treated as
   validating the liveness patch.
+
+### Strict CI follow-up: 2026-10-24
+
+- CI run [40131401609](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40131401609) failed at the newly strict patch phase, as intended: `0031-sweet-read-write-root.patch` could not apply to `bsd/vfs/vfs_subr.c` after 0110 had already integrated and extended its `rootrw` logic for SWEET and VEUX. Its second change is also superseded by 0111's VEUX-aware dirty-root/journal handling. Added it to the explicit skip allowlist with the expected apply-failure signature and explanation. No kernel image from this run is accepted or flashed.
+- macOS 13.5 remains the selected base: the workflow fetches XNU 8796 and the SWEET/VEUX patches are authored against that tree. Changing the host's current macOS version would not make a different XNU source version compatible; the workflow's `macos_version` selects the XNU release.
