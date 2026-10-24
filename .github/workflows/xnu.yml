@@ -209,6 +209,7 @@ jobs:
             grep -Fq 'first successful UFS write' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'first UFS write failure' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'VEUX ROOT mode=' xnu/bsd/vfs/vfs_subr.c
+            grep -Fq 'read-only default; rw requires rootrw=1 and ufsrw=1' xnu/bsd/vfs/vfs_subr.c
             grep -Fq 'VEUX MOUNT helper exit' xnu/bsd/kern/kern_exit.c
             grep -Fq 'if (isroot && ronly) {' xnu/bsd/sweet_hfs/core/hfs_vfsops.c
             grep -Fq 'VEUX HFS: read-only root journal replay disabled' xnu/bsd/sweet_hfs/core/hfs_vfsops.c
@@ -289,6 +290,7 @@ jobs:
             --patch-status patch-status.txt \
             --build-id "$VEUX_BUILD_ID" \
             --boot-args "$VEUX_BOOT_ARGS" \
+            --source-root dxb/xnu \
             --output out/manifest.json
 
       - name: Package build tree for local compiles

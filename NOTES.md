@@ -2286,3 +2286,14 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - CI run [40131401609](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40131401609) failed at the newly strict patch phase, as intended: `0031-sweet-read-write-root.patch` could not apply to `bsd/vfs/vfs_subr.c` after 0110 had already integrated and extended its `rootrw` logic for SWEET and VEUX. Its second change is also superseded by 0111's VEUX-aware dirty-root/journal handling. Added it to the explicit skip allowlist with the expected apply-failure signature and explanation. No kernel image from this run is accepted or flashed.
 - macOS 13.5 remains the selected base: the workflow fetches XNU 8796 and the SWEET/VEUX patches are authored against that tree. Changing the host's current macOS version would not make a different XNU source version compatible; the workflow's `macos_version` selects the XNU release.
 - Strict CI run [40131633045](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40131633045) then exposed `0032-sweet-bearssl-sha1.patch`, a SWEET-only SHA-1 fallback whose build-file hunk conflicts with the current tree. The VEUX-targeted equivalent is `0089-veux-bearssl-sha1.patch`; added an exact, signature-checked allowlist entry for the SWEET-only patch. This run also failed safely before compilation; no image is accepted or flashed.
+
+### Verification of allowlisted 0031 (2026-10-24)
+
+`0031-sweet-read-write-root.patch` has two hunks across two files. Its changes are both represented in the patched source; the skip loses no VEUX behavior:
+
+| 0031 hunk | Equivalent in the patched source snapshot | Result |
+|---|---|---|
+| `bsd/vfs/vfs_subr.c`: clear `MNT_RDONLY` when `rootrw` is set | `shim/out/0110-work/bsd/vfs/vfs_subr.c:1272-1283`; line 1279 parses `rootrw` (initialized to 0 at 1278) and line 1280 clears `MNT_RDONLY`. The mount begins with `MNT_RDONLY | MNT_ROOTFS` at line 1157. | Same rootrw behavior, widened to SWEET or VEUX by 0110. With no rw boot arg, the zero default leaves the root read-only. |
+| `bsd/sweet_hfs/core/hfs_vfsutils.c`: allow a dirty, non-journaled root to mount read-write | `shim/out/0110-work/bsd/sweet_hfs/core/hfs_vfsutils.c:203-220`; root-only branch logs and continues, while non-root volumes still return `EINVAL`. | Same dirty-root exception, widened to SWEET or VEUX by 0110. |
+
+The CI kernel manifest checks for the embedded `rootrw` and `ufsrw` strings and the compiled `VEUX ROOT mode=` diagnostic, including the read-only default and opt-in policy. It also checks the source invariants: the root mount starts with `MNT_RDONLY`, `rootrw` initializes to zero and gates clearing that flag, `ufsrw` initializes to zero, and UFS writability requires `rw == 1`. The manifest renders the allowlist record as `allowlisted skip: 0031 (SWEET rootrw and dirty-root exception are already present and VEUX-enabled by 0110; no unique VEUX behavior is omitted.)`.

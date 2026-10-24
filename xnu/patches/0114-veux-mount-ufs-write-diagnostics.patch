@@ -78,7 +78,7 @@ Subject: [PATCH] Report VEUX mount mode and first UFS writes
 +	uint32_t rootrw = 0, ufsrw = 0;
 +	PE_parse_boot_argn("rootrw", &rootrw, sizeof(rootrw));
 +	PE_parse_boot_argn("ufsrw", &ufsrw, sizeof(ufsrw));
-+	printf("VEUX ROOT mode=%s ufs_write=%s\n", rootrw == 1 ? "rw" : "ro",
++	printf("VEUX ROOT mode=%s ufs_write=%s (read-only default; rw requires rootrw=1 and ufsrw=1)\n", rootrw == 1 ? "rw" : "ro",
 +	    ufsrw == 1 ? "enabled" : "disabled");
  #endif
  #if CONFIG_MACF
