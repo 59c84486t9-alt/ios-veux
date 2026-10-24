@@ -85,8 +85,8 @@ new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/veux_liveness.c
 @@ -0,0 +1,167 @@
-+#define MACH_KERNEL_PRIVATE 1
 +#include <sys/param.h>
++#define MACH_KERNEL_PRIVATE 1
 +#include <sys/proc.h>
 +#include <kern/task.h>
 +#include <kern/thread.h>

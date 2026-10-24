@@ -91,7 +91,7 @@ def validate_patches(verbose=False):
         with open(liveness_path, 'r', errors='ignore') as f:
             liveness = f.read()
         required_liveness = (
-            '+#define MACH_KERNEL_PRIVATE 1',
+            '+#include <sys/param.h>\n+#define MACH_KERNEL_PRIVATE 1',
             '+#include <kern/zalloc.h>',
             '+#include <sys/resourcevar.h>',
             '+#define task_get_proc_raw veux_unused_task_get_proc_raw',
