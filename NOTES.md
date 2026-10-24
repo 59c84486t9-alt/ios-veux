@@ -1772,3 +1772,33 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - CI run `40048143567` compiled XNU but failed its post-build source assertions: patch 0097 was skipped because patch 0088 had already changed the same UFS file. Consolidated the safe opt-in userdata/LUN0 log guard, bounded lock-safe ring snapshot, and printk-to-ring tap into patch 0088 and removed the duplicate patch 0097. Rerun CI; the failed run produced no kernel image.
 - CI run and final image hash: pending.
 - CI run `40049901404` failed during `pe_serial.c` compilation. The earlier consolidated logger patch had inserted a duplicate printk tap at a stale line number, outside any function; the active console tap is already in `osfmk/console/serial_console.c`. Removed the misplaced hunk, updated the CI assertion to check the actual console path, and taught repo validation that historical patch 0097 was merged into 0088. Local repo validation, the PSCI ADT check, and `git diff --check` pass. No kernel artifact was produced; rerun CI before packaging or flashing.
+
+## >>> UPDATE 2026-10-23 (reboot observability and PSCI reset test) <<<
+
+- Corrected console ring hookup: `veux_log_append(c, size)` is in the active
+  XNU console path (`osfmk/console/serial_console.c`). Removed a duplicate
+  hunk that had landed outside a function in `pe_serial.c` and caused CI's
+  compile failure. Source check now verifies the actual path. Repo validation
+  recognizes that removed patch 0097 was consolidated into patch 0088.
+- Commit `1ce5f7a966a8bab8140cbb82529285c28ecc471a` passed CI run
+  `40051486458` (macOS 13.5 / DEVELOPMENT / VEUX; all build and diagnostics
+  steps passed). Kernel artifact `kernel.development.veux` SHA-256:
+  `7fd61d08151886aa79c18f470a68b8b48d57c10b49bcfb15c36e78325d27912b`.
+- Built the XNU payload with fresh VEUX high-memory ADT (`/psci method=smc`),
+  unchanged current root mode and diagnostics:
+  `rootrw=1 ufsrw=1 veuxlog=1`, framebuffer console enabled, launchd/cache
+  diagnostics, and `unentitled_ios_sim_launch=1`. The Android boot-v2 wrapper
+  uses the existing VEUX DTB and the CI-derived payload. Extracted components
+  match the payload, shim kernel, and DTB inputs. Boot image SHA-256:
+  `ee68fe5fa4b67f3de22807d92792f0d65ca2b6caaeb24630b8a0b7859bccd460`.
+- Host did not have `aarch64-linux-gnu-gcc` or `mkbootimg`; the shim was built
+  with the installed Android NDK Clang/LLD cross-target, and boot-v2 components
+  were assembled with the verified header layout. XNU itself is the CI-built
+  kernel above. The standalone PSCI probe video previously showed reset around
+  5-6 seconds, ahead of the 11-second watchdog period; this image adds a
+  10-second countdown for filming.
+- Fastboot verified product `veux`, unlocked bootloader, active slot A, and
+  `boot_b` size `0x8000000`. Flashed only `boot_b`, selected slot B, and reboot
+  returned OKAY. At 75 seconds after reboot, neither ADB nor fastboot had
+  re-enumerated. New ring has not yet been retrieved, so the reboot requester
+  and reached stage remain unknown.
