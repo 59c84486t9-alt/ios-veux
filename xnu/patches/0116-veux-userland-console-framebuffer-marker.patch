@@ -1,0 +1,63 @@
+From: ios-veux
+Subject: [PATCH] Mirror userspace console output to VEUX framebuffer
+
+Mirror /dev/console text into the existing simplefb console and draw one
+green marker when the opt-in hello LaunchDaemon emits its debug token. This
+is a bring-up diagnostic bridge, not a general display or IOSurface API.
+
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1545,6 +1545,23 @@
+ 	veux_fb_console_col++;
+ }
+ 
++void
++veux_fb_console_hello_block(void)
++{
++	if (!veux_fb_console_ready || veux_fb_console_base == NULL) {
++		return;
++	}
++	/* A bright green square at the top-right, separate from the text area. */
++	for (uint32_t y = 16; y < 64; y++) {
++		volatile uint32_t *row = veux_fb_console_base +
++		    y * (veux_fb_console_stride / sizeof(uint32_t));
++		for (uint32_t x = VEUX_FB_WIDTH - 64; x < VEUX_FB_WIDTH - 16; x++) {
++			row[x] = 0xff00ff00u;
++		}
++	}
++	__asm__ volatile("dsb sy" ::: "memory");
++}
++
+ static uint32_t veux_fb_panic_col, veux_fb_panic_row;
+ void
+ veux_fb_panic_begin(void)
+
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -534,6 +534,26 @@
+ console_write(char *str, int size)
+ {
+ 	assert(str != NULL);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	/* /dev/console writes otherwise bypass the PE_kputc framebuffer sink. */
++	extern void veux_fb_console_putc(char);
++	extern void veux_fb_console_hello_block(void);
++	static const char marker[] = "VEUX_FB_GREEN_BLOCK\n";
++	static unsigned marker_pos;
++	for (int n = 0; n < size; n++) {
++		char c = str[n];
++		if (c == marker[marker_pos]) {
++			marker_pos++;
++			if (marker_pos == sizeof(marker) - 1) {
++				veux_fb_console_hello_block();
++				marker_pos = 0;
++			}
++		} else {
++			marker_pos = (c == marker[0]) ? 1 : 0;
++		}
++		veux_fb_console_putc(c);
++	}
++#endif
+ 
+ 	char *write_ptr = NULL;
+ 	int chunk_size = CPU_CONS_BUF_SIZE;

@@ -1802,3 +1802,160 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   returned OKAY. At 75 seconds after reboot, neither ADB nor fastboot had
   re-enumerated. New ring has not yet been retrieved, so the reboot requester
   and reached stage remain unknown.
+
+## >>> UPDATE 2026-10-24 (skip fatal keybag init boot task) <<<
+
+- Captured ring `research/veux-logs/xnu-veux-20261024-after-psci-test.txt`
+  identifies the reboot source: launchd runs `keybagd --init`; keybagd logs
+  `FATAL KEYBAG ERROR: failed to load system bag`, two missing device-tree
+  options messages, then `MKB_INIT: Rebooting...`. The reboot hook records
+  `VEUX reboot requested howto=0x0 caller=keybagd pid=0xb message="<none>"`.
+  It is keybagd itself, not launchd reacting to a fatal-job policy. PSCI reset
+  executes after the visible countdown; this boot had `rootrw=1 ufsrw=1`, and
+  mount helpers both exited 0 before keybag initialization.
+- Root image `/Users/vivien/Downloads/ios16-root-20H392.simg` contains a
+  `KeyBagKeys=SWEET` systembag and the ADT has `/defaults/no-effaceable-storage`.
+  The failure is therefore keybagd's inability to load a device-backed system
+  bag/SEP state; it is not an absent systembag file. The ordinary
+  `com.apple.mobile.keybagd.plist` has `RunAtLoad=true`, `OnDemand=true`,
+  `EnablePressuredExit=true`, and first-unlock notify/Mach services, but no
+  `KeepAlive`, `Critical`, or `ExitTimeOut`. Separately, the embedded
+  `launchd.__config` boot task has `AllowCrash=true`; removing that task is the
+  minimum way to prevent its explicit reboot while leaving the daemon plist
+  untouched. Exact before/after task config and reversible diff are in
+  `research/veux-logs/launchd-config-keybag-{before,after}.plist` and
+  `research/veux-logs/launchd-config-keybag.diff`.
+- Built host-side candidate
+  `/Users/vivien/Downloads/ios16-root-20H392-keybag-skip.simg` by removing
+  only `Boot.keybag` (`/usr/libexec/keybagd --init`) from the embedded launchd
+  config, preserving the original fixed-size section with padding, and
+  ad-hoc re-signing `/sbin/launchd`. The regular keybagd daemon plist and all
+  kernel files are unchanged. Candidate is a structurally verified Android
+  sparse image with 244 changed filesystem blocks. SHA-256:
+  `f7d7bfe0e4dd12d44f38a41d8e0c3b131f6503fe0682c798e0b75e946fdd1b3e`.
+  Baseline image SHA-256 remains
+  `9d20904cf584270fbb47ca968141cc33508e10ac7f649c03b0dd3581020cbf77`.
+- The existing kernel is unchanged; CI run `40051486458` passed and the
+  already-flashed boot image hash is
+  `ee68fe5fa4b67f3de22807d92792f0d65ca2b6caaeb24630b8a0b7859bccd460`.
+  Host-side root image edit adds no kernel build. Recovery ADB is online as
+  root on slot A; device reports `veux`, serial `4078cac030c8`. Next action is
+  to flash the candidate to userdata and retest before considering any further
+  changes.
+- If boot proceeds, SEP/keybag consumers likely include `securityd` (keychain
+  and protected key operations), `lockdownd` (pairing/protected services),
+  `authd`/`akd` (authentication and identity), and later SpringBoard/backboardd
+  services (device-unlock and protected-data state). A missing SEP can make
+  operations unavailable or cause individual jobs to fail; it does not imply
+  every consumer must crash. Existing SWEET XNU patch 0038 adds an AppleKeyStore
+  IOKit stand-in; this VEUX test deliberately prefers the minimal userland
+  bypass and does not port that kernel patch yet.
+- For headless progress, hardware-dependent candidates to disable only when
+  the ring shows they block boot are CommCenter/baseband, Wi-Fi, AppleKeyStore
+  consumers that demand SEP-backed keys, mediaserverd camera/audio services,
+  GPU/display acceleration, sensor/motion/location services, and restore or
+  provisioning tasks. Existing root tweaks already remove CommCenter jobs and
+  disable VirtualAudio/recorder paths. Keep changes per-job and record each
+  edit here; launchd timestamps at 1970 remain a known clock issue.
+- Flashed the candidate to `userdata` from fastboot on verified product
+  `veux` (slot A recovery was active before switching to bootloader). All 16
+  sparse chunks reported `OKAY`; then selected slot B and issued `fastboot
+  reboot`. As of 2026-10-24, neither ADB nor fastboot has re-enumerated after
+  roughly two minutes. The edited boot's result and ring are not yet available;
+  do not infer the next failure from the old ring.
+- The first candidate's photo showed `initproc exited -- exit reason namespace
+  7 subcode 0x1 description: undefined boot task keybag`: launchd requires the
+  `Boot.keybag` task name to exist. Corrected the host image from the preserved
+  raw baseline by retaining the task and setting `Program=/usr/bin/true`,
+  `ProgramArguments=['true']`, `PerformAfterUserspaceReboot=true`, and
+  `AllowCrash=true`. The keybagd LaunchDaemon plist is still unchanged.
+  Re-signed `/sbin/launchd` ad hoc; `codesign --verify` reports valid on disk
+  and its designated requirement is satisfied. Embedded config re-parses
+  with the expected task dictionary. The corrected full-write sparse image
+  `/Users/vivien/Downloads/ios16-root-20H392-keybag-noop.simg` has SHA-256
+  `5da713f38323460f33b20679368fc97f808b40eb1b5129ad8d84f51e01cabd0d`.
+- Flashed the corrected image to `userdata` from fastboot, with `-S 512M`;
+  all 24 chunks reported `OKAY` (297 seconds). This candidate writes zero
+  blocks explicitly to clear stale data from the failed first edit. It is a
+  root-image-only change; the kernel and its CI-passing hash are unchanged.
+  Recovery ADB later read the persistent VEUX ring from userdata; it is saved
+  as `research/veux-logs/xnu-veux-20261024-after-keybag-noop.txt` (36,437
+  bytes, flush sequence 5). The candidate ran with `rootrw=1 ufsrw=1`; HFS
+  mounted successfully (`errno=0`), both mount phases exited 0, MSUEarlyBootTask
+  and FIPS completed, and launchd logged `Early boot complete. Continuing
+  system boot.` The `keybag` boot task logged “optional boot task not present”;
+  keybagd did not run and the old keybag reboot is absent. The exact reason the
+  embedded task was treated as absent despite the host-side no-op plist change
+  still needs verification. Later in launchd startup, the ring logs
+  `shared_region ... vm_shared_region_start_address() failed` and 20
+  `dyld_shared_cache_arm64.*: not in trust cache` warnings. No panic or reboot
+  request appears after this change in the ring. After returning to slot B and
+  rebooting, the phone did not enumerate over ADB or fastboot for 60 seconds,
+  so SpringBoard is not confirmed and another ring cannot be read until the
+  device returns to recovery. CI/kernel/boot image are unchanged; no new kernel
+  build or flash was made in this check. The original sparse baseline was
+  removed temporarily to make room for image conversion; its expanded raw
+  baseline is still at `/tmp/ios16-root-20H392-keybag-base.raw`.
+
+## >>> UPDATE 2026-10-24 (visible post-launchd userland probe) <<<
+
+- Reopened the exact previously flashed boot image
+  `shim/out/veux-xnu-40051486458/shim-boot.img`, SHA-256
+  `ee68fe5fa4b67f3de22807d92792f0d65ca2b6caaeb24630b8a0b7859bccd460`.
+  Extracted the XNU payload ADT at offset `0xfc26d0` (11,468 bytes), rather
+  than relying on the ADT generator. `/chosen/asmb/lp-sip0=0x6f` and
+  `lp-sip1=1`; the same payload has `/chosen/framebuffer@85200000`
+  (1080x2400 simple-framebuffer), `/veux-ufs`, and `/psci` compatible
+  `arm,psci-1.0`, method `smc`. Payload command line is
+  `debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress
+  rd=ufsroot0 unentitled_ios_sim_launch=1 veuxlog=1 veuxfb=1
+  veuxfbconsole=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1
+  wdt_test=no_user_checkin rootrw=1 ufsrw=1`. ADT matches the generator's
+  semantic values; phandles/random per-build details can differ. ADT does not
+  encode boot-args; those are in the payload header.
+- SWEET's raw boot logs are not in the local checkout, but retained notes cite
+  boot 0029's `vm_shared_region_start_address() failed` followed by launchd's
+  ignition failure for a separate missing-preboot reason, and boot 0032's
+  `not in trust cache` warnings followed by successful shared-cache mapping and
+  launchd startup. The current VEUX ring likewise reaches
+  `Early boot complete. Continuing system boot.` after the warnings. Treat
+  these as non-blocking evidence; they are not the current screen freeze cause.
+- `veux-hello.c` is an ad-hoc-signed iOS arm64 LaunchDaemon candidate. The
+  existing VEUX AMFI policy recognizes signed rootfs executables as platform
+  binaries and attaches signature entitlements; this test needs no special
+  entitlements. The source sends a hello and `VEUX_FB_GREEN_BLOCK` token to
+  `/dev/console`, emits an os_log message, and records the console open errno
+  to `/private/var/log/veux-hello.log`. `com.veux.hello.plist` requests RunAtLoad
+  and routes stdout/stderr to `/dev/console`. XNU patch 0116 mirrors
+  `/dev/console` writes to the existing simplefb text console and paints a
+  green square on the marker. This is a limited bring-up diagnostic, not the
+  missing IOSurface/IOMobileFramebuffer service.
+- Root-image installation is not yet verified: the only packaged hello sparse
+  image used an earlier binary without the marker and is superseded. Its
+  external `/Volumes/savedrive` disappeared before readback; do not flash that
+  package. The original sparse root image remains untouched, but the current
+  hello candidate must be installed and repacked after the drive returns.
+  The HFS mount was made `noowners`; we have not validated launchd's expected
+  root ownership in the final image. Keep this as an explicit packaging check.
+  Reversible edit inventory and hashes are in
+  `research/veux-logs/veux-hello-root-image.diff`.
+- Current VEUX has simplefb for kernel text only. Patch 0116 exposes userspace
+  `/dev/console` text and a single-color marker, but no IOMobileFramebuffer,
+  IOSurface mapping/user client, backboardd display service, or HID touch path.
+  SWEET notes document the longer path: AppleCLCD/IOMobileFramebuffer,
+  IOSurface, backboardd swaps, HID, then SpringBoard/Setup. For VEUX the
+  incremental target is first a visible hello block and console line; after
+  that, a headless shell/service proof; a home screen requires the display and
+  IOSurface/backboardd path. This boot's ring only proves early boot tasks and
+  launchd's early-boot completion; it cannot enumerate jobs after the lost
+  tail. No job exits after that point are confirmed.
+- Keybag review: the tested no-op landed in embedded `launchd.__config` boot
+  task configuration, not the ordinary `com.apple.mobile.keybagd.plist`.
+  Latest ring says the optional `keybag` boot task was absent and does not show
+  keybagd execution. No keybag dependency is established from the captured
+  post-early-boot tail.
+- Wall clock remains 1970 in launchd logs. No new root image was flashed and no
+  new CI result exists yet for patch 0116. The earlier flashed image remains
+  hash `ee68fe5f...`; the superseded hello sparse candidate hash
+  `45eeb1e576ce7d9732b2d96b61c4f48739854b057c512f32b2b88ce91c54f3b8` is not
+  suitable for flashing.

@@ -1,0 +1,36 @@
+VEUX hello LaunchDaemon root-image edit manifest
+===============================================
+
+Original source image (unchanged):
+  /Users/vivien/Downloads/ios16-root-20H392-keybag-noop.simg
+  SHA-256 5da713f38323460f33b20679368fc97f808b40eb1b5129ad8d84f51e01cabd0d
+
+HFS changes staged in the expanded working copy:
+  + /System/Library/LaunchDaemons/com.veux.hello.plist
+    Mode 0444 on the host mount; RunAtLoad, UserName=root, stdout/stderr to
+    /dev/console, ProgramArguments=/usr/libexec/veux-hello.
+  + /usr/libexec/veux-hello
+    iOS arm64 Mach-O, ad-hoc signed, mode 0555. The first package used the
+    earlier hello-only program (SHA-256 c432716ee6dcbd0037da2d11b04a7bea
+    71418f35076764c2fc434e83e6631aae).
+
+An Android-sparse candidate was emitted at
+  /Volumes/savedrive/ios16-root-20H392-veux-hello.simg
+with SHA-256
+  45eeb1e576ce7d9732b2d96b61c4f48739854b057c512f32b2b88ce91c54f3b8
+It is superseded and must not be flashed: the C source was then updated to
+emit VEUX_FB_GREEN_BLOCK, and XNU patch 0116 was added to mirror console bytes
+and draw the green block. The external savedrive volume disappeared before
+the candidate could be reopened or verified; the original image is untouched.
+
+Current sources:
+  research/veux-logs/veux-hello.c
+  research/veux-logs/com.veux.hello.plist
+  research/veux-logs/veux-hello.arm64 (local build, ad-hoc signature verified)
+Current local executable SHA-256:
+  ea59048d1967eba76bebdb3ab87fc851aff05c0baed5d83cacbf7eedc1acbf13
+
+Restore the external drive, remount the original sparse image through a fresh
+expanded working copy, install the current source/binary/plist, then regenerate
+and hash a new sparse image after CI for patch 0116 passes. Do not use the
+superseded hash above for flashing.
