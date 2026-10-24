@@ -49,14 +49,14 @@ replacement = r'''        STATUS_FILE="${PATCH_STATUS_FILE:-${WORK_DIR}/patch-st
             PATCH_NAME=$(basename "${PATCH}")
             PATCH_COUNT=$((PATCH_COUNT + 1))
             printf 'PATCH_STATUS: %s CHECKING (fuzz_limit=0)\n' "${PATCH_NAME}" | tee -a "${STATUS_FILE}"
-            if APPLY_CHECK=$(git apply --recount --check "${PATCH}" 2>&1); then
+            if APPLY_CHECK=$(git apply --check "${PATCH}" 2>&1); then
                 case "${ALLOWLIST_NAMES}" in *"|${PATCH_NAME}|"*)
                     REASON=$(awk -F '\t' -v name="${PATCH_NAME}" '$1 == name {print $2}' "${ALLOWLIST_FILE}")
                     printf 'PATCH_STATUS: %s ALLOWLIST_STALE (now applies; reason: %s)\n' "${PATCH_NAME}" "${REASON}" | tee -a "${STATUS_FILE}"
                     exit 1
                     ;;
                 esac
-                if git apply --recount "${PATCH}"; then
+                if git apply "${PATCH}"; then
                     printf 'PATCH_STATUS: %s APPLIED\n' "${PATCH_NAME}" | tee -a "${STATUS_FILE}"
                 else
                     printf 'PATCH_STATUS: %s FAILED (apply)\n' "${PATCH_NAME}" | tee -a "${STATUS_FILE}"
