@@ -1,0 +1,210 @@
+From: ios-veux
+Subject: [PATCH] Sample VEUX process liveness after launchd early boot
+
+After launchd reports early boot complete, periodically print a bounded
+process/thread snapshot to the framebuffer console and persistent ring.
+
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -105,3 +105,4 @@
+ bsd/dev/memdev.c			standard
+ bsd/dev/sweet_ufs.c		standard
++bsd/dev/veux_liveness.c		standard
+ bsd/dev/mem.c			standard
+
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -534,6 +534,12 @@
+ 	static const char marker[] = "VEUX_FB_GREEN_BLOCK\n";
+ 	static unsigned marker_pos;
++	static const char boot_done[] = "Early boot complete. Continuing system boot.";
++	static unsigned boot_done_pos;
++	extern void veux_liveness_start(void);
+ 	for (int n = 0; n < size; n++) {
+ 		char c = str[n];
++		if (c == boot_done[boot_done_pos]) {
++			if (++boot_done_pos == sizeof(boot_done) - 1) { veux_liveness_start(); boot_done_pos = 0; }
++		} else boot_done_pos = (c == boot_done[0]) ? 1 : 0;
+ 		if (c == marker[marker_pos]) {
+ 			marker_pos++;
+
+--- a/osfmk/arm64/veux_early.c
++++ b/osfmk/arm64/veux_early.c
+@@ -237,6 +237,12 @@
+  timer_call_setup(&vw_call, vw_timer, NULL);
+  uint64_t deadline; clock_interval_to_deadline(100, 1000000, &deadline);
+  timer_call_enter(&vw_call, deadline, TIMER_CALL_LOCAL);
+ }
++void
++veux_idle_sample_report(void)
++{
++ printf("VEUX IDLE: samples=%llu ticks=%llu..%llu pset_runq=%llu rt_runq=%llu\n",
++     vw_idle_samples, vw_tick_start, vw_tick_end, vw_runq, vw_rt);
++}
+ void
+ veux_bsd_stage(unsigned int stage)
+
+--- /dev/null
++++ b/bsd/dev/veux_liveness.c
+@@ -0,0 +1,161 @@
++#include <sys/param.h>
++#include <sys/proc.h>
++#include <sys/proc_internal.h>
++#include <sys/systm.h>
++#include <kern/task.h>
++#include <kern/thread.h>
++#include <os/atomic_private.h>
++#include <arm/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern task_t proc_task(proc_t);
++extern int hz;
++extern arm_saved_state_t *find_user_regs(thread_t);
++extern uint64_t get_saved_state_pc(arm_saved_state_t *);
++extern boolean_t is_saved_state64(arm_saved_state_t *);
++extern void veux_idle_sample_report(void);
++extern int veux_log_flush_sync(void);
++
++#define VEUX_LIVE_MAX 16
++#define VEUX_SEEN_MAX 1024
++struct veux_live_entry {
++	int pid, ppid, state, threads;
++	uint64_t user_us, system_us, user_delta_us, system_delta_us, user_pc;
++	char name[32];
++};
++static struct veux_live_entry live_entries[VEUX_LIVE_MAX], previous_entries[VEUX_LIVE_MAX];
++static unsigned int live_count, previous_live_count, process_count, thread_count;
++static int live_pids[VEUX_SEEN_MAX], previous_pids[VEUX_SEEN_MAX];
++static unsigned int live_pid_count, previous_pid_count;
++static int live_chan;
++static unsigned int live_started;
++
++static bool
++veux_pid_seen(int pid)
++{
++	for (unsigned int i = 0; i < previous_pid_count; i++) {
++		if (previous_pids[i] == pid) {
++			if (live_pid_count < VEUX_SEEN_MAX) live_pids[live_pid_count++] = pid;
++			return true;
++		}
++	}
++	if (live_pid_count < VEUX_SEEN_MAX) live_pids[live_pid_count++] = pid;
++	return false;
++}
++
++static void
++veux_previous_cpu(int pid, uint64_t *user, uint64_t *system)
++{
++	*user = *system = 0;
++	for (unsigned int i = 0; i < previous_live_count; i++) {
++		if (previous_entries[i].pid == pid) {
++			*user = previous_entries[i].user_us;
++			*system = previous_entries[i].system_us;
++			return;
++		}
++	}
++}
++
++static int
++veux_live_proc(proc_t p, __unused void *arg)
++{
++	int pid = proc_pid(p);
++	task_t task = proc_task(p);
++	int nthreads = 0;
++	uint64_t user_pc = 0;
++	if (task != TASK_NULL) {
++		task_lock(task);
++		nthreads = task->thread_count;
++		thread_t th;
++		queue_iterate(&task->threads, th, thread_t, task_threads) {
++			arm_saved_state_t *ss = find_user_regs(th);
++			if (ss && is_saved_state64(ss)) user_pc = get_saved_state_pc(ss);
++			break;
++		}
++		task_unlock(task);
++	}
++	process_count++;
++	thread_count += nthreads;
++	if (live_count < VEUX_LIVE_MAX) {
++		struct veux_live_entry *e = &live_entries[live_count++];
++		e->pid = pid;
++		e->ppid = p->p_pptr ? proc_pid(p->p_pptr) : 0;
++		e->state = p->p_stat;
++		e->threads = nthreads;
++		e->user_us = p->p_stats ? (uint64_t)p->p_stats->p_ru.ru_utime.tv_sec * 1000000ULL + p->p_stats->p_ru.ru_utime.tv_usec : 0;
++		e->system_us = p->p_stats ? (uint64_t)p->p_stats->p_ru.ru_stime.tv_sec * 1000000ULL + p->p_stats->p_ru.ru_stime.tv_usec : 0;
++		e->user_pc = user_pc;
++		proc_name(pid, e->name, sizeof(e->name));
++	}
++	return PROC_RETURNED;
++}
++
++static void
++veux_live_launchd(void)
++{
++	proc_t p = proc_find(1);
++	task_t task = p ? proc_task(p) : TASK_NULL;
++	if (task == TASK_NULL) {
++		if (p) proc_rele(p);
++		printf("VEUX LIVE: launchd task unavailable\n");
++		return;
++	}
++	task_lock(task);
++	thread_t th;
++	int index = 0;
++	queue_iterate(&task->threads, th, thread_t, task_threads) {
++		arm_saved_state_t *ss = find_user_regs(th);
++		uint64_t pc = (ss && is_saved_state64(ss)) ? get_saved_state_pc(ss) : 0;
++		printf("VEUX LIVE: launchd thread%d wait=0x%llx hint=0x%x pc=0x%llx\n",
++		    index++, (uint64_t)th->wait_event, th->block_hint, pc);
++		if (index == 1) break;
++	}
++	task_unlock(task);
++	proc_rele(p);
++}
++
++static void
++veux_liveness_thread(__unused void *arg, __unused wait_result_t wr)
++{
++	for (;;) {
++		memcpy(previous_pids, live_pids, live_pid_count * sizeof(live_pids[0]));
++		previous_pid_count = live_pid_count;
++		memcpy(previous_entries, live_entries, live_count * sizeof(live_entries[0]));
++		previous_live_count = live_count;
++		live_pid_count = 0;
++		live_count = process_count = thread_count = 0;
++		proc_iterate(PROC_ALLPROCLIST, veux_live_proc, NULL, NULL, NULL);
++		printf("VEUX LIVE: processes=%u threads=%u\n", process_count, thread_count);
++		veux_idle_sample_report();
++		for (unsigned int i = 0; i < live_count; i++) {
++			struct veux_live_entry *e = &live_entries[i];
++			const char *mark = e->pid == 1 ? "launchd" : (e->ppid == 1 ? "child" : "");
++			uint64_t old_user, old_system;
++			veux_previous_cpu(e->pid, &old_user, &old_system);
++			bool is_new = !veux_pid_seen(e->pid);
++			e->user_delta_us = e->user_us >= old_user ? e->user_us - old_user : 0;
++			e->system_delta_us = e->system_us >= old_system ? e->system_us - old_system : 0;
++			printf("VEUX LIVE: pid=%d ppid=%d name=%s state=%d cpu_us=%llu/%llu delta_us=%llu/%llu threads=%d user_pc=0x%llx %s%s\n",
++			    e->pid, e->ppid, e->name, e->state,
++			    (unsigned long long)e->user_us, (unsigned long long)e->system_us,
++			    (unsigned long long)e->user_delta_us, (unsigned long long)e->system_delta_us,
++			    e->threads, (unsigned long long)e->user_pc, mark, is_new ? " NEW" : "");
++		}
++		veux_live_launchd();
++		printf("VEUX LIVE: sync ring flush follows\n");
++		(void)veux_log_flush_sync();
++		(void)tsleep(&live_chan, PWAIT, "veuxlive", 10 * hz);
++	}
++}
++
++void
++veux_liveness_start(void)
++{
++	thread_t thread;
++	if (!os_atomic_cmpxchg(&live_started, 0, 1, relaxed)) return;
++	if (kernel_thread_start(veux_liveness_thread, NULL, &thread) == KERN_SUCCESS) {
++		thread_deallocate(thread);
++	} else {
++		os_atomic_store(&live_started, 0, relaxed);
++	}
++}

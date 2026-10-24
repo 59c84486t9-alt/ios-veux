@@ -2020,3 +2020,45 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - Recovery is the current device state on slot A. The experimental XNU image is
   still on boot_b; the last CI image was run `40092567840`, SHA-256
   `0ac083af37c44833afb9a622ee91da48e838dbdbe89d57e11504ce47df3ae8aa`.
+
+## >>> UPDATE 2026-10-24 (post-early-boot liveness and cached hello job) <<<
+
+- User reports iOS reaches launchd's “Early boot complete. Continuing system
+  boot.” while the framebuffer remains on the console. The most recent captured
+  ring still ends at that message, so the post-early-boot process state is not
+  known yet; the phone is in slot-A recovery while this candidate is prepared.
+- Added XNU patch `0117-veux-post-early-boot-liveness.patch`. It starts once
+  `console_write` sees launchd's early-boot-complete line. Every 10 seconds it
+  prints process/thread totals, up to 16 processes (PID/PPID, name, numeric
+  state, user/system CPU microseconds and interval deltas, thread count, saved
+  user PC), marks direct launchd children and PIDs newly seen since the prior
+  sample, reports launchd's first listed thread wait event/block hint/user PC,
+  reports the already-running idle sampler's sample/tick/runqueue values, and
+  synchronously flushes the diagnostic ring. Console `printf` reaches the
+  framebuffer and ring through the existing VEUX console paths. CI has not yet
+  tested this patch.
+- Launchd's current binary contains boot-argument strings
+  `launchd_verbose_coalition_logs=` and `launchd_log_verbose_meta_limit=`;
+  there is no general `launchd_verbose` string. Existing launchd boot-task
+  messages are already sent through `/dev/console` and therefore mirrored to
+  the screen/ring. The next payload will set the two recognized coalition
+  logging arguments (`launchd_verbose_coalition_logs=1` and
+  `launchd_log_verbose_meta_limit=128`) for additional coalition metadata;
+  this is not evidence of a universal verbose-job switch.
+- In the mounted temporary HFS working image, the hello plist and ad-hoc-signed
+  arm64 executable were present but absent from the embedded launchd plist's
+  `LaunchDaemons` cache. Added the plist dictionary to that cache and created
+  a 512-byte `/private/var/db/prng.seed`. The exact root-image edits and
+  reversal steps are recorded in
+  `research/veux-logs/veux-postboot-liveness-root-image.diff`; verified hashes:
+  launchd cache `bd2a421fe37bf1748d0cc9bc9a9bd4bfafd945e61cf6d70e08e608b50c9bfd4f`,
+  hello plist `e3d8bf685248e6935e36843aba1071174d7b79a1f4d08d350d383f775254e44c`,
+  hello binary `ea59048d1967eba76bebdb3ab87fc851aff05c0baed5d83cacbf7eedc1acbf13`,
+  seed `5a6c4536f5e188dda65185cee3ae0a3f69ab8936edbf68f0587ed41066306fd0`.
+  Source sparse image is unchanged. This temporary mounted image has no
+  flashable repack yet, and none of these root edits are on the phone.
+- The sparse root source is 11.3 GiB; the macOS data volume has only 5.5 GiB
+  free. The mounted expanded image's backing file was unlinked by an earlier
+  failed repack. Its current changes are verified in place but must be
+  preserved or recreated before detaching the mount. No flashable image hash
+  or new CI run is claimed yet.
