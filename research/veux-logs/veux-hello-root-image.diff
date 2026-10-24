@@ -35,26 +35,20 @@ expanded working copy, install the current source/binary/plist, then regenerate
 and hash a new sparse image after CI for patch 0116 passes. Do not use the
 superseded hash above for flashing.
 
-Current candidate, installed in the previously verified keybag-noop HFS+ working
-image and then packed as Android sparse:
-  /Users/vivien/Downloads/ios16-root-20H392-veux-hello.simg
-  SHA-256 cfbd130cc77fb7bbd67ea3b902b6584318f9be572229a8d8fbf945a5d3693488
-  Logical size 17,179,869,184 bytes (4,194,304 x 4,096-byte blocks)
-  Sparse size 5,813,887,544 bytes
-Edits added to that root image:
-  + /System/Library/LaunchDaemons/com.veux.hello.plist
-    SHA-256 e3d8bf685248e6935e36843aba1071174d7b79a1f4d08d350d383f775254e44c
-  + /usr/libexec/veux-hello
-    SHA-256 ea59048d1967eba76bebdb3ab87fc851aff05c0baed5d83cacbf7eedc1acbf13
-    ad-hoc signed arm64 Mach-O; codesign verification passed; mode 0555
-The plist source is the repository copy in this directory, mode 0444. The HFS+
-volume mounted read/write and unmounted cleanly on the host. Host mount used
-noowners, so the on-image UID/GID could not be verified; program mode, plist
-mode, signatures and contents were checked. A full fsck_hfs -fn scan was
-started but cancelled after it remained unresponsive for several minutes.
-The prior keybag-noop sparse source is preserved unchanged at
-/Users/vivien/Downloads/ios16-root-20H392-keybag-noop.simg, SHA-256
-5da713f38323460f33b20679368fc97f808b40eb1b5129ad8d84f51e01cabd0d.
-The expanded temporary raw working copy was deleted after successful packing;
-its earlier 16 GiB baseline is not retained. The preserved sparse source is the
-rollback image.
+
+Attempted candidate update in a disposable expanded copy:
+  The HFS+ volume mounted read/write; the hello plist and executable were
+  installed and checked (source hashes above). `img2simg` ran out of host disk
+  space while emitting `/Users/vivien/Downloads/ios16-root-20H392-veux-hello.simg`.
+  That file is truncated (SHA-256 cfbd130cc77fb7bbd67ea3b902b6584318f9be572229a8d8fbf945a5d3693488)
+  and its Android sparse chunk table extends past EOF. It is invalid and must
+  never be flashed. It has been deleted. The 16 GiB working raw copy was also
+  deleted after the failed conversion.
+
+The original, valid keybag-noop sparse root remains unchanged at
+  `/Users/vivien/Downloads/ios16-root-20H392-keybag-noop.simg`, SHA-256
+  `5da713f38323460f33b20679368fc97f808b40eb1b5129ad8d84f51e01cabd0d`.
+No hello changes have been flashed to userdata. The mounted HFS+ volume used
+`noowners`, so UID/GID could not be verified; file modes and signatures were
+checked. A full `fsck_hfs -fn` scan was cancelled after several minutes without
+output.
