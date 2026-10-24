@@ -5,7 +5,7 @@
  extern int hz;
  static void sweet_log_start(void);
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
-+static void veux_log_start(void);
++static void veux_log_start(bool userdata_partition);
 +void veux_log_append(const char *c, int size);
 +int veux_log_flush_sync(void);
 +#endif
@@ -48,12 +48,12 @@
  	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20,
  	    su.writable ? "read-write" : "read-only", su.dma_pa);
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
-+	veux_log_start();
++	veux_log_start(strcmp(want, "userdata") == 0);
 +#endif
  #if defined(ARM64_BOARD_CONFIG_SWEET)
  	/* SWEET-only writers, samplers, and peripheral probes. */
  	sweet_log_start();
-@@ -816,6 +834,142 @@
+@@ -816,6 +834,162 @@
  		thread_deallocate(thread);
  	}
  }
@@ -70,6 +70,7 @@
 +
 +static char veux_log_ring[VEUX_LOG_SIZE];
 +static uint64_t _Atomic veux_log_total;
++static uint32_t _Atomic veux_log_lock;
 +static int veux_log_chan;
 +static bool veux_log_started;
 +
@@ -85,9 +86,14 @@
 +	if (size <= 0) {
 +		return;
 +	}
-+	uint64_t at = os_atomic_add_orig(&veux_log_total, (uint64_t)size, relaxed);
++	/* Console output may arrive in panic or interrupt context. Drop a byte
++	 * rather than wait on another writer, and publish it only after storage. */
 +	for (int i = 0; i < size; i++) {
-+		veux_log_ring[(at + (uint64_t)i) % VEUX_LOG_SIZE] = c[i];
++		if (!os_atomic_cmpxchg(&veux_log_lock, 0, 1, acquire)) continue;
++		uint64_t at = os_atomic_load(&veux_log_total, relaxed);
++		veux_log_ring[at % VEUX_LOG_SIZE] = c[i];
++		os_atomic_store(&veux_log_total, at + 1, release);
++		os_atomic_store(&veux_log_lock, 0, release);
 +	}
 +}
 +
@@ -136,7 +142,7 @@
 +	printf("VEUX LOG: bounded userdata tail at block 0x%llx (%u KiB)\n",
 +	    base, VEUX_LOG_BLOCKS * UFS_BLOCK >> 10);
 +	for (;;) {
-+		uint64_t total = os_atomic_load(&veux_log_total, relaxed);
++		uint64_t total = os_atomic_load(&veux_log_total, acquire);
 +		if (total != flushed) {
 +			uint64_t pos = total - flushed >= VEUX_LOG_SIZE ? total - VEUX_LOG_SIZE : flushed;
 +			int error = 0;
@@ -145,9 +151,19 @@
 +				uint32_t off = (uint32_t)(pos % VEUX_LOG_SIZE);
 +				uint32_t blk = off / UFS_BLOCK;
 +				uint64_t need = ((uint64_t)off % UFS_BLOCK + (total - pos) + UFS_BLOCK - 1) / UFS_BLOCK;
-+				uint32_t n = (uint32_t)MIN(MIN(need, (uint64_t)(VEUX_LOG_SIZE / UFS_BLOCK - blk)),
-+				    (uint64_t)(BOUNCE_SIZE / UFS_BLOCK));
++				uint32_t n = (uint32_t)MIN(MIN(need, (uint64_t)(VEUX_LOG_SIZE / UFS_BLOCK - blk)), 64u);
++				while (!os_atomic_cmpxchg(&veux_log_lock, 0, 1, acquire)) __asm__ volatile("yield");
++				uint64_t live_total = os_atomic_load(&veux_log_total, acquire);
++				if (live_total > pos && live_total - pos > VEUX_LOG_SIZE) {
++					total = live_total;
++					pos = total - VEUX_LOG_SIZE;
++					off = (uint32_t)(pos % VEUX_LOG_SIZE);
++					blk = off / UFS_BLOCK;
++					need = ((uint64_t)off % UFS_BLOCK + (total - pos) + UFS_BLOCK - 1) / UFS_BLOCK;
++					n = (uint32_t)MIN(MIN(need, (uint64_t)(VEUX_LOG_SIZE / UFS_BLOCK - blk)), 64u);
++				}
 +				memcpy(bounce, veux_log_ring + (uint64_t)blk * UFS_BLOCK, n * UFS_BLOCK);
++				os_atomic_store(&veux_log_lock, 0, release);
 +				error = ufs_write_blocks(base + 1 + blk, n);
 +				pos += (uint64_t)(blk + n) * UFS_BLOCK - off;
 +			}
@@ -176,26 +192,38 @@
 +}
 +
 +static void
-+veux_log_start(void)
++veux_log_start(bool userdata_partition)
 +{
-+	uint32_t on = 1;
++	uint32_t on = 0;
 +	thread_t thread;
-+	PE_parse_boot_argn("veuxlog", &on, sizeof(on));
-+	if (!on || su.nblocks < 2 * VEUX_LOG_BLOCKS) {
++	if (!PE_parse_boot_argn("veuxlog", &on, sizeof(on)) || on != 1 ||
++	    !userdata_partition || su.lun != 0 || su.nblocks < 2 * VEUX_LOG_BLOCKS) {
 +		return;
 +	}
 +	su.log_first_block = su.first_block + su.nblocks - VEUX_LOG_BLOCKS;
 +	su.log_nblocks = VEUX_LOG_BLOCKS;
-+	su.log_write_enabled = true;
-+	if (!veux_log_started && kernel_thread_start(veux_log_thread, NULL, &thread) == KERN_SUCCESS) {
-+		veux_log_started = true;
-+		thread_deallocate(thread);
++	if (!veux_log_started) {
++		su.log_write_enabled = true;
++		if (kernel_thread_start(veux_log_thread, NULL, &thread) == KERN_SUCCESS) {
++			veux_log_started = true;
++			thread_deallocate(thread);
++		} else {
++			su.log_write_enabled = false;
++		}
 +	}
 +}
 +#endif
  
  /* Root device for rd=ufsroot0 (IOFindBSDRoot). */
  int sweet_ufs_rootdev(dev_t *dev);
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -796,0 +797,5 @@
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	/* Mirror the active XNU printk path into VEUX's bounded UFS log ring. */
++	extern void veux_log_append(const char *c, int size);
++	veux_log_append(&c, 1);
++#endif
 --- a/osfmk/console/serial_console.c
 +++ b/osfmk/console/serial_console.c
 @@ -268,6 +268,8 @@
