@@ -1711,3 +1711,61 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
 - The current `veux-xnu-39973136957-rw.img` boot args had `veuxlog=0`, so the existing VEUX bounded userdata tail logger was disabled. Prepared a diagnostic repack of the exact run-39973136957 kernel with only `veuxlog=1` changed; root mode remains `rootrw=1 ufsrw=1`. The persistent logger writes its bounded 4 MiB ring plus 4 KiB header in userdata tail slack and flushes with SYNCHRONIZE CACHE. It starts only after the UFS userdata path is recognized, so a reset before that point may still leave no ring.
 - Diagnostic image `shim/out/veux-xnu-39973136957/shim-boot-veux-xnu-39973136957-rw-log.img`, 17,121,280 bytes, SHA-256 `0095ec0b94c6e2fe1efd3cb86d2f09f4aa8a18d964abd2155623c4f31ecd852b`. Android boot-v2 unpack verification: XNU payload matches the generated log-enabled payload; shim kernel and selected VEUX DTB match the known template byte-for-byte. It uses the same CI-passed kernel from run `39973136957`; no XNU source or binary changed.
 - Fastboot verified `veux`, slot `b`, and `boot_b` capacity `0x8000000`; flashed only `boot_b`, selected B, and reboot returned OKAY. The phone reappeared in fastboot after the loop. `fastboot reboot recovery` returned OKAY, but neither ADB nor fastboot had re-enumerated 35 seconds later, so the tail ring has not yet been retrieved. Need recovery ADB to read it and identify the initiating reboot path. Userdata/root image is expendable per user.
+
+## >>> UPDATE 2026-10-23 (launchd bootstrap boot-args test) <<<
+
+- Recovery ADB was explicitly reached by switching the active slot to A before
+  `fastboot reboot recovery`. The read-only tail-ring pull succeeded as root;
+  the log is `research/veux-logs/xnu-veux-20261023-083041.txt` (same ring,
+  flush sequence 2 on the repeat pull at 08:34:18).
+- The log confirms `rootrw=1 ufsrw=1`, first successful UFS read and write,
+  successful HFS journaled root mount, launchd exec, and mount helper exit
+  status 0. It then records ignition failing to find Preboot (error 25), cache
+  entries not in the unavailable trust cache, and launchd starting the
+  `finish-obliteration` task (`mobile_obliterator`). The ring ends there.
+- Prepared a boot-args-only repack of the exact CI kernel from run
+  `39973136957` (SUCCESS, commit `f2c92747e60d4cf5dbf54845e78ad007c23a4afc`,
+  kernel SHA-256
+  `018f16ad435bb30a5086380927c84b41cb86236136f86faed3619e3424b2dd3a`). Added
+  `ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin`
+  to the previous RW/logger arguments. The XNU payload outside its command-line
+  field, shim kernel, and VEUX DTB are unchanged.
+- Candidate image:
+  `shim/out/veux-xnu-39973136957/shim-boot-veux-xnu-39973136957-rw-log-launchd.img`,
+  17,121,280 bytes, SHA-256
+  `0d50527f71e7685dd438c5000ac7218167663b24191918fac19569fb1d0c57fc`.
+  Unpack verification confirmed the ramdisk payload, shim kernel and DTB.
+- Fastboot confirmed product `veux`, unlocked bootloader, slot A, and `boot_b`
+  capacity `0x8000000`; flashed only `boot_b`, selected slot B, and reboot
+  returned OKAY. No userdata write or root-image change was made by the host.
+  Neither ADB nor fastboot had re-enumerated 50 seconds after reboot; outcome
+  of this boot-args test remains unknown pending phone re-enumeration/log pull.
+
+## >>> UPDATE 2026-10-23 (diagnostic repack boot follow-up) <<<
+
+- Recovery ADB was available in slot A (`veux`, serial `4078cac030c8`). Pulled
+  `research/veux-logs/xnu-veux-20261023-adb-on.txt`; it is still the prior
+  22,826-byte ring at flush sequence 3, ending at `exec keybagd`. It confirms
+  mount-phase-2's mount helper exited 0; missing data volume and optional
+  BindFS paths were reported, but did not fail that helper. No panic, reset
+  request, or later boot-stage output was flushed.
+- Re-selected already flashed slot B and issued `fastboot reboot` (OKAY). The
+  device did not re-enumerate as ADB or fastboot after about 52 seconds, so the
+  new boot has not yet yielded a readable ring. It is not possible to identify
+  the reset source from the available capture. No further flash or userdata
+  write was performed.
+- User reported fastboot; verified `veux`, slot B, then restored slot A and
+  issued `fastboot reboot recovery`. Recovery ADB came up as root. A new ring
+  pull (`research/veux-logs/xnu-veux-20261023-recovery-again.txt`) reports
+  flush 2 and ends at `exec MSUEarlyBootTask`; it has no panic/reset-request
+  text. The boot args in that capture still include `unentitled_ios_sim_launch=1`
+  and `rootrw=1 ufsrw=1`; mount-phase-1 and mount-phase-2 helpers both exit 0.
+
+## >>> UPDATE 2026-10-23 (MSU task and reboot-path instrumentation candidate) <<<
+
+- Latest recovered ring (`research/veux-logs/xnu-veux-20261023-recovery-again.txt`) is an RW boot (`rootrw=1 ufsrw=1`). Both mount phases exit 0 and the HFS+ root mounts journaled. The visible ring ends at launchd starting `MSUEarlyBootTask`; this is a capture boundary, not evidence the task caused the reboot. Its launchd timestamp is `1970-01-01`, a known clock issue for later time-based checks.
+- Extracted `/usr/libexec/MSUEarlyBootTask` from `/Users/vivien/Downloads/ios16-root-20H392.simg`; it is arm64 Mach-O, SHA-256 `4461470c4bcb4afe3b5bc89209d8983765af9a8112141e410635e0fcec7f763f`. Ghidra pseudocode shows the no-update path prints `MSUEarlyBootTask: I have nothing to do. Goodbye!!`; the observed missing booted-OS-data path also only prints an error. The direct callee list has no reboot/restart call. This does not identify the actual reset source.
+- `/System/Library/xpc/launchd.plist` has 530 `LaunchDaemons` entries but no `MSUEarlyBootTask` string or ordered boot-task list; the task sequence is not represented there. The current ring ends before any later task. SWEET's `tools/sweet-root-tweaks.py` does not disable MSUEarlyBootTask; its root-image edits instead remove CommCenter jobs and disable VirtualAudio/recorder paths. No VEUX userland edit is warranted for the normal no-update branch. Later hardware-bound daemons remain candidates, but their order after MSU is not established by this capture.
+- Extended VEUX patch 0115 to log the reboot caller PID/name, `howto`, full message text and its hex bytes at `reboot_kernel` entry, then synchronously flush the ring before shutdown. This central entry covers reboot syscalls and in-kernel callers; there is no separate `boot()` function in this source tree. Panic rendering and `IOPlatformExpert::haltRestart()` also call the bounded, nonblocking UFS ring flush; flush failures are reported in the console.
+- Before PSCI, `haltRestart()` prints a ten-second countdown, flushes the countdown to the ring, then uses `/psci` `method` to select SMC/HVC and issues the existing PSCI reset/off IDs. Standalone PSCI reset timing was confirmed by `IMG_0646.mov` before the known 11-second watchdog bark. The current root remains RW for the next diagnostic boot.
+- CI run and final image hash: pending.

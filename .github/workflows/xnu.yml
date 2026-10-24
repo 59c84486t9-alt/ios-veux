@@ -95,6 +95,13 @@ jobs:
             grep -Fq 'veux_lifecycle_stage(3)' xnu/bsd/kern/kern_exit.c
             grep -Fq 'veux_reboot_request((uint32_t)howto' xnu/bsd/kern/kern_shutdown.c
             grep -Fq 'VEUX reboot requested howto=0x%x' xnu/bsd/kern/kern_shutdown.c
+            grep -Fq 'message_hex=' xnu/bsd/kern/kern_shutdown.c
+            grep -Fq 'veux_log_flush_sync(void)' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'lck_mtx_try_lock(&sweet_ufs_lock)' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq 'VEUX haltRestart entry type=0x%x ring_flush=0x%x' xnu/iokit/Kernel/IOPlatformExpert.cpp
+            grep -Fq 'VEUX PSCI: reset in %u seconds' xnu/iokit/Kernel/IOPlatformExpert.cpp
+            grep -Fq 'VEUX PSCI: countdown complete ring_flush=0x%x' xnu/iokit/Kernel/IOPlatformExpert.cpp
+            grep -Fq '(void)veux_log_flush_sync();' xnu/osfmk/arm64/veux_early.c
             grep -Fq 'VEUX PSCI: conduit=%s function=0x%llx' xnu/iokit/Kernel/IOPlatformExpert.cpp
             grep -Fq 'IORegistryEntry::fromPath("/psci", gIODTPlane)' xnu/iokit/Kernel/IOPlatformExpert.cpp
             grep -Fq 'register uint64_t x0 __asm__("x0")' xnu/iokit/Kernel/IOPlatformExpert.cpp
@@ -199,6 +206,8 @@ jobs:
           fbcon = region.split("void\nveux_fb_console_putc(char c)", 1)[1]
           kprintf = Path("xnu/pexpert/arm/pe_kprintf.c").read_text()
           ufs = Path("xnu/bsd/dev/sweet_ufs.c").read_text()
+          halt = Path("xnu/iokit/Kernel/IOPlatformExpert.cpp").read_text()
+          shutdown = Path("xnu/bsd/kern/kern_shutdown.c").read_text()
           amfi = Path("xnu/bsd/kern/sweet_amfi.c").read_text()
           entitlements = Path("xnu/iokit/Kernel/arm/SweetEntitlements.cpp").read_text()
           bsd_init = Path("xnu/bsd/kern/bsd_init.c").read_text()
@@ -225,6 +234,9 @@ jobs:
           assert "!PE_parse_boot_argn(\"veuxlog\", &on, sizeof(on)) || on != 1" in ufs, "userdata writes must require veuxlog=1 explicitly"
           assert "!userdata_partition || su.lun != 0" in ufs, "persistent logs are limited to userdata on LUN 0"
           assert "su.log_first_block = su.first_block + su.nblocks - VEUX_LOG_BLOCKS" in ufs, "persistent log writes remain bounded to the reserved partition tail"
+          assert "veux_log_flush_sync(void)" in ufs and "lck_mtx_try_lock(&sweet_ufs_lock)" in ufs and "ufs_sync_cache()" in ufs, "reboot and panic ring flushes are synchronous and never block on the UFS lock"
+          assert "message_hex=" in shutdown and "veux_log_flush_sync()" in shutdown, "record the reboot request and flush it before shutdown proceeds"
+          assert "VEUX PSCI: reset in %u seconds" in halt and "IODelay(1000000)" in halt, "show a 10-second on-screen PSCI countdown before reset"
           assert "defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in bsd_init, "register the built-in AMFI compatibility policy on VEUX"
           assert "defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in amfi, "compile the AMFI provider for VEUX"
           assert "#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in entitlements, "compile the shared XML entitlements provider for VEUX"

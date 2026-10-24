@@ -1,12 +1,13 @@
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c
-@@ -49,6 +49,10 @@
+@@ -49,6 +49,11 @@
  extern void thread_deallocate(thread_t);
  extern int hz;
  static void sweet_log_start(void);
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +static void veux_log_start(void);
 +void veux_log_append(const char *c, int size);
++int veux_log_flush_sync(void);
 +#endif
  extern void sweet_sample_start(void);
  extern void sweet_keys_init(void);
@@ -52,7 +53,7 @@
  #if defined(ARM64_BOARD_CONFIG_SWEET)
  	/* SWEET-only writers, samplers, and peripheral probes. */
  	sweet_log_start();
-@@ -816,6 +834,106 @@
+@@ -816,6 +834,142 @@
  		thread_deallocate(thread);
  	}
  }
@@ -88,6 +89,42 @@
 +	for (int i = 0; i < size; i++) {
 +		veux_log_ring[(at + (uint64_t)i) % VEUX_LOG_SIZE] = c[i];
 +	}
++}
++
++/* Best-effort synchronous snapshot for reboot and panic paths. Never wait for
++ * the UFS lock here: shutdown may have interrupted its owner. */
++int
++veux_log_flush_sync(void)
++{
++	if (!veux_log_started || !su.log_write_enabled || !su.ready) return ENXIO;
++	if (!lck_mtx_try_lock(&sweet_ufs_lock)) return EBUSY;
++	uint64_t total = os_atomic_load(&veux_log_total, relaxed);
++	uint64_t pos = total > VEUX_LOG_SIZE ? total - VEUX_LOG_SIZE : 0;
++	uint64_t base = su.log_first_block;
++	void *bounce = (void *)(su.dma + DMA_BOUNCE);
++	int error = 0;
++	while (pos < total && !error) {
++		uint32_t off = (uint32_t)(pos % VEUX_LOG_SIZE);
++		uint32_t blk = off / UFS_BLOCK;
++		uint64_t need = ((uint64_t)off % UFS_BLOCK + (total - pos) + UFS_BLOCK - 1) / UFS_BLOCK;
++		uint32_t n = (uint32_t)MIN(MIN(need, (uint64_t)(VEUX_LOG_SIZE / UFS_BLOCK - blk)),
++		    (uint64_t)(BOUNCE_SIZE / UFS_BLOCK));
++		memcpy(bounce, veux_log_ring + (uint64_t)blk * UFS_BLOCK, n * UFS_BLOCK);
++		error = ufs_write_blocks(base + 1 + blk, n);
++		pos += (uint64_t)(blk + n) * UFS_BLOCK - off;
++	}
++	if (!error) {
++		struct veux_log_header h = {
++			.magic = { 'V', 'E', 'U', 'X', 'L', 'O', 'G', '1' },
++			.version = 1, .size = VEUX_LOG_SIZE, .total = total, .seq = total,
++		};
++		bzero(bounce, UFS_BLOCK);
++		memcpy(bounce, &h, sizeof(h));
++		error = ufs_write_blocks(base, 1);
++	}
++	if (!error) error = ufs_sync_cache();
++	lck_mtx_unlock(&sweet_ufs_lock);
++	return error;
 +}
 +
 +static void

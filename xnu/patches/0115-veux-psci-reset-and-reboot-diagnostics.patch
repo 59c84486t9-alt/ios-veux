@@ -10,31 +10,34 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
  
  #if defined(__arm64__)
  #include <arm64/tlb.h>
-@@ -113,6 +114,11 @@
+@@ -113,6 +114,12 @@
  
  OSSymbol * gPlatformInterruptControllerName;
  
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +extern "C" void veux_lifecycle_stage(unsigned int);
 +extern "C" void veux_reboot_halt_enter(uint32_t, uintptr_t *);
++extern "C" int veux_log_flush_sync(void);
 +#endif
 +
  /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
  
  bool
-@@ -338,6 +344,11 @@
+@@ -338,6 +344,13 @@
  int
  IOPlatformExpert::haltRestart(unsigned int type)
  {
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +	if (type != kPEPanicSync && type != kPEHangCPU) {
 +		veux_reboot_halt_enter(type, (uintptr_t *)__builtin_frame_address(0));
++		int log_error = veux_log_flush_sync();
++		IOLog("VEUX haltRestart entry type=0x%x ring_flush=0x%x\n", type, log_error);
 +	}
 +#endif
  	if (type == kPEPanicSync) {
  		return 0;
  	}
-@@ -353,6 +364,34 @@
+@@ -353,6 +364,41 @@
  		type = kPEHaltCPU;
  	}
  
@@ -49,6 +52,12 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
 +		    memcmp(method->getBytesNoCopy(), "hvc", 4) == 0;
 +		if (use_smc || use_hvc) {
 +			register uint64_t x0 __asm__("x0") = (type == kPEHaltCPU) ? 0x84000008ULL : 0x84000009ULL;
++			for (unsigned int remaining = 10; remaining > 0; --remaining) {
++				IOLog("VEUX PSCI: reset in %u seconds\n", remaining);
++				IODelay(1000000);
++			}
++			int log_error = veux_log_flush_sync();
++			IOLog("VEUX PSCI: countdown complete ring_flush=0x%x\n", log_error);
 +			veux_lifecycle_stage(5);
 +			IOLog("VEUX PSCI: conduit=%s function=0x%llx type=0x%x before call\n",
 +			    use_smc ? "smc" : "hvc", x0, type);
@@ -58,6 +67,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
 +				__asm__ volatile("hvc #0" : "+r" (x0) : : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "memory", "cc");
 +			}
 +			IOLog("VEUX PSCI: call returned status=0x%llx; awaiting timeout panic\n", x0);
++			(void)veux_log_flush_sync();
 +			OSSafeReleaseNULL(psci);
 +			return -1;
 +		}
@@ -116,7 +126,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
  		char prefix[8] = {'f','r','a','m','e','0','=',0};
  		prefix[5] = (char)('0' + i);
  		for (unsigned int j = 0; prefix[j]; ++j) veux_fb_panic_putc(prefix[j]);
-@@ -99,11 +120,59 @@
+@@ -99,11 +120,61 @@
  		veux_panic_hex(ret); veux_fb_panic_putc('\n');
  		if (next <= (uintptr_t)frame || next >= high || next - (uintptr_t)frame > kernel_stack_size) break;
  		frame = (uintptr_t *)next;
@@ -124,6 +134,8 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
  	}
  	veux_fb_panic_console_tail();
  	veux_stage_flush();
++	extern int veux_log_flush_sync(void);
++	(void)veux_log_flush_sync();
  }
  
 +void
@@ -197,7 +209,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
  #endif /* ARM64_BOARD_CONFIG_VEUX */
 --- a/bsd/kern/kern_shutdown.c
 +++ b/bsd/kern/kern_shutdown.c
-@@ -178,6 +178,18 @@
+@@ -178,6 +178,26 @@
  {
  	int hostboot_option = 0;
  	uint64_t startTime;
@@ -209,8 +221,16 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
 +		veux_reboot_request((uint32_t)howto, requestor ? requestor->p_comm : "kernel",
 +		    requestor ? requestor->p_pid : 0, (uintptr_t *)__builtin_frame_address(0));
 +		veux_lifecycle_stage(4);
-+		printf("VEUX reboot requested howto=0x%x caller=%s pid=0x%x\n", howto,
-+		    requestor ? requestor->p_comm : "kernel", requestor ? requestor->p_pid : 0);
++		printf("VEUX reboot requested howto=0x%x caller=%s pid=0x%x message=\"%s\" message_hex=",
++		    howto, requestor ? requestor->p_comm : "kernel", requestor ? requestor->p_pid : 0,
++		    message ? message : "<none>");
++		if (message) {
++			for (unsigned int i = 0; i < 1024 && message[i] != '\0'; ++i) printf("%02x", (unsigned char)message[i]);
++		}
++		printf("\n");
++		int log_error = veux_log_flush_sync();
++		printf("VEUX reboot request ring_flush=0x%x\n", log_error);
++		(void)veux_log_flush_sync();
 +	}
 +#endif
  
