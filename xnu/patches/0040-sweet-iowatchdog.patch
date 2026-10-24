@@ -1,3 +1,4 @@
+diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
 --- a/iokit/conf/files.arm64
 +++ b/iokit/conf/files.arm64
 @@ -12,3 +12,4 @@
@@ -5,6 +6,7 @@
  iokit/Kernel/arm/SweetEntitlements.cpp                           optional iokitcpp
  iokit/Kernel/arm/SweetKeyStore.cpp                               optional iokitcpp
 +iokit/Kernel/arm/SweetWatchdog.cpp                               optional iokitcpp
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
 --- a/iokit/KernelConfigTables.cpp
 +++ b/iokit/KernelConfigTables.cpp
 @@ -52,6 +52,11 @@
@@ -19,6 +21,8 @@
  #endif
      "   {"
      "     'IOClass'         = IOPanicPlatform;"
+diff --git a/iokit/Kernel/arm/SweetWatchdog.cpp b/iokit/Kernel/arm/SweetWatchdog.cpp
+new file mode 100644
 --- /dev/null
 +++ b/iokit/Kernel/arm/SweetWatchdog.cpp
 @@ -0,0 +1,94 @@

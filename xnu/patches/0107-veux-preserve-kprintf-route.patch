@@ -1,6 +1,7 @@
 From: VEUX bring-up
 Subject: [PATCH] Preserve the validated framebuffer sink through KPRINTF startup
 
+diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
 @@ -63,12 +63,6 @@

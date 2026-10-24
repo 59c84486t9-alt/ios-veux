@@ -1,3 +1,4 @@
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 --- a/osfmk/arm64/veux_early.c
 +++ b/osfmk/arm64/veux_early.c
 @@ -9,6 +9,11 @@
@@ -241,6 +242,7 @@
 +}
 +
  #endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/osfmk/arm64/sweet_early.h b/osfmk/arm64/sweet_early.h
 --- a/osfmk/arm64/sweet_early.h
 +++ b/osfmk/arm64/sweet_early.h
 @@ -33,6 +33,8 @@
@@ -252,6 +254,7 @@
  void veux_irq_probe(void);
  int veux_probe_interrupt(unsigned int group);
  static inline void sweet_early_disable(void) {}
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -1479,6 +1479,9 @@
@@ -292,6 +295,7 @@
  				}
  			}
  		}
+diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
 --- a/osfmk/kern/startup.c
 +++ b/osfmk/kern/startup.c
 @@ -709,6 +709,9 @@
@@ -304,6 +308,7 @@
  
  	/*
  	 * This will start displaying progress to the user, start as early as possible
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
 --- a/bsd/kern/bsd_init.c
 +++ b/bsd/kern/bsd_init.c
 @@ -1,3 +1,6 @@

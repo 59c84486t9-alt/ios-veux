@@ -5,6 +5,7 @@ Use the supplied 1080x2520 a8r8g8b8 framebuffer at 0x85200000. Map it
 without probing or gating on SDE registers so the opted-in early marker and
 text console can produce a visible XNU life signal.
 
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -1430,24 +1430,13 @@
@@ -298,6 +299,7 @@ text console can produce a visible XNU life signal.
 -	veux_sde_log_text("--- VEUX SDE probe v1 end ---\n");
 -}
  #endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
 @@ -108,11 +108,11 @@
@@ -317,6 +319,7 @@ text console can produce a visible XNU life signal.
  }
  #endif
  
+diff --git a/pexpert/pexpert/arm/protos.h b/pexpert/pexpert/arm/protos.h
 --- a/pexpert/pexpert/arm/protos.h
 +++ b/pexpert/pexpert/arm/protos.h
 @@ -19,7 +19,7 @@

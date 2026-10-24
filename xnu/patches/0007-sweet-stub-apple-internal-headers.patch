@@ -23,7 +23,6 @@ index 6c63bbd..347efee 100644
  #  PERF_DBG_DEBUG = [ PERF_DBG_BASE lock_stats zleaks alternate_debugger sched_hygiene_debug config_debug_syscall_rejection config_iotrace ]
 diff --git a/osfmk/arm64/ppl/sart.h b/osfmk/arm64/ppl/sart.h
 new file mode 100644
-index 0000000..a8cd7b6
 --- /dev/null
 +++ b/osfmk/arm64/ppl/sart.h
 @@ -0,0 +1,13 @@
@@ -42,7 +41,6 @@ index 0000000..a8cd7b6
 +#endif /* _ARM64_PPL_SART_H_ */
 diff --git a/osfmk/arm64/ppl/uat.h b/osfmk/arm64/ppl/uat.h
 new file mode 100644
-index 0000000..4a790c2
 --- /dev/null
 +++ b/osfmk/arm64/ppl/uat.h
 @@ -0,0 +1,13 @@
@@ -61,7 +59,6 @@ index 0000000..4a790c2
 +#endif /* _ARM64_PPL_UAT_H_ */
 diff --git a/osfmk/arm64/tunables/tunables.s b/osfmk/arm64/tunables/tunables.s
 new file mode 100644
-index 0000000..711cdef
 --- /dev/null
 +++ b/osfmk/arm64/tunables/tunables.s
 @@ -0,0 +1,7 @@

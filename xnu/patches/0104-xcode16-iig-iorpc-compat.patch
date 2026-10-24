@@ -5,6 +5,7 @@ Xcode 16's IIG output references IORPC.kernelContent in kernel builds.
 Backport the kernel-only field present in newer open-source XNU so the
 generated XNU 8796 sources compile with the macOS 15 runner's toolchain.
 
+diff --git a/iokit/IOKit/IORPC.h b/iokit/IOKit/IORPC.h
 --- a/iokit/IOKit/IORPC.h
 +++ b/iokit/IOKit/IORPC.h
 @@ -224,5 +224,8 @@ struct IORPC {
@@ -16,6 +17,7 @@ generated XNU 8796 sources compile with the macOS 15 runner's toolchain.
 +#endif /* KERNEL */
  };
  typedef struct IORPC IORPC;
+diff --git a/iokit/DriverKit/IORPC.h b/iokit/DriverKit/IORPC.h
 --- a/iokit/DriverKit/IORPC.h
 +++ b/iokit/DriverKit/IORPC.h
 @@ -224,5 +224,8 @@ struct IORPC {

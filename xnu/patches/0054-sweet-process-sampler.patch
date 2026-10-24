@@ -1,6 +1,10 @@
+diff --git a/bsd/conf/files b/bsd/conf/files
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -105,6 +105,7 @@
+@@ -103,8 +103,9 @@
+ ./systrace_args.c			optional config_dtrace
+
+ bsd/dev/random/randomdev.c		standard
  
  bsd/dev/memdev.c			standard
  bsd/dev/sweet_ufs.c			standard
@@ -8,6 +12,7 @@
  bsd/dev/mem.c				standard
  bsd/dev/munge.c 			optional config_requires_u32_munging
  bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c
 @@ -46,6 +46,7 @@
@@ -26,6 +31,7 @@
  	return 0;
  }
  
+diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 --- a/osfmk/kern/exception.c
 +++ b/osfmk/kern/exception.c
 @@ -971,6 +971,56 @@
@@ -85,6 +91,7 @@
  #endif /* ARM64_BOARD_CONFIG_SWEET */
  
  kern_return_t
+diff --git a/iokit/Kernel/IOUserClient.cpp b/iokit/Kernel/IOUserClient.cpp
 --- a/iokit/Kernel/IOUserClient.cpp
 +++ b/iokit/Kernel/IOUserClient.cpp
 @@ -2603,7 +2603,7 @@
@@ -105,6 +112,7 @@
  		}
  		sweet_iolog_parsed = 1;
  	}
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
 @@ -217,6 +217,7 @@
@@ -126,6 +134,8 @@
  	if (!fConsolePaused) {
  		int quiet = 0;
  		fConsolePaused = true;
+diff --git a/bsd/dev/sweet_sample.c b/bsd/dev/sweet_sample.c
+new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_sample.c
 @@ -0,0 +1,88 @@

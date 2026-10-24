@@ -1,3 +1,4 @@
+diff --git a/bsd/conf/files b/bsd/conf/files
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
 @@ -108,6 +108,8 @@
@@ -9,6 +10,7 @@
  bsd/dev/mem.c				standard
  bsd/dev/munge.c 			optional config_requires_u32_munging
  bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
 --- a/bsd/dev/sweet_touch.c
 +++ b/bsd/dev/sweet_touch.c
 @@ -1,8 +1,8 @@
@@ -83,6 +85,7 @@
  	uint8_t gid[12] = {0}, fid1 = 0, fid2 = 0;
  	int ge = touch_read(0x5d, 0x4022, true, gid, sizeof(gid));
  	printf("SWEET TOUCH: probe 0x5d err=%d pid=%02x%02x%02x%02x fw=%02x.%02x.%02x.%02x irq=%#x\n",
+diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
 --- a/iokit/conf/files.arm64
 +++ b/iokit/conf/files.arm64
 @@ -15,6 +15,7 @@
@@ -93,6 +96,7 @@
  iokit/Kernel/arm/hid/SweetHID.cpp                                optional iokitcpp
  iokit/Kernel/arm/hid/IOHIDEvent.cpp                              optional iokitcpp
  iokit/Kernel/arm/hid/IOHIDEventServiceQueue.cpp                  optional iokitcpp
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
 --- a/iokit/KernelConfigTables.cpp
 +++ b/iokit/KernelConfigTables.cpp
 @@ -77,6 +77,11 @@
@@ -107,6 +111,8 @@
  #endif
      "   {"
      "     'IOClass'         = IOPanicPlatform;"
+diff --git a/bsd/dev/sweet_rpmh.c b/bsd/dev/sweet_rpmh.c
+new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_rpmh.c
 @@ -0,0 +1,358 @@
@@ -468,6 +474,8 @@
 +	return error;
 +}
 +#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_spmi.c b/bsd/dev/sweet_spmi.c
+new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_spmi.c
 @@ -0,0 +1,126 @@
@@ -597,6 +605,8 @@
 +	return -1;
 +}
 +#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_spmi.h b/bsd/dev/sweet_spmi.h
+new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_spmi.h
 @@ -0,0 +1,14 @@
@@ -614,6 +624,8 @@
 +}
 +#endif
 +#endif
+diff --git a/iokit/Kernel/arm/SweetBattery.cpp b/iokit/Kernel/arm/SweetBattery.cpp
+new file mode 100644
 --- /dev/null
 +++ b/iokit/Kernel/arm/SweetBattery.cpp
 @@ -0,0 +1,319 @@

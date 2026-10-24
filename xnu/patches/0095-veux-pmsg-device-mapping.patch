@@ -6,6 +6,7 @@ XNU bytes. Use the conservative I/O memory mapping for the reserved pmsg RAM
 instead of write-combining, while retaining the store barriers from patch 0094.
 Give this logger a distinct start marker so the next dump identifies this build.
 
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -755,7 +755,8 @@

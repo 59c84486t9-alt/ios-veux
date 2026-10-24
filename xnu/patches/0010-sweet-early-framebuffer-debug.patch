@@ -142,7 +142,6 @@ index ccbb188..777aca4 100644
  
 diff --git a/osfmk/arm64/sweet_early.c b/osfmk/arm64/sweet_early.c
 new file mode 100644
-index 0000000..8f4c808
 --- /dev/null
 +++ b/osfmk/arm64/sweet_early.c
 @@ -0,0 +1,130 @@
@@ -278,7 +277,6 @@ index 0000000..8f4c808
 +#endif /* SWEET */
 diff --git a/osfmk/arm64/sweet_early.h b/osfmk/arm64/sweet_early.h
 new file mode 100644
-index 0000000..fbbc827
 --- /dev/null
 +++ b/osfmk/arm64/sweet_early.h
 @@ -0,0 +1,22 @@

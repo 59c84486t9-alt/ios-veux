@@ -8,6 +8,7 @@ match the known splash reservation. The framebuffer path never writes SDE MMIO.
 
 Enable the bounded marker only with veuxfb=1.
 
+diff --git a/pexpert/pexpert/arm/protos.h b/pexpert/pexpert/arm/protos.h
 --- a/pexpert/pexpert/arm/protos.h
 +++ b/pexpert/pexpert/arm/protos.h
 @@ -19,6 +19,7 @@
@@ -18,6 +19,7 @@ Enable the bounded marker only with veuxfb=1.
  #endif
  void veux_pmsg_putc(char c);
  
+diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
 @@ -107,6 +107,8 @@
@@ -29,6 +31,7 @@ Enable the bounded marker only with veuxfb=1.
  	}
  }
  #endif
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -1423,3 +1423,214 @@

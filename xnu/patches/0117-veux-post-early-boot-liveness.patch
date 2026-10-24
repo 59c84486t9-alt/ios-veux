@@ -19,11 +19,7 @@ diff --git a/bsd/conf/files b/bsd/conf/files
 diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
 --- a/osfmk/console/serial_console.c
 +++ b/osfmk/console/serial_console.c
-@@ -537,9 +537,15 @@
- #if defined(ARM64_BOARD_CONFIG_VEUX)
- 	/* /dev/console writes otherwise bypass the PE_kputc framebuffer sink. */
- 	extern void veux_fb_console_putc(char);
- 	extern void veux_fb_console_hello_block(void);
+@@ -540,6 +540,17 @@
  	static const char marker[] = "VEUX_FB_GREEN_BLOCK\n";
  	static unsigned marker_pos;
 +	static const char boot_done[] = "Early boot complete. Continuing system boot.";
@@ -32,9 +28,15 @@ diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
  	for (int n = 0; n < size; n++) {
  		char c = str[n];
 +		if (c == boot_done[boot_done_pos]) {
-+			if (++boot_done_pos == sizeof(boot_done) - 1) { veux_liveness_start(); boot_done_pos = 0; }
-+		} else boot_done_pos = (c == boot_done[0]) ? 1 : 0;
++			if (++boot_done_pos == sizeof(boot_done) - 1) {
++				veux_liveness_start();
++				boot_done_pos = 0;
++			}
++		} else {
++			boot_done_pos = (c == boot_done[0]) ? 1 : 0;
++		}
  		if (c == marker[marker_pos]) {
+ 			marker_pos++;
 diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c

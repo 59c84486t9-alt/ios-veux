@@ -5,6 +5,7 @@ Use the reserved 1 MiB Android pmsg zone for a persistent XNU kprintf trail.
 The logger is enabled only when the VEUX ADT contains the verified ramoops
 region. It appends using Linux persistent_ram's no-ECC pmsg header format.
 
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -26,6 +26,7 @@
@@ -98,6 +99,7 @@ region. It appends using Linux persistent_ram's no-ECC pmsg header format.
  
  static void
  fbcon_clear_row(uint32_t row)
+diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
 @@ -12,6 +12,7 @@
@@ -129,6 +131,7 @@ region. It appends using Linux persistent_ram's no-ECC pmsg header format.
  	uart_putc(c);
  }
  
+diff --git a/pexpert/pexpert/arm/protos.h b/pexpert/pexpert/arm/protos.h
 --- a/pexpert/pexpert/arm/protos.h
 +++ b/pexpert/pexpert/arm/protos.h
 @@ -16,6 +16,8 @@

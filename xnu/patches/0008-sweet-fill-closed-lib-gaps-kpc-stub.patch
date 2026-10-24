@@ -93,7 +93,6 @@ index b820595..a6d23fa 100644
  {
 diff --git a/osfmk/arm64/amcc_rorgn_common.c b/osfmk/arm64/amcc_rorgn_common.c
 new file mode 100644
-index 0000000..963cdc1
 --- /dev/null
 +++ b/osfmk/arm64/amcc_rorgn_common.c
 @@ -0,0 +1,9 @@
@@ -108,7 +107,6 @@ index 0000000..963cdc1
 +static const uint8_t sweet_no_amcc_rorgn __attribute__((unused)) = 0;
 diff --git a/osfmk/arm64/amcc_rorgn_ppl.c b/osfmk/arm64/amcc_rorgn_ppl.c
 new file mode 100644
-index 0000000..963cdc1
 --- /dev/null
 +++ b/osfmk/arm64/amcc_rorgn_ppl.c
 @@ -0,0 +1,9 @@
@@ -159,7 +157,6 @@ index f2c2a00..e777b77 100644
   *
 diff --git a/osfmk/arm64/kpc.c b/osfmk/arm64/kpc.c
 new file mode 100644
-index 0000000..1ac5f54
 --- /dev/null
 +++ b/osfmk/arm64/kpc.c
 @@ -0,0 +1,159 @@

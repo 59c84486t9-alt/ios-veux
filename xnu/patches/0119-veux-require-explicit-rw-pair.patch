@@ -1,0 +1,49 @@
+From: ios-veux
+Subject: [PATCH] Require both VEUX read-write boot arguments
+
+Keep the root and underlying UFS device read-only unless rootrw=1 and
+ufsrw=1 are both present. Report the effective mode, not one requested bit.
+
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -711,8 +711,10 @@
+ 	devfs_make_node(makedev(su.cmajor, 0), DEVFS_CHAR, UID_ROOT, GID_OPERATOR, 0640, "rufsroot0");
+ 	/* Only now, with the partition bounds known, can writes be allowed. */
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+-	/* Read-only by default; rw requires both rootrw=1 and ufsrw=1. */
+-	su.writable = (rw == 1);
++	/* Require both boot args before exposing a writable device. */
++	uint32_t rootrw = 0;
++	PE_parse_boot_argn("rootrw", &rootrw, sizeof(rootrw));
++	su.writable = (rw == 1 && rootrw == 1);
+ #else
+ 	su.writable = (rw != 0);
+ #endif
+diff --git a/bsd/vfs/vfs_subr.c b/bsd/vfs/vfs_subr.c
+--- a/bsd/vfs/vfs_subr.c
++++ b/bsd/vfs/vfs_subr.c
+@@ -1217,8 +1217,8 @@
+ 	uint32_t rootrw = 0, ufsrw = 0;
+ 	PE_parse_boot_argn("rootrw", &rootrw, sizeof(rootrw));
+ 	PE_parse_boot_argn("ufsrw", &ufsrw, sizeof(ufsrw));
+-	printf("VEUX ROOT mode=%s ufs_write=%s (read-only default; rw requires rootrw=1 and ufsrw=1)\n", rootrw == 1 ? "rw" : "ro",
+-	    ufsrw == 1 ? "enabled" : "disabled");
++	printf("VEUX ROOT mode=%s rootrw=%u ufsrw=%u\n",
++	    rootrw == 1 && ufsrw == 1 ? "rw" : "ro", rootrw, ufsrw);
+ #endif
+ #if CONFIG_MACF
+ 	struct vnode *vp;
+@@ -1280,8 +1280,10 @@
+ 		 * boot-arg rootrw=1 mounts it read-write from the start.
+ 		 */
+ 		{
+-			uint32_t rootrw = 0;
+-			if (PE_parse_boot_argn("rootrw", &rootrw, sizeof(rootrw)) && rootrw) {
++			uint32_t rootrw = 0, ufsrw = 0;
++			PE_parse_boot_argn("rootrw", &rootrw, sizeof(rootrw));
++			PE_parse_boot_argn("ufsrw", &ufsrw, sizeof(ufsrw));
++			if (rootrw == 1 && ufsrw == 1) {
+ 				mp->mnt_flag &= ~MNT_RDONLY;
+ 			}
+ 		}

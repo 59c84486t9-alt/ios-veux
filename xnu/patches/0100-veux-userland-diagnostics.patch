@@ -1,6 +1,7 @@
 From: ios-veux
 Subject: [PATCH] Add opt-in VEUX userspace console and IOKit diagnostics
 
+diff --git a/bsd/dev/mem.c b/bsd/dev/mem.c
 --- a/bsd/dev/mem.c
 +++ b/bsd/dev/mem.c
 @@ -153,7 +153,7 @@
@@ -37,6 +38,7 @@ Subject: [PATCH] Add opt-in VEUX userspace console and IOKit diagnostics
  			{
  				char name[32];
  				if (sweet_null_tee(name, sizeof(name))) {
+diff --git a/iokit/Kernel/IOUserClient.cpp b/iokit/Kernel/IOUserClient.cpp
 --- a/iokit/Kernel/IOUserClient.cpp
 +++ b/iokit/Kernel/IOUserClient.cpp
 @@ -2600,7 +2600,7 @@

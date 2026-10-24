@@ -1,6 +1,7 @@
 From: VEUX bring-up
 Subject: [PATCH] Instrument VM faults with phase-safe recovery experiments
 
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 --- a/osfmk/arm64/veux_early.c
 +++ b/osfmk/arm64/veux_early.c
 @@ -3,6 +3,11 @@
@@ -488,6 +489,7 @@ Subject: [PATCH] Instrument VM faults with phase-safe recovery experiments
 +}
 +
  #endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/osfmk/arm64/sweet_early.h b/osfmk/arm64/sweet_early.h
 --- a/osfmk/arm64/sweet_early.h
 +++ b/osfmk/arm64/sweet_early.h
 @@ -18,8 +18,21 @@
@@ -512,6 +514,7 @@ Subject: [PATCH] Instrument VM faults with phase-safe recovery experiments
  void veux_irq_probe(void);
  int veux_probe_interrupt(unsigned int group);
  static inline void sweet_early_disable(void) {}
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
 --- a/osfmk/arm64/sleh.c
 +++ b/osfmk/arm64/sleh.c
 @@ -464,6 +464,9 @@
@@ -600,6 +603,7 @@ Subject: [PATCH] Instrument VM faults with phase-safe recovery experiments
  		rtclock_intr(TRUE);
  		INTERRUPT_MASKED_DEBUG_END();
  	}
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -1501,7 +1501,7 @@

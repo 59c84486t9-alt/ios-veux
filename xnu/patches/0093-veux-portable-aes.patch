@@ -5,6 +5,7 @@ SWEET's BearSSL-backed CBC/ECB implementation avoids the null corecrypto
 function table for legacy AES APIs. BearSSL is already staged for VEUX; include
 VEUX in the provider guards and its include/compiler settings.
 
+diff --git a/libkern/crypto/corecrypto_aes.c b/libkern/crypto/corecrypto_aes.c
 --- a/libkern/crypto/corecrypto_aes.c
 +++ b/libkern/crypto/corecrypto_aes.c
 @@ -32,8 +32,8 @@
@@ -18,6 +19,7 @@ VEUX in the provider guards and its include/compiler settings.
  extern const struct ccmode_cbc sweet_aes_cbc_encrypt;
  extern const struct ccmode_cbc sweet_aes_cbc_decrypt;
  #define AES_CBC_ENCRYPT_MODE (&sweet_aes_cbc_encrypt)
+diff --git a/libkern/conf/Makefile.template b/libkern/conf/Makefile.template
 --- a/libkern/conf/Makefile.template
 +++ b/libkern/conf/Makefile.template
 @@ -33,7 +33,7 @@
@@ -29,6 +31,7 @@ VEUX in the provider guards and its include/compiler settings.
  SWEET_AES_ROOT = $(SRCROOT)/libkern/crypto/sweet_bearssl
  SWEET_AES_INC = -I$(SWEET_AES_ROOT)/inc -I$(SWEET_AES_ROOT)/src
  sweet_aes.o_INCFLAGS = $(SWEET_AES_INC)
+diff --git a/libkern/crypto/sweet_aes.c b/libkern/crypto/sweet_aes.c
 --- a/libkern/crypto/sweet_aes.c
 +++ b/libkern/crypto/sweet_aes.c
 @@ -4,7 +4,7 @@
@@ -40,6 +43,7 @@ VEUX in the provider guards and its include/compiler settings.
  #include <libkern/libkern.h>
  #include <libkern/crypto/aes.h>
  #include <corecrypto/ccmode.h>
+diff --git a/libkern/crypto/sweet_aes_ct.c b/libkern/crypto/sweet_aes_ct.c
 --- a/libkern/crypto/sweet_aes_ct.c
 +++ b/libkern/crypto/sweet_aes_ct.c
 @@ -1,4 +1,4 @@
@@ -48,6 +52,7 @@ VEUX in the provider guards and its include/compiler settings.
 +#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
  #include "sweet_bearssl/src/symcipher/aes_ct.c"
  #endif
+diff --git a/libkern/crypto/sweet_aes_ct_enc.c b/libkern/crypto/sweet_aes_ct_enc.c
 --- a/libkern/crypto/sweet_aes_ct_enc.c
 +++ b/libkern/crypto/sweet_aes_ct_enc.c
 @@ -1,4 +1,4 @@
@@ -56,6 +61,7 @@ VEUX in the provider guards and its include/compiler settings.
 +#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
  #include "sweet_bearssl/src/symcipher/aes_ct_enc.c"
  #endif
+diff --git a/libkern/crypto/sweet_aes_ct_dec.c b/libkern/crypto/sweet_aes_ct_dec.c
 --- a/libkern/crypto/sweet_aes_ct_dec.c
 +++ b/libkern/crypto/sweet_aes_ct_dec.c
 @@ -1,4 +1,4 @@
@@ -64,6 +70,7 @@ VEUX in the provider guards and its include/compiler settings.
 +#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
  #include "sweet_bearssl/src/symcipher/aes_ct_dec.c"
  #endif
+diff --git a/libkern/crypto/sweet_aes_ct_cbcenc.c b/libkern/crypto/sweet_aes_ct_cbcenc.c
 --- a/libkern/crypto/sweet_aes_ct_cbcenc.c
 +++ b/libkern/crypto/sweet_aes_ct_cbcenc.c
 @@ -1,4 +1,4 @@
@@ -72,6 +79,7 @@ VEUX in the provider guards and its include/compiler settings.
 +#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
  #include "sweet_bearssl/src/symcipher/aes_ct_cbcenc.c"
  #endif
+diff --git a/libkern/crypto/sweet_aes_ct_cbcdec.c b/libkern/crypto/sweet_aes_ct_cbcdec.c
 --- a/libkern/crypto/sweet_aes_ct_cbcdec.c
 +++ b/libkern/crypto/sweet_aes_ct_cbcdec.c
 @@ -1,4 +1,4 @@

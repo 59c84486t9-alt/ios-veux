@@ -5,6 +5,7 @@ The generic BSD root-mount loop retries a failed mount. For the VEUX
 bring-up, report the terminal failure and panic rather than repeating UFS
 traffic against the same damaged or unsupported root volume.
 
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
 --- a/bsd/kern/bsd_init.c
 +++ b/bsd/kern/bsd_init.c
 @@ -901,5 +901,9 @@

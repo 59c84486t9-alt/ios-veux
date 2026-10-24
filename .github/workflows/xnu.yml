@@ -35,7 +35,10 @@ env:
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
   MACHINE_CONFIG: ${{ inputs.machine_config || 'VEUX' }}
   VEUX_BUILD_ID: ${{ github.run_id }}
-  VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 rootrw=1 ufsrw=1 veuxlog=1 launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128"
+  # Keep the first candidate boot read-only. The VEUX tail logger occupies
+  # userdata blocks and must not be enabled while the HFS+ root volume can
+  # extend through those blocks. RW remains a boot-arg-only experiment.
+  VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128"
 
 jobs:
   build:
@@ -45,6 +48,16 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
+
+      - name: Repository and patch structure preflight
+        run: |
+          python3 tools/validate-repo.py
+          case " $VEUX_BOOT_ARGS " in
+            *" rootrw=1 "*|*" ufsrw=1 "*|*" veuxlog=1 "*)
+              echo "refusing an RW or userdata-tail-log default boot configuration" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Fetch build script
         run: |
@@ -205,11 +218,13 @@ jobs:
             grep -Fq 'veux_bsd_stage(16); /* first successful UFS block read */' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'veux_bsd_stage(17); /* first UFS block-read failure */' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'error=0x%x lba=0x%llx count=0x%x' xnu/bsd/dev/sweet_ufs.c
-            grep -Fq 'su.writable = (rw == 1);' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'first successful UFS write' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'first UFS write failure' xnu/bsd/dev/sweet_ufs.c
             grep -Fq 'VEUX ROOT mode=' xnu/bsd/vfs/vfs_subr.c
-            grep -Fq 'read-only default; rw requires rootrw=1 and ufsrw=1' xnu/bsd/vfs/vfs_subr.c
+            grep -Fq 'VEUX ROOT mode=%s rootrw=%u ufsrw=%u' xnu/bsd/vfs/vfs_subr.c
+            grep -Fq 'if (rootrw == 1 && ufsrw == 1)' xnu/bsd/vfs/vfs_subr.c
+            grep -Fq 'su.writable = (rw == 1 && rootrw == 1);' xnu/bsd/dev/sweet_ufs.c
+            grep -Fq '0119-veux-require-explicit-rw-pair.patch' patch-status.txt
             grep -Fq 'VEUX MOUNT helper exit' xnu/bsd/kern/kern_exit.c
             grep -Fq 'if (isroot && ronly) {' xnu/bsd/sweet_hfs/core/hfs_vfsops.c
             grep -Fq 'VEUX HFS: read-only root journal replay disabled' xnu/bsd/sweet_hfs/core/hfs_vfsops.c

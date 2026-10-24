@@ -1,5 +1,6 @@
 From: ios-veux
 Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
+diff --git a/iokit/Kernel/IOPlatformExpert.cpp b/iokit/Kernel/IOPlatformExpert.cpp
 --- a/iokit/Kernel/IOPlatformExpert.cpp
 +++ b/iokit/Kernel/IOPlatformExpert.cpp
 @@ -52,6 +52,7 @@
@@ -79,6 +80,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
  #if defined (__x86_64__)
  	// On ARM kPEPanicRestartCPU is supported in the drivers
  	if (type == kPEPanicRestartCPU) {
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 --- a/osfmk/arm64/veux_early.c
 +++ b/osfmk/arm64/veux_early.c
 @@ -22,6 +22,11 @@
@@ -207,6 +209,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
  }
  
  #endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/bsd/kern/kern_shutdown.c b/bsd/kern/kern_shutdown.c
 --- a/bsd/kern/kern_shutdown.c
 +++ b/bsd/kern/kern_shutdown.c
 @@ -178,6 +178,27 @@
@@ -237,6 +240,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
  
  	if ((howto & (RB_PANIC | RB_QUICK)) == (RB_PANIC | RB_QUICK)) {
  		panic_kernel(howto, message);
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
 @@ -4887,7 +4887,9 @@
@@ -260,6 +264,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
  	veux_bsd_stage(14); /* launchd execve entry */
  #endif
  	exec_error = execve(p, &init_exec_args, retval);
+diff --git a/bsd/kern/kern_exit.c b/bsd/kern/kern_exit.c
 --- a/bsd/kern/kern_exit.c
 +++ b/bsd/kern/kern_exit.c
 @@ -1778,7 +1778,17 @@
@@ -290,6 +295,7 @@ Subject: [PATCH] Add VEUX PSCI reset and reboot-origin diagnostics
  		printf("VEUX MOUNT helper exit raw-status=0x%x\n", rv);
  	}
  #endif
+diff --git a/osfmk/arm64/sweet_early.h b/osfmk/arm64/sweet_early.h
 --- a/osfmk/arm64/sweet_early.h
 +++ b/osfmk/arm64/sweet_early.h
 @@ -36,6 +36,9 @@

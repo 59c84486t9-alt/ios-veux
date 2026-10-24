@@ -1,3 +1,4 @@
+diff --git a/bsd/net/rtsock.c b/bsd/net/rtsock.c
 --- a/bsd/net/rtsock.c
 +++ b/bsd/net/rtsock.c
 @@ -510,6 +510,25 @@
@@ -26,6 +27,7 @@
  	switch (rtm->rtm_type) {
  	case RTM_ADD:
  		if (info.rti_info[RTAX_GATEWAY] == NULL) {
+diff --git a/bsd/netinet/in.c b/bsd/netinet/in.c
 --- a/bsd/netinet/in.c
 +++ b/bsd/netinet/in.c
 @@ -1210,6 +1210,20 @@

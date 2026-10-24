@@ -5,10 +5,10 @@ Mirror /dev/console text into the existing simplefb console and draw one
 green marker when the opt-in hello LaunchDaemon emits its debug token. This
 is a bring-up diagnostic bridge, not a general display or IOSurface API.
 
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -1545,6 +1545,23 @@
- 	veux_fb_console_col++;
+@@ -1561,4 +1561,21 @@
  }
  
 +void
@@ -30,16 +30,14 @@ is a bring-up diagnostic bridge, not a general display or IOSurface API.
 +
  static uint32_t veux_fb_panic_col, veux_fb_panic_row;
  void
- veux_fb_panic_begin(void)
-
+diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
 --- a/osfmk/console/serial_console.c
 +++ b/osfmk/console/serial_console.c
-@@ -534,6 +534,26 @@
- console_write(char *str, int size)
+@@ -535,4 +535,24 @@
  {
  	assert(str != NULL);
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
-+	/* /dev/console writes otherwise bypass the PE_kputc framebuffer sink. */
++	/* Mirror user console output into the simple framebuffer diagnostics. */
 +	extern void veux_fb_console_putc(char);
 +	extern void veux_fb_console_hello_block(void);
 +	static const char marker[] = "VEUX_FB_GREEN_BLOCK\n";
@@ -60,4 +58,3 @@ is a bring-up diagnostic bridge, not a general display or IOSurface API.
 +#endif
  
  	char *write_ptr = NULL;
- 	int chunk_size = CPU_CONS_BUF_SIZE;

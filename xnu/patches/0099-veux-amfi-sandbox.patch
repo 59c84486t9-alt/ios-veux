@@ -1,6 +1,7 @@
 From: ios-veux
 Subject: [PATCH] Enable VEUX AMFI and opt-in sandbox bring-up policies
 
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
 --- a/bsd/kern/bsd_init.c
 +++ b/bsd/kern/bsd_init.c
 @@ -691,8 +691,8 @@
@@ -14,6 +15,7 @@ Subject: [PATCH] Enable VEUX AMFI and opt-in sandbox bring-up policies
  	extern void sweet_amfi_policy_register(void);
  	sweet_amfi_policy_register();
  #endif
+diff --git a/bsd/kern/sweet_amfi.c b/bsd/kern/sweet_amfi.c
 --- a/bsd/kern/sweet_amfi.c
 +++ b/bsd/kern/sweet_amfi.c
 @@ -22,7 +22,7 @@

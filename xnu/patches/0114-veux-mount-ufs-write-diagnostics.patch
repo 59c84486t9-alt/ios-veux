@@ -1,6 +1,7 @@
 From: ios-veux
 Subject: [PATCH] Report VEUX mount mode and first UFS writes
 
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c
 @@ -329,7 +329,22 @@
@@ -27,6 +28,7 @@ Subject: [PATCH] Report VEUX mount mode and first UFS writes
  }
  
  static int
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
 @@ -4884,6 +4884,13 @@
@@ -43,6 +45,7 @@ Subject: [PATCH] Report VEUX mount mode and first UFS writes
  
  	memoryshot(VM_EXECVE, DBG_FUNC_NONE);
  
+diff --git a/bsd/kern/kern_exit.c b/bsd/kern/kern_exit.c
 --- a/bsd/kern/kern_exit.c
 +++ b/bsd/kern/kern_exit.c
 @@ -1844,6 +1844,13 @@
@@ -59,6 +62,7 @@ Subject: [PATCH] Report VEUX mount mode and first UFS writes
  
  	if (p->p_crash_behavior != 0 || p == initproc) {
  		proc_handle_critical_exit(p, rv);
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
 --- a/bsd/kern/bsd_init.c
 +++ b/bsd/kern/bsd_init.c
 @@ -888,6 +888,7 @@
@@ -69,6 +73,7 @@ Subject: [PATCH] Report VEUX mount mode and first UFS writes
  #endif
  		if (0 == err) {
  #if defined(ARM64_BOARD_CONFIG_VEUX)
+diff --git a/bsd/vfs/vfs_subr.c b/bsd/vfs/vfs_subr.c
 --- a/bsd/vfs/vfs_subr.c
 +++ b/bsd/vfs/vfs_subr.c
 @@ -1214,6 +1214,11 @@
@@ -83,6 +88,7 @@ Subject: [PATCH] Report VEUX mount mode and first UFS writes
  #endif
  #if CONFIG_MACF
  	struct vnode *vp;
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 --- a/osfmk/arm64/veux_early.c
 +++ b/osfmk/arm64/veux_early.c
 @@ -781,8 +781,8 @@

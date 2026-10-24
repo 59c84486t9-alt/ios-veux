@@ -25,6 +25,7 @@ for patch in (
     "0114-veux-mount-ufs-write-diagnostics.patch",
     "0117-veux-post-early-boot-liveness.patch",
     "0118-veux-stop-mountroot-retries.patch",
+    "0119-veux-require-explicit-rw-pair.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -38,7 +39,7 @@ needles = {
     "mount_helper_start": b"VEUX MOUNT helper start name=",
     "mount_helper_exit": b"VEUX MOUNT helper exit raw-status=",
     "root_mount_result": b"VEUX ROOT mount result errno=",
-    "root_mode_and_ro_default": b"VEUX ROOT mode=%s ufs_write=%s (read-only default; rw requires rootrw=1 and ufsrw=1)",
+    "root_mode_reports_effective_dual_arg_state": b"VEUX ROOT mode=%s rootrw=%u ufsrw=%u",
     "rootrw_boot_arg": b"rootrw",
     "ufsrw_boot_arg": b"ufsrw",
     "ufs_first_write_success": b"VEUX UFS: first successful UFS write",
@@ -54,21 +55,23 @@ ufs = (a.source_root / "bsd/dev/sweet_ufs.c").read_text()
 root_alloc = vfs.split("vfs_rootmountalloc_internal(struct vfstable *vfsp", 1)[1].split("vfs_rootmountalloc(", 1)[0]
 source_checks["root_mount_starts_read_only"] = "mp->mnt_flag = MNT_RDONLY | MNT_ROOTFS;" in root_alloc
 mountroot = vfs.split("vfs_mountroot(void)", 1)[1]
-rootrw_block = mountroot.split('PE_parse_boot_argn("rootrw", &rootrw, sizeof(rootrw))', 1)
-source_checks["rootrw_only_clears_readonly_when_one"] = (
-    len(rootrw_block) == 2
-    and "uint32_t rootrw = 0;" in mountroot
-    and "&& rootrw)" in rootrw_block[1][:100]
-    and "mp->mnt_flag &= ~MNT_RDONLY;" in rootrw_block[1][:180]
+root_mount_alloc = mountroot.split('mp = vfs_rootmountalloc_internal(vfsp, "root_device")', 1)
+root_mount_alloc = root_mount_alloc[1].split("if (vfsp->vfc_mountroot)", 1)[0] if len(root_mount_alloc) == 2 else ""
+source_checks["rootrw_and_ufsrw_both_required_for_rw_mount"] = (
+    "uint32_t rootrw = 0, ufsrw = 0;" in root_mount_alloc
+    and 'PE_parse_boot_argn("rootrw", &rootrw, sizeof(rootrw));' in root_mount_alloc
+    and 'PE_parse_boot_argn("ufsrw", &ufsrw, sizeof(ufsrw));' in root_mount_alloc
+    and "if (rootrw == 1 && ufsrw == 1)" in root_mount_alloc
+    and "mp->mnt_flag &= ~MNT_RDONLY;" in root_mount_alloc
 )
-source_checks["ufsrw_defaults_off_and_requires_one"] = (
+source_checks["rootrw_and_ufsrw_both_required_for_writable_ufs"] = (
     "uint32_t rw = 0;" in ufs
-    and
-    'PE_parse_boot_argn("ufsrw", &rw, sizeof(rw));' in ufs
-    and "su.writable = (rw == 1);" in ufs
+    and 'PE_parse_boot_argn("ufsrw", &rw, sizeof(rw));' in ufs
+    and 'PE_parse_boot_argn("rootrw", &rootrw, sizeof(rootrw));' in ufs
+    and "su.writable = (rw == 1 && rootrw == 1);" in ufs
 )
 if not all(source_checks.values()):
-    raise SystemExit("rootrw/ufsrw source policy check failed: " + repr(source_checks))
+    raise SystemExit("dual-argument rootrw/ufsrw source policy check failed: " + repr(source_checks))
 missing = [name for name, passed in checks.items() if not passed]
 if missing:
     raise SystemExit("kernel manifest checks failed: " + ", ".join(missing))
@@ -87,8 +90,8 @@ for line in status:
             "patch": patch_name,
             "reason": reason,
         })
-if not any(item["patch_id"] == "0031" for item in allowlisted_skips):
-    raise SystemExit("manifest requires the explicit 0031 allowlisted skip record")
+if not any("0031-sweet-read-write-root.patch APPLIED" in line for line in status):
+    raise SystemExit("manifest requires 0031 to apply; its rootrw gate is a prerequisite for the VEUX extension")
 
 manifest = {
     "build_id": a.build_id,

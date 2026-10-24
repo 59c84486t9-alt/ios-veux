@@ -6,6 +6,7 @@ its 12 MiB reservation with 16K L3 pages, retain an alias through TTBR0
 teardown, and keep six stage cells below the text console. GIC completion
 is configuration evidence, not proof of interrupt delivery.
 
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
 @@ -218,8 +218,33 @@
@@ -94,6 +95,7 @@ is configuration evidence, not proof of interrupt delivery.
  
  #if (!CONFIG_KERNEL_INTEGRITY || (CONFIG_KERNEL_INTEGRITY && !defined(KERNEL_INTEGRITY_WT)))
  	/* Watchtower
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 --- a/osfmk/arm64/arm_vm_init.c
 +++ b/osfmk/arm64/arm_vm_init.c
 @@ -1852,6 +1852,25 @@
@@ -140,6 +142,7 @@ is configuration evidence, not proof of interrupt delivery.
  #endif
  	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
  
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 --- a/osfmk/arm64/veux_early.c
 +++ b/osfmk/arm64/veux_early.c
 @@ -1,4 +1,4 @@
@@ -190,6 +193,7 @@ is configuration evidence, not proof of interrupt delivery.
  	veux_early_string("VEUX EARLY ");
  	veux_early_uint(stage);
  	veux_early_string(": ");
+diff --git a/osfmk/arm64/sweet_early.h b/osfmk/arm64/sweet_early.h
 --- a/osfmk/arm64/sweet_early.h
 +++ b/osfmk/arm64/sweet_early.h
 @@ -16,6 +16,8 @@
@@ -201,6 +205,7 @@ is configuration evidence, not proof of interrupt delivery.
  static inline void sweet_early_disable(void) {}
  #else
  static inline void sweet_early_mark(unsigned int stage, const char *label)
+diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
 --- a/pexpert/arm/pe_fiq.c
 +++ b/pexpert/arm/pe_fiq.c
 @@ -1,3 +1,4 @@
@@ -218,6 +223,7 @@ is configuration evidence, not proof of interrupt delivery.
  }
  #else
  void
+diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
 @@ -113,6 +113,7 @@
@@ -228,6 +234,7 @@ is configuration evidence, not proof of interrupt delivery.
  }
  #endif
  
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -1430,12 +1430,12 @@

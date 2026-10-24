@@ -1,6 +1,7 @@
 From: ios-veux
 Subject: [PATCH] Enable VEUX user-process crash diagnostics
 
+diff --git a/bsd/kern/kern_exit.c b/bsd/kern/kern_exit.c
 --- a/bsd/kern/kern_exit.c
 +++ b/bsd/kern/kern_exit.c
 @@ -1884,7 +1884,7 @@
@@ -12,6 +13,7 @@ Subject: [PATCH] Enable VEUX user-process crash diagnostics
  		if (p == current_proc()) {
  			extern void sweet_crash_log(const char *, int, int, uint64_t, uint64_t);
  			sweet_crash_log(p->p_comm, proc_getpid(p), WTERMSIG(rv),
+diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 --- a/osfmk/kern/exception.c
 +++ b/osfmk/kern/exception.c
 @@ -916,9 +916,15 @@

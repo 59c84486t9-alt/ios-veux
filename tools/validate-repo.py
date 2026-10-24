@@ -51,9 +51,20 @@ def validate_patches(verbose=False):
             continue
 
         with open(path, 'r', errors='ignore') as f:
-            head = f.read(2048)
+            patch_text = f.read()
+            head = patch_text[:2048]
             if not ('--- ' in head or 'diff ' in head or 'Index:' in head):
                 errors.append(f"Patch missing standard diff header: {fname}")
+
+            # Repeated diff sections for one path usually mean a malformed
+            # patch boundary (a common cause of silent/partial application).
+            diff_paths = re.findall(r'^diff --git a/(.*?) b/.*$', patch_text, re.M)
+            duplicates = sorted({p for p in diff_paths if diff_paths.count(p) > 1})
+            if duplicates:
+                errors.append(f"Repeated diff section(s) in {fname}: {', '.join(duplicates)}")
+
+            if '.rej' in fname or '.orig' in fname:
+                errors.append(f"Patch artifact must not be tracked as a patch: {fname}")
 
     # Check contiguous sequence
     if seen_numbers:

@@ -1,3 +1,4 @@
+diff --git a/bsd/dev/mem.c b/bsd/dev/mem.c
 --- a/bsd/dev/mem.c
 +++ b/bsd/dev/mem.c
 @@ -153,6 +153,44 @@

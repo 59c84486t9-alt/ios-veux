@@ -1,6 +1,7 @@
 From: ios-veux
 Subject: [PATCH] Preserve VEUX console tail in a non-overlapping panic screen
 
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -1443,7 +1443,26 @@
@@ -88,6 +89,7 @@ Subject: [PATCH] Preserve VEUX console tail in a non-overlapping panic screen
 +	}
 +}
  #endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 --- a/osfmk/arm64/veux_early.c
 +++ b/osfmk/arm64/veux_early.c
 @@ -63,6 +63,7 @@

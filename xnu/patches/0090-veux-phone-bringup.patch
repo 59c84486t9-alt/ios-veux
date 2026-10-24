@@ -1,3 +1,4 @@
+diff --git a/bsd/pthread/sweet_pthread_init.c b/bsd/pthread/sweet_pthread_init.c
 --- a/bsd/pthread/sweet_pthread_init.c
 +++ b/bsd/pthread/sweet_pthread_init.c
 @@ -1,11 +1,11 @@
@@ -27,6 +28,7 @@
  STARTUP(EARLY_BOOT, STARTUP_RANK_SECOND, sweet_pthread_register);
 -#endif /* ARM64_BOARD_CONFIG_SWEET */
 +#endif /* ARM64_BOARD_CONFIG_SWEET || ARM64_BOARD_CONFIG_VEUX */
+diff --git a/bsd/pthread/sweet_pthread_support.c b/bsd/pthread/sweet_pthread_support.c
 --- a/bsd/pthread/sweet_pthread_support.c
 +++ b/bsd/pthread/sweet_pthread_support.c
 @@ -1,5 +1,5 @@
@@ -37,6 +39,7 @@
  #include "sweet_libpthread/kern/kern_support.c"
 -#endif /* ARM64_BOARD_CONFIG_SWEET */
 +#endif /* ARM64_BOARD_CONFIG_SWEET || ARM64_BOARD_CONFIG_VEUX */
+diff --git a/bsd/pthread/sweet_pthread_synch.c b/bsd/pthread/sweet_pthread_synch.c
 --- a/bsd/pthread/sweet_pthread_synch.c
 +++ b/bsd/pthread/sweet_pthread_synch.c
 @@ -1,5 +1,5 @@
@@ -47,6 +50,7 @@
  #include "sweet_libpthread/kern/kern_synch.c"
 -#endif /* ARM64_BOARD_CONFIG_SWEET */
 +#endif /* ARM64_BOARD_CONFIG_SWEET || ARM64_BOARD_CONFIG_VEUX */
+diff --git a/bsd/sys/pthread_internal.h b/bsd/sys/pthread_internal.h
 --- a/bsd/sys/pthread_internal.h
 +++ b/bsd/sys/pthread_internal.h
 @@ -34,7 +34,7 @@
@@ -58,6 +62,8 @@
  	/* libpthread-514.100.2 includes the trailing kwe_uth pointer. */
  	char opaque[56];
  #else
+diff --git a/iokit/Kernel/arm/VeuxCPU.cpp b/iokit/Kernel/arm/VeuxCPU.cpp
+new file mode 100644
 --- /dev/null
 +++ b/iokit/Kernel/arm/VeuxCPU.cpp
 @@ -0,0 +1,172 @@
@@ -233,6 +239,7 @@
 +	return cpuName;
 +}
 +#endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
 --- a/iokit/KernelConfigTables.cpp
 +++ b/iokit/KernelConfigTables.cpp
 @@ -39,6 +39,12 @@
@@ -248,6 +255,7 @@
      "     'IOProbeScore'    = 10000:32;"
      "   },"
  #endif
+diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
 --- a/iokit/conf/files.arm64
 +++ b/iokit/conf/files.arm64
 @@ -8,6 +8,7 @@
@@ -258,6 +266,7 @@
  
  # SWEET device-tree platform (empty translation unit on other boards)
  iokit/Kernel/arm/SweetPlatformExpert.cpp                         optional iokitcpp
+diff --git a/libkern/crypto/corecrypto_sha2.c b/libkern/crypto/corecrypto_sha2.c
 --- a/libkern/crypto/corecrypto_sha2.c
 +++ b/libkern/crypto/corecrypto_sha2.c
 @@ -34,12 +34,13 @@
@@ -279,6 +288,7 @@
   * the caller's SHA384_CTX/SHA512_CTX.
   */
  #include <corecrypto/ccsha2.h>
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 --- a/osfmk/arm64/arm_vm_init.c
 +++ b/osfmk/arm64/arm_vm_init.c
 @@ -42,6 +42,7 @@
@@ -302,6 +312,7 @@
  	sweet_early_mark(13, "pmap_bootstrap done");
  
  	disable_preemption();
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
 --- a/osfmk/arm64/sleh.c
 +++ b/osfmk/arm64/sleh.c
 @@ -1856,10 +1856,10 @@
@@ -327,6 +338,7 @@
  		sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_TIMER);
  		cdp->cpu_decrementer = -1; /* Large */
  		INTERRUPT_MASKED_DEBUG_START(rtclock_intr, DBG_INTR_TYPE_TIMER);
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
 @@ -837,11 +837,11 @@
@@ -343,6 +355,7 @@
  
  #if (!CONFIG_KERNEL_INTEGRITY || (CONFIG_KERNEL_INTEGRITY && !defined(KERNEL_INTEGRITY_WT)))
  	/* Watchtower
+diff --git a/osfmk/arm64/sweet_early.h b/osfmk/arm64/sweet_early.h
 --- a/osfmk/arm64/sweet_early.h
 +++ b/osfmk/arm64/sweet_early.h
 @@ -1,4 +1,4 @@
@@ -363,6 +376,8 @@
  #else
  static inline void sweet_early_mark(unsigned int stage, const char *label)
  {
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
+new file mode 100644
 --- /dev/null
 +++ b/osfmk/arm64/veux_early.c
 @@ -0,0 +1,90 @@
@@ -456,6 +471,7 @@
 +	}
 +}
 +#endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
 --- a/osfmk/conf/files.arm64
 +++ b/osfmk/conf/files.arm64
 @@ -41,6 +41,7 @@
@@ -466,6 +482,7 @@
  osfmk/arm64/arm64_hypercall.c	standard
  osfmk/arm/io_map.c		standard
  osfmk/arm64/loose_ends.c	standard
+diff --git a/osfmk/kern/debug.c b/osfmk/kern/debug.c
 --- a/osfmk/kern/debug.c
 +++ b/osfmk/kern/debug.c
 @@ -1072,7 +1072,7 @@
@@ -477,6 +494,7 @@
  	/* No CPU/thread/debugger state is required for this first panic copy. */
  	sweet_early_panic(panic_format_str, panic_args);
  #endif
+diff --git a/osfmk/prng/prng_random.c b/osfmk/prng/prng_random.c
 --- a/osfmk/prng/prng_random.c
 +++ b/osfmk/prng/prng_random.c
 @@ -145,10 +145,10 @@
@@ -511,6 +529,7 @@
  	/* Hash without depending on the absent corecrypto kext's dispatch table. */
  	const struct ccdigest_info *di = &ccsha256_ltc_di;
  	ccdigest_di_decl(di, ctx);
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
 --- a/osfmk/vm/vm_kern.c
 +++ b/osfmk/vm/vm_kern.c
 @@ -2439,9 +2439,9 @@
@@ -561,6 +580,7 @@
  		slot_idx = sweet_kmem_uniform(zpercpu_get(sizeclass.ks_rng_ctx), num_slots);
  #else
  		crypto_random_uniform(zpercpu_get(sizeclass.ks_rng_ctx), num_slots,
+diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
 --- a/pexpert/arm/pe_fiq.c
 +++ b/pexpert/arm/pe_fiq.c
 @@ -17,9 +17,9 @@
@@ -662,6 +682,7 @@
  }
  #else
  void
+diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
 @@ -13,6 +13,7 @@
@@ -721,6 +742,7 @@
  	}
  }
  STARTUP(KPRINTF, STARTUP_RANK_FIRST, PE_init_kprintf);
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -728,14 +728,18 @@
@@ -761,6 +783,7 @@
  	CleanPoC_DcacheRegion_Force((vm_offset_t)veux_pmsg_header, VEUX_PMSG_HDR_SIZE);
  	static const char start[] = "\n--- XNU VEUX ramoops log start ---\n";
  	for (unsigned int i = 0; i < sizeof(start) - 1; i++) {
+diff --git a/pexpert/pexpert/arm/protos.h b/pexpert/pexpert/arm/protos.h
 --- a/pexpert/pexpert/arm/protos.h
 +++ b/pexpert/pexpert/arm/protos.h
 @@ -38,8 +38,8 @@
@@ -774,6 +797,7 @@
  #endif
  
  #ifdef PRIVATE
+diff --git a/pexpert/pexpert/arm64/SWEET.h b/pexpert/pexpert/arm64/SWEET.h
 --- a/pexpert/pexpert/arm64/SWEET.h
 +++ b/pexpert/pexpert/arm64/SWEET.h
 @@ -49,6 +49,8 @@
@@ -785,6 +809,7 @@
  
  #define GIC_SPURIOUS_IRQ          1023    // IRQ no. for GIC spurious interrupt
  
+diff --git a/pexpert/pexpert/arm64/VEUX.h b/pexpert/pexpert/arm64/VEUX.h
 --- a/pexpert/pexpert/arm64/VEUX.h
 +++ b/pexpert/pexpert/arm64/VEUX.h
 @@ -32,18 +32,29 @@

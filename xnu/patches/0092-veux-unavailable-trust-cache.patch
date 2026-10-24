@@ -5,6 +5,7 @@ The VEUX kernel also has no Image4 or AMFI kexts in its current bring-up image.
 Keep trust caches explicitly unavailable and reject cache loads rather than
 panicking during startup or dereferencing absent runtime callbacks.
 
+diff --git a/bsd/kern/kern_trustcache.c b/bsd/kern/kern_trustcache.c
 --- a/bsd/kern/kern_trustcache.c
 +++ b/bsd/kern/kern_trustcache.c
 @@ -248,7 +248,7 @@

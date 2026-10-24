@@ -1,6 +1,7 @@
 From: ios-veux
 Subject: [PATCH] Add an opt-in transparent VEUX framebuffer console
 
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -1449,6 +1449,59 @@
@@ -172,6 +173,7 @@ Subject: [PATCH] Add an opt-in transparent VEUX framebuffer console
  		}
  	}
  	__asm__ volatile("dsb sy" ::: "memory");
+diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
 @@ -34,6 +34,7 @@

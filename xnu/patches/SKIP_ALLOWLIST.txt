@@ -2,6 +2,3 @@ TrustCache.patch	macOS 13.5 XNU 8796 already contains the TrustCache API header;
 iobuffermemd_monterey.patch	Monterey-only IOBufferMemoryDescriptor backport is incompatible with macOS 13.5 XNU 8796 and has no VEUX-specific build or runtime effect.	iokit/Kernel/IOBufferMemoryDescriptor.cpp:332
 skywalk_sonoma.patch	Sonoma-only Skywalk patch targets a different os_packet.h layout and has no VEUX-specific build or runtime effect.	bsd/skywalk/packet/os_packet.h:883
 syntax_checker_sonoma.patch	Sonoma-only LLDB syntax-checker tooling patch targets a different source layout and does not change the VEUX kernel build or runtime.	tools/lldbmacros/core/syntax_checker.py:1
-0031-sweet-read-write-root.patch	SWEET rootrw and dirty-root exception are already present and VEUX-enabled by 0110; no unique VEUX behavior is omitted.	bsd/vfs/vfs_subr.c: patch does not apply
-0032-sweet-bearssl-sha1.patch	SWEET-only SHA-1 fallback is superseded for VEUX by 0089-veux-bearssl-sha1.patch, which carries the VEUX-targeted equivalent; does not alter VEUX behavior.	libkern/conf/files: patch does not apply
-0033-sweet-bearssl-sha384-sha512.patch	SWEET SHA-384/512 fallback is guarded by ARM64_BOARD_CONFIG_SWEET throughout; this skip adds no VEUX objects, symbols, or behavior.	libkern/conf/files: patch does not apply

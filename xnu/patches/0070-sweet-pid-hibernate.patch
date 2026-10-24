@@ -1,3 +1,4 @@
+diff --git a/bsd/kern/syscalls.master b/bsd/kern/syscalls.master
 --- a/bsd/kern/syscalls.master
 +++ b/bsd/kern/syscalls.master
 @@ -650,7 +650,7 @@
@@ -9,6 +10,7 @@
  435	AUE_NULL	ALL	{ int pid_hibernate(int pid); }
  #else
  435     AUE_NULL        ALL     { int nosys(void); }
+diff --git a/bsd/vm/vm_unix.c b/bsd/vm/vm_unix.c
 --- a/bsd/vm/vm_unix.c
 +++ b/bsd/vm/vm_unix.c
 @@ -1755,7 +1755,12 @@

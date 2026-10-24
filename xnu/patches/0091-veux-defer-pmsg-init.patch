@@ -6,6 +6,7 @@ after pmap_bootstrap, arm_vm_init has not yet allocated the early I/O page
 tables, so mapping ramoops still panics with a missing PTE. Keep early kprintf
 silent and map pmsg only after the early I/O tables are provisioned.
 
+diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
 @@ -71,13 +71,7 @@
@@ -41,6 +42,7 @@ silent and map pmsg only after the early I/O tables are provisioned.
  
  #ifdef MP_DEBUG
  static void
+diff --git a/pexpert/pexpert/arm/protos.h b/pexpert/pexpert/arm/protos.h
 --- a/pexpert/pexpert/arm/protos.h
 +++ b/pexpert/pexpert/arm/protos.h
 @@ -17,6 +17,9 @@
@@ -53,6 +55,7 @@ silent and map pmsg only after the early I/O tables are provisioned.
  void veux_pmsg_putc(char c);
  
  /**
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 --- a/osfmk/arm64/arm_vm_init.c
 +++ b/osfmk/arm64/arm_vm_init.c
 @@ -2296,12 +2296,6 @@

@@ -1,3 +1,4 @@
+diff --git a/pexpert/pexpert/arm64/SWEET.h b/pexpert/pexpert/arm64/SWEET.h
 --- a/pexpert/pexpert/arm64/SWEET.h
 +++ b/pexpert/pexpert/arm64/SWEET.h
 @@ -17,8 +17,13 @@
@@ -16,6 +17,7 @@
  
  #define ARM_ARCH_TIMER
  #define __ARM_ARCH__              8
+diff --git a/iokit/Kernel/arm/SweetCPU.cpp b/iokit/Kernel/arm/SweetCPU.cpp
 --- a/iokit/Kernel/arm/SweetCPU.cpp
 +++ b/iokit/Kernel/arm/SweetCPU.cpp
 @@ -73,9 +73,10 @@
@@ -40,6 +42,7 @@
  	    requested, topology->num_cpus, SWEET_SMP_MAX_CPUS);
  
  	uint64_t deadline;
+diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
 --- a/osfmk/arm64/machine_routines.c
 +++ b/osfmk/arm64/machine_routines.c
 @@ -955,7 +955,7 @@

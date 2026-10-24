@@ -1,3 +1,4 @@
+diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 --- a/osfmk/kern/exception.c
 +++ b/osfmk/kern/exception.c
 @@ -873,14 +873,15 @@

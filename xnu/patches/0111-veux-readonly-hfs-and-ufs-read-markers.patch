@@ -86,8 +86,7 @@ diff --git a/bsd/sweet_hfs/core/hfs_vfsops.c b/bsd/sweet_hfs/core/hfs_vfsops.c
 diff --git a/bsd/sweet_hfs/core/hfs_vfsutils.c b/bsd/sweet_hfs/core/hfs_vfsutils.c
 --- a/bsd/sweet_hfs/core/hfs_vfsutils.c
 +++ b/bsd/sweet_hfs/core/hfs_vfsutils.c
-@@ -734,7 +734,12 @@
- 	//
+@@ -735,5 +735,10 @@
  	if (   (vcb->vcbAtrb & kHFSVolumeJournaledMask)
  		&& (SWAP_BE32(vhp->lastMountedVersion) != kHFSJMountVersion)
 -		&& (hfsmp->jnl == NULL)) {
@@ -99,8 +98,6 @@ diff --git a/bsd/sweet_hfs/core/hfs_vfsutils.c b/bsd/sweet_hfs/core/hfs_vfsutils
 +		) {
  
  		retval = hfs_late_journal_init(hfsmp, vhp, args);
- 		if (retval != 0) {
-
 diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 --- a/osfmk/arm64/veux_early.c
 +++ b/osfmk/arm64/veux_early.c

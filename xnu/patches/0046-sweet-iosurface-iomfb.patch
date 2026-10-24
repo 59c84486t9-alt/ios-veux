@@ -1,3 +1,4 @@
+diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
 --- a/iokit/conf/files.arm64
 +++ b/iokit/conf/files.arm64
 @@ -13,3 +13,5 @@
@@ -6,6 +7,7 @@
  iokit/Kernel/arm/SweetWatchdog.cpp                               optional iokitcpp
 +iokit/Kernel/arm/SweetSurface.cpp                                optional iokitcpp
 +iokit/Kernel/arm/SweetFramebuffer.cpp                            optional iokitcpp
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
 --- a/iokit/KernelConfigTables.cpp
 +++ b/iokit/KernelConfigTables.cpp
 @@ -57,6 +57,16 @@
@@ -25,6 +27,7 @@
  #endif
      "   {"
      "     'IOClass'         = IOPanicPlatform;"
+diff --git a/iokit/Kernel/arm/SweetPlatformExpert.cpp b/iokit/Kernel/arm/SweetPlatformExpert.cpp
 --- a/iokit/Kernel/arm/SweetPlatformExpert.cpp
 +++ b/iokit/Kernel/arm/SweetPlatformExpert.cpp
 @@ -62,6 +62,18 @@
@@ -46,6 +49,8 @@
  }
  
  bool
+diff --git a/iokit/Kernel/arm/SweetSurface.h b/iokit/Kernel/arm/SweetSurface.h
+new file mode 100644
 --- /dev/null
 +++ b/iokit/Kernel/arm/SweetSurface.h
 @@ -0,0 +1,65 @@
@@ -114,6 +119,8 @@
 +
 +#endif /* SWEET */
 +#endif /* _SWEET_SURFACE_H */
+diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.cpp
+new file mode 100644
 --- /dev/null
 +++ b/iokit/Kernel/arm/SweetSurface.cpp
 @@ -0,0 +1,872 @@
@@ -989,6 +996,8 @@
 +	return &sweet_surface_traps[index];
 +}
 +#endif /* SWEET */
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+new file mode 100644
 --- /dev/null
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
 @@ -0,0 +1,455 @@

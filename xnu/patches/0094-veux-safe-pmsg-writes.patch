@@ -6,6 +6,7 @@ cache-clean-by-VA operations through that I/O alias; order data before its
 persistent_ram header instead. Route pmsg-only kprintf output directly to the
 ring so it does not depend on VEUX's unverified UART.
 
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -26,7 +26,6 @@
@@ -48,6 +49,7 @@ ring so it does not depend on VEUX's unverified UART.
  }
  
  static void
+diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
 @@ -33,6 +33,7 @@
