@@ -5,16 +5,16 @@ After launchd reports early boot complete, periodically print a bounded
 process/thread snapshot to the framebuffer console. Console output is mirrored
 into the in-memory ring, but this sampler does not flush storage.
 
-diff --git a/bsd/conf/files b/bsd/conf/files
---- a/bsd/conf/files
-+++ b/bsd/conf/files
-@@ -112,5 +112,6 @@ bsd/dev/sweet_rpmh.c			standard
- bsd/dev/sweet_spmi.c			standard
- bsd/dev/sweet_usb.c			standard
- bsd/dev/mem.c				standard
-+bsd/dev/veux_liveness.c		standard
- bsd/dev/munge.c 			optional config_requires_u32_munging
- bsd/dev/unix_startup.c			standard
+diff --git a/osfmk/conf/files b/osfmk/conf/files
+--- a/osfmk/conf/files
++++ b/osfmk/conf/files
+@@ -108,6 +108,7 @@ osfmk/kern/affinity.c			standard
+ osfmk/kern/arcade.c				optional config_arcade
+ osfmk/kern/ast.c			standard
++osfmk/kern/veux_liveness.c		standard
+ osfmk/kern/audit_sessionport.c		optional config_audit
+ osfmk/kern/backtrace.c			standard
+ osfmk/kern/btlog.c			standard
 
 diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
 --- a/osfmk/console/serial_console.c
@@ -80,13 +80,13 @@ diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 +}
  void
  veux_bsd_stage(unsigned int stage)
-diff --git a/bsd/dev/veux_liveness.c b/bsd/dev/veux_liveness.c
+diff --git a/osfmk/kern/veux_liveness.c b/osfmk/kern/veux_liveness.c
 new file mode 100644
 --- /dev/null
-+++ b/bsd/dev/veux_liveness.c
++++ b/osfmk/kern/veux_liveness.c
 @@ -0,0 +1,167 @@
-+#include <sys/param.h>
 +#define MACH_KERNEL_PRIVATE 1
++#include <sys/param.h>
 +#include <sys/proc.h>
 +#include <kern/task.h>
 +#include <kern/thread.h>
