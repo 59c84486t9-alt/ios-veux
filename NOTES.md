@@ -1985,3 +1985,38 @@ What it took today (in order): 0058 HID services (Apple IOHIDFamily-1915 user cl
   failed before transfer (`Failed reading from userdata`). Userdata still has
   the prior keybag-noop root. The next boot will test console mirroring only;
   the hello LaunchDaemon is absent from the flashed root.
+
+## >>> UPDATE 2026-10-24 (slot-A recovery and recovered VEUX boot ring) <<<
+
+- User requested slot A recovery. Fastboot identified the phone, active slot B;
+  `fastboot set_active a` and `fastboot reboot recovery` both returned OKAY.
+  Recovery ADB connected as root and reports `ro.boot.slot_suffix=_a`.
+  No boot, recovery, or userdata contents were flashed during this collection.
+- Recovery `/sys/fs/pstore` is empty. Its `/tmp/recovery.log` records recovery
+  startup, clearing BCB, and ADB enablement; it contains no XNU trace. Recovery
+  `dmesg` repeatedly reports missing `ipa_fws.mdt` (`rc=-2`), an Android
+  recovery firmware warning unrelated to the captured iOS boot.
+- Read the last 1,025 4 KiB blocks of userdata: 4,198,400 bytes at byte offset
+  109,152,378,880 (partition size 109,156,577,280 bytes). The ring now has
+  `VEUXLOG1`, version 1, 4 MiB capacity, 28,022 log bytes, flush sequence 6.
+  Current tail SHA-256 is
+  `4caecfb557ee4f9334d75e9afbc0a0f2191e6aaa087d29895e42112174e9953d`; it
+  differs from the pre-logger blank-tail backup because this boot wrote the
+  enabled diagnostic ring. No restore was attempted.
+- Decoded ring: `research/veux-logs/recovery-slot-a-20261024/xnu-ring.txt`;
+  raw tail and recovery dmesg are alongside it (research/ is git-ignored).
+  Ring has not wrapped. XNU reports `rootrw=rw ufs_write=enabled`, HFS journal
+  replay completes, first UFS write succeeds at LBA `0x2db428`, HFS mounts, and
+  root mount returns errno 0. Launchd reaches “Early boot complete. Continuing
+  system boot.” with no panic/reboot text in the complete captured ring.
+- `MSUEarlyBootTask` executes but cannot query `BootManifestHash` and cannot
+  find the booted OS data path; boot proceeds into FIPS, keybag (optional task
+  absent), usermanagerd, and the remaining listed early tasks. FIPS POST passes.
+  `prng_seedctl` later cannot access `kern.prng.user_reseed_count` and reports
+  virtual-random load failure; launchd cache loading then succeeds. Missing
+  BindFS paths under factory/Pearl produce `ENOENT`, while the mount helper
+  returns raw status 0. The log ends at launchd's early-boot-complete message;
+  it does not identify why the screen remains at the console afterward.
+- Recovery is the current device state on slot A. The experimental XNU image is
+  still on boot_b; the last CI image was run `40092567840`, SHA-256
+  `0ac083af37c44833afb9a622ee91da48e838dbdbe89d57e11504ce47df3ae8aa`.
