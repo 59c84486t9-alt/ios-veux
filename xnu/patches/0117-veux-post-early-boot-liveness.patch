@@ -84,23 +84,32 @@ diff --git a/bsd/dev/veux_liveness.c b/bsd/dev/veux_liveness.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/veux_liveness.c
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,167 @@
++#define MACH_KERNEL_PRIVATE 1
 +#include <sys/param.h>
 +#include <sys/proc.h>
-+#include <sys/proc_internal.h>
-+#include <sys/systm.h>
 +#include <kern/task.h>
 +#include <kern/thread.h>
++#include <kern/zalloc.h>
++#include <sys/resourcevar.h>
++/* Private BSD and Mach headers publish incompatible opaque task accessors
++ * and duplicate the proc/task zone declaration. The sampler uses proc_task(),
++ * not task_get_proc_raw() or either zone declaration. */
++#define task_get_proc_raw veux_unused_task_get_proc_raw
++#define ZONE_DECLARE_ID(id, type)
++#include <sys/proc_internal.h>
++#undef ZONE_DECLARE_ID
++#undef task_get_proc_raw
++#include <sys/systm.h>
 +#include <os/atomic_private.h>
 +#include <arm/machine_routines.h>
++#include <arm/thread.h>
++#include <mach/arm/thread_status.h>
 +#include <pexpert/pexpert.h>
 +
-+extern task_t proc_task(proc_t);
 +extern int hz;
-+extern arm_saved_state_t *find_user_regs(thread_t);
-+extern uint64_t get_saved_state_pc(arm_saved_state_t *);
-+extern boolean_t is_saved_state64(arm_saved_state_t *);
 +extern void veux_idle_sample_report(void);
++void veux_liveness_start(void);
 +
 +#define VEUX_LIVE_MAX 16
 +#define VEUX_SEEN_MAX 1024

@@ -82,6 +82,40 @@ def validate_patches(verbose=False):
             else:
                 expected += 1
 
+    # The liveness patch directly inspects kernel task/thread and process
+    # accounting structures. Keep its private-header contract explicit: the
+    # build must see complete definitions and the canonical saved-state
+    # helpers, rather than local declarations that can conflict with XNU.
+    liveness_path = os.path.join(patch_dir, '0117-veux-post-early-boot-liveness.patch')
+    if os.path.exists(liveness_path):
+        with open(liveness_path, 'r', errors='ignore') as f:
+            liveness = f.read()
+        required_liveness = (
+            '+#define MACH_KERNEL_PRIVATE 1',
+            '+#include <kern/zalloc.h>',
+            '+#include <sys/resourcevar.h>',
+            '+#define task_get_proc_raw veux_unused_task_get_proc_raw',
+            '+#define ZONE_DECLARE_ID(id, type)',
+            '+#undef ZONE_DECLARE_ID',
+            '+#undef task_get_proc_raw',
+            '+#include <kern/task.h>',
+            '+#include <kern/thread.h>',
+            '+#include <arm/thread.h>',
+            '+#include <mach/arm/thread_status.h>',
+            '+void veux_liveness_start(void);',
+        )
+        for token in required_liveness:
+            if token not in liveness:
+                errors.append(f"0117 liveness source is missing required XNU API declaration/include: {token[1:]}")
+        forbidden_liveness = (
+            '+extern uint64_t get_saved_state_pc(',
+            '+extern boolean_t is_saved_state64(',
+            '+extern arm_saved_state_t *find_user_regs(',
+        )
+        for token in forbidden_liveness:
+            if token in liveness:
+                errors.append(f"0117 must use XNU's canonical declaration, not redeclare: {token[1:]}")
+
     if errors:
         print(red(f"[-] Patch validation failed with {len(errors)} error(s):"))
         for err in errors:
