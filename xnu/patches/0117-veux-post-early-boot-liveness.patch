@@ -85,7 +85,7 @@ diff --git a/osfmk/kern/veux_liveness.c b/osfmk/kern/veux_liveness.c
 new file mode 100644
 --- /dev/null
 +++ b/osfmk/kern/veux_liveness.c
-@@ -0,0 +1,167 @@
+@@ -0,0 +1,168 @@
 +#define MACH_KERNEL_PRIVATE 1
 +#include <sys/param.h>
 +#include <sys/proc.h>

@@ -1,7 +1,7 @@
 diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
 --- a/iokit/KernelConfigTables.cpp
 +++ b/iokit/KernelConfigTables.cpp
-@@ -34,4 +34,12 @@
+@@ -34,5 +34,13 @@
  const char * gIOKernelConfigTables =
      "("
 +#if defined(ARM64_BOARD_CONFIG_VEUX)

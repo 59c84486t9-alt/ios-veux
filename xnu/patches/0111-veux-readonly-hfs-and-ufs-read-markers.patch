@@ -64,7 +64,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 diff --git a/bsd/sweet_hfs/core/hfs_vfsops.c b/bsd/sweet_hfs/core/hfs_vfsops.c
 --- a/bsd/sweet_hfs/core/hfs_vfsops.c
 +++ b/bsd/sweet_hfs/core/hfs_vfsops.c
-@@ -1537,7 +1537,15 @@ hfs_mountfs(struct vnode *devvp, struct mount *mp, struct hfs_mount_args *args,
+@@ -1537,7 +1537,18 @@ hfs_mountfs(struct vnode *devvp, struct mount *mp, struct hfs_mount_args *args,
  		if (args != NULL && (args->flags & HFSFSMNT_EXTENDED_ARGS) && 
  		    args->journal_disable) {
  		    jnl_disable = 1;
