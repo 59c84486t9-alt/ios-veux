@@ -8,7 +8,7 @@ into the in-memory ring, but this sampler does not flush storage.
 diff --git a/osfmk/conf/files b/osfmk/conf/files
 --- a/osfmk/conf/files
 +++ b/osfmk/conf/files
-@@ -108,6 +108,7 @@ osfmk/kern/affinity.c			standard
+@@ -110,5 +110,6 @@ osfmk/kern/arcade.c				optional config_arcade
  osfmk/kern/arcade.c				optional config_arcade
  osfmk/kern/ast.c			standard
 +osfmk/kern/veux_liveness.c		standard
