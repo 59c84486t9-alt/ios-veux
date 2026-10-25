@@ -224,7 +224,7 @@ jobs:
             grep -Fq 'VEUX ROOT mode=%s rootrw=%u ufsrw=%u' xnu/bsd/vfs/vfs_subr.c
             grep -Fq 'if (rootrw == 1 && ufsrw == 1)' xnu/bsd/vfs/vfs_subr.c
             grep -Fq 'su.writable = (rw == 1 && rootrw == 1);' xnu/bsd/dev/sweet_ufs.c
-            grep -Fq '0119-veux-require-explicit-rw-pair.patch' patch-status.txt
+            grep -Fq '0119-veux-require-explicit-rw-pair.patch' ../patch-status.txt
             grep -Fq 'VEUX MOUNT helper exit' xnu/bsd/kern/kern_exit.c
             grep -Fq 'if (isroot && ronly) {' xnu/bsd/sweet_hfs/core/hfs_vfsops.c
             grep -Fq 'VEUX HFS: read-only root journal replay disabled' xnu/bsd/sweet_hfs/core/hfs_vfsops.c
