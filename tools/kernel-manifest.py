@@ -34,6 +34,7 @@ for patch in (
     "0119-veux-require-explicit-rw-pair.patch",
     "0120-veux-unconditional-early-console-build-id.patch",
     "0121-veux-launchd-main-stack-exec-trace.patch",
+    "0122-veux-xpcproxy-driver-spawn-gate.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -49,7 +50,15 @@ needles = {
     "launchd_main_thread_wait": b"VEUX MAIN WAIT: tid=%llu state=0x%x kind=%s",
     "launchd_main_thread_stack_each_sample": b"VEUX STACK MAIN: tid=%llu attempted=%u skipped: %s result=%d frames=%u flags=0x%x",
     "launchd_main_thread_stack_frames": b"VEUX STACK MAIN FRAMES: tid=%llu",
-    "pid1_spawn_attempts": b"VEUX SPAWN: pid=1 parent=%d name=%s path=%s errno=%d path_errno=%d",
+    "pid1_spawn_attempts": b"VEUX SPAWN FAIL: pid=1 parent=%d name=%s path=%s stage=%s errno=%d path_errno=%d attempt=%u",
+    "pid1_spawn_repeat_dedup": b"VEUX SPAWN REPEAT: pid=1 parent=%d name=%s path=%s stage=%s errno=%d count=%u",
+    "xpcproxy_driver_entitlement_deny": b"VEUX SPAWN DENY: return_site=exec_validate_spawnattr_policy policy=IOCurrentTaskHasEntitlement",
+    "xpcproxy_driver_bootarg_allow": b"VEUX SPAWN DEV ALLOW: rule=pid1-xpcproxy-driver-bootarg hook=exec_validate_spawnattr_policy/IOCurrentTaskHasEntitlement",
+    "xpcproxy_target_signature_state": b"VEUX SPAWN TARGET: path=%s stage=exec_activate_image result=0 csflags=0x%x CS_VALID=%u CS_PLATFORM_BINARY=%u",
+    "exec_activation_failure_return": b"VEUX SPAWN RETURN: return_site=exec_activate_image stage=exec_mach_imgact+exec_activate_image",
+    "exec_imgact_return_trace": b"VEUX IMGACT RETURN: return_site=exec_activate_image activator=%s",
+    "exec_mac_hook_deny_trace": b"VEUX MAC HOOK DENY: stage=mac_vnode_check_exec policy=%s hook=mpo_vnode_check_exec",
+    "launch_constraint_hook_deny_trace": b"VEUX MAC DENY: policy=%s hook=mpo_proc_check_launch_constraints",
     "pid1_exec_attempts": b"VEUX EXEC: pid=1 name=%s path=%s errno=%d path_errno=%d",
     "process_exit_status_and_signal": b"VEUX EXIT: pid=%d name=%s status=0x%x exit_status=%d signal=%d",
     "exec_mac_denials": b"VEUX MAC DENY: policy=mac_vnode_check_exec",
@@ -113,16 +122,42 @@ source_checks["launchd_main_stack_is_attempted_each_sample_with_explicit_skip_re
     and "previous_launchd_wait_hash != wait_hash" in exception
     and "if (!previous_launchd_wait_valid && thread->kernel_stack != 0)" not in exception
 )
+exec_source = (a.source_root / "bsd/kern/kern_exec.c").read_text()
 source_checks["pid1_exec_spawn_exit_and_mac_trace_hooks"] = (
-    "veux_trace_spawn = (proc_getpid(ap) == 1);" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
-    and "VEUX SPAWN: pid=1 parent=%d name=%s path=%s errno=%d path_errno=%d" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
-    and "veux_trace_exec = (proc_getpid(p) == 1);" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
-    and "VEUX EXEC: pid=1 name=%s path=%s errno=%d path_errno=%d" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
-    and "VEUX MAC DENY: policy=mac_vnode_check_exec" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
-    and "VEUX MAC DENY: policy=vnode_authorize" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
+    "veux_trace_spawn = (proc_getpid(ap) == 1);" in exec_source
+    and "VEUX SPAWN FAIL: pid=1 parent=%d name=%s path=%s stage=%s errno=%d path_errno=%d attempt=%u" in exec_source
+    and "veux_trace_exec = (proc_getpid(p) == 1);" in exec_source
+    and "VEUX EXEC: pid=1 name=%s path=%s errno=%d path_errno=%d" in exec_source
+    and "VEUX MAC DENY: policy=mac_vnode_check_exec" in exec_source
+    and "VEUX MAC DENY: policy=vnode_authorize" in exec_source
     and "VEUX EXIT: pid=%d name=%s status=0x%x exit_status=%d signal=%d" in (a.source_root / "bsd/kern/kern_exit.c").read_text()
     and "WIFEXITED(veux_status)" in (a.source_root / "bsd/kern/kern_exit.c").read_text()
     and "WIFSIGNALED(veux_status)" in (a.source_root / "bsd/kern/kern_exit.c").read_text()
+)
+
+source_checks["xpcproxy_driver_spawn_exception_is_bootarg_gated_entitlement_only"] = (
+    'strcmp(veux_spawn_path, "/usr/libexec/xpcproxy") == 0' in exec_source
+    and 'PE_parse_boot_argn("veux_spawn_driver", &dev_allow, sizeof(dev_allow))' in exec_source
+    and "dev_allow == 1" in exec_source
+    and "error == EPERM" in exec_source
+    and "proctype == POSIX_SPAWN_PROC_TYPE_DRIVER" in exec_source
+    and "POSIX_SPAWN_ENTITLEMENT_DRIVER" in exec_source
+    and "veux_spawn_deferred_driver_policy = 1;" in exec_source
+    and "error = 0; /* Bypass only this entitlement gate; image and MAC checks still run. */" in exec_source
+    and "if (error != 0 && !veux_spawn_deferred_driver_policy)" in exec_source
+    and "flags=0x%x setexec=%u options=0x%x launch_type=0x%x mac_extensions_size=%u" in exec_source
+    and "VEUX SPAWN DEV ALLOW: rule=pid1-xpcproxy-driver-bootarg" in exec_source
+    and "followup=normal-image-signature-vnode-exec-and-launch-constraints" in exec_source
+    and "VEUX SPAWN TARGET: path=%s stage=exec_activate_image result=0 csflags=0x%x CS_VALID=%u CS_PLATFORM_BINARY=%u" in exec_source
+    and "exec_resettextvp(p, imgp);" in exec_source
+    and "veux_spawn_deferred_driver_policy && (imgp->ip_csflags" not in exec_source
+    and "VEUX SPAWN DENY: return_site=exec_validate_spawnattr_policy policy=IOCurrentTaskHasEntitlement" in exec_source
+    and "VEUX SPAWN RETURN: return_site=exec_activate_image stage=exec_mach_imgact+exec_activate_image" in exec_source
+    and "VEUX IMGACT RETURN: return_site=exec_activate_image activator=%s" in exec_source
+    and "if (proc_getpid(vfs_context_proc(ctx)) == 1 && hook_result != 0)" in (a.source_root / "security/mac_vfs.c").read_text()
+    and "veux_exec_mac_denials % 32" in (a.source_root / "security/mac_vfs.c").read_text()
+    and "VEUX MAC HOOK DENY: stage=mac_vnode_check_exec policy=%s hook=mpo_vnode_check_exec" in (a.source_root / "security/mac_vfs.c").read_text()
+    and "VEUX MAC DENY: policy=%s hook=mpo_proc_check_launch_constraints" in (a.source_root / "security/mac_process.c").read_text()
 )
 
 source_checks["launchd_vm_report_is_present"] = (

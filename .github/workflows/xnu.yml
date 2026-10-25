@@ -37,7 +37,7 @@ env:
   VEUX_BUILD_ID: ${{ github.run_id }}
   # The root is intentionally RW only when both explicit args are present.
   # Keep veuxlog disabled: its fixed userdata-tail range can overlap HFS+.
-  VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 rootrw=1 ufsrw=1 veuxfb=1 veuxfbconsole=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128"
+  VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 rootrw=1 ufsrw=1 veuxfb=1 veuxfbconsole=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128 veux_spawn_driver=1"
 
 jobs:
   build:
@@ -51,7 +51,7 @@ jobs:
       - name: Repository and patch structure preflight
         run: |
           python3 tools/validate-repo.py
-          for required in debug=0xc serial=3 cpus=1 veuxfb=1 veuxfbconsole=1 rootrw=1 ufsrw=1; do
+          for required in debug=0xc serial=3 cpus=1 veuxfb=1 veuxfbconsole=1 rootrw=1 ufsrw=1 veux_spawn_driver=1; do
             case " $VEUX_BOOT_ARGS " in
               *" $required "*) ;;
               *) echo "required diagnostic boot argument missing: $required" >&2; exit 1 ;;
@@ -223,10 +223,28 @@ jobs:
             grep -Fq 'VEUX BUILD: ID=' xnu/pexpert/arm/pe_serial.c
             grep -Fq '0120-veux-unconditional-early-console-build-id.patch' ../patch-status.txt
             grep -Fq '0121-veux-launchd-main-stack-exec-trace.patch' ../patch-status.txt
+            grep -Fq '0122-veux-xpcproxy-driver-spawn-gate.patch' ../patch-status.txt
+            grep -Fq 'VEUX SPAWN DEV ALLOW: rule=pid1-xpcproxy-driver-bootarg hook=exec_validate_spawnattr_policy/IOCurrentTaskHasEntitlement' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'error = 0; /* Bypass only this entitlement gate; image and MAC checks still run. */' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'followup=normal-image-signature-vnode-exec-and-launch-constraints' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'strcmp(veux_spawn_path, "/usr/libexec/xpcproxy") == 0' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'PE_parse_boot_argn("veux_spawn_driver", &dev_allow, sizeof(dev_allow))' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'VEUX SPAWN TARGET: path=%s stage=exec_activate_image result=0 csflags=0x%x CS_VALID=%u CS_PLATFORM_BINARY=%u' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'error == EPERM' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'proctype == POSIX_SPAWN_PROC_TYPE_DRIVER' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'dev_allow == 1' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'exec_resettextvp(p, imgp);' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'VEUX SPAWN DENY: return_site=exec_validate_spawnattr_policy policy=IOCurrentTaskHasEntitlement' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'VEUX SPAWN RETURN: return_site=exec_activate_image stage=exec_mach_imgact+exec_activate_image' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'VEUX IMGACT RETURN: return_site=exec_activate_image activator=%s' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'if (proc_getpid(p) == 1 && error != -1' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'VEUX MAC HOOK DENY: stage=mac_vnode_check_exec policy=%s hook=mpo_vnode_check_exec' xnu/security/mac_vfs.c
+            grep -Fq 'if (proc_getpid(vfs_context_proc(ctx)) == 1 && hook_result != 0)' xnu/security/mac_vfs.c
+            grep -Fq 'VEUX MAC DENY: policy=%s hook=mpo_proc_check_launch_constraints' xnu/security/mac_process.c
             grep -Fq 'VEUX STACK MAIN: tid=%llu attempted=%u skipped: %s result=%d frames=%u flags=0x%x' xnu/osfmk/kern/exception.c
             grep -Fq 'main_trace_result = machine_trace_thread64(thread' xnu/osfmk/kern/exception.c
             grep -Fq 'VEUX MAIN WAIT: tid=%llu' xnu/osfmk/kern/exception.c
-            grep -Fq 'VEUX SPAWN: pid=1 parent=%d name=%s path=%s errno=%d path_errno=%d' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'VEUX SPAWN FAIL: pid=1 parent=%d name=%s path=%s stage=%s errno=%d path_errno=%d attempt=%u' xnu/bsd/kern/kern_exec.c
             grep -Fq 'VEUX EXEC: pid=1 name=%s path=%s errno=%d path_errno=%d' xnu/bsd/kern/kern_exec.c
             grep -Fq 'VEUX EXIT: pid=%d name=%s status=0x%x exit_status=%d signal=%d' xnu/bsd/kern/kern_exit.c
             grep -Fq 'VEUX MAC DENY: policy=mac_vnode_check_exec' xnu/bsd/kern/kern_exec.c

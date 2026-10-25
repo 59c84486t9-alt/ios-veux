@@ -1,0 +1,287 @@
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -2231,6 +2231,17 @@
+ 	error = -1;
+ 	for (i = 0; error == -1 && execsw[i].ex_imgact != NULL; i++) {
+ 		error = (*execsw[i].ex_imgact)(imgp);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		if (proc_getpid(p) == 1 && error != -1 && error != 0 && error != -2 && error != -3) {
++			static uint32_t veux_imgact_failures;
++			veux_imgact_failures++;
++			if (veux_imgact_failures <= 10) {
++				printf("VEUX IMGACT RETURN: return_site=exec_activate_image activator=%s path=%s errno=%d pid=%d name=%s csflags=0x%x attempt=%u\n",
++				    execsw[i].ex_name, excpath, error, proc_getpid(p), p->p_comm,
++				    imgp->ip_csflags, veux_imgact_failures);
++			}
++		}
++#endif
+ 
+ 		switch (error) {
+ 		/* case -1: not claimed: continue */
+@@ -3389,8 +3400,12 @@
+ 	struct uthread  *uthread = 0;   /* compiler complains if not set to 0*/
+ 	int error, sig;
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
++	static uint32_t veux_pid1_spawn_failures;
+ 	int veux_trace_spawn = (proc_getpid(ap) == 1);
++	int veux_spawn_specific_policy = 0;
++	int veux_spawn_deferred_driver_policy = 0;
+ 	int veux_spawn_path_error = 0;
++	const char *veux_spawn_stage = "posix_spawn-setup";
+ 	size_t veux_spawn_path_len = 0;
+ 	char veux_spawn_path[256] = "<not-copied>";
+ 	if (veux_trace_spawn) {
+@@ -3680,7 +3695,47 @@
+ #endif
+ 
+ 		if ((error = exec_validate_spawnattr_policy(psa->psa_apptype)) != 0) {
+-			goto bad;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++			if (veux_trace_spawn) {
++				static uint32_t veux_spawn_policy_failures;
++				static uint32_t veux_spawn_policy_deferred;
++				uint32_t dev_allow = 0;
++				int proctype = psa->psa_apptype & POSIX_SPAWN_PROC_TYPE_MASK;
++				boolean_t defer_xpcproxy_driver_check =
++				    (veux_trace_spawn && error == EPERM && proctype == POSIX_SPAWN_PROC_TYPE_DRIVER &&
++				    strcmp(veux_spawn_path, "/usr/libexec/xpcproxy") == 0 &&
++				    PE_parse_boot_argn("veux_spawn_driver", &dev_allow, sizeof(dev_allow)) &&
++				    dev_allow == 1);
++				if (defer_xpcproxy_driver_check) {
++					/* The target's validated signing state exists only after image activation. */
++					veux_spawn_deferred_driver_policy = 1;
++					error = 0; /* Bypass only this entitlement gate; image and MAC checks still run. */
++					veux_spawn_policy_deferred++;
++					if (veux_spawn_policy_deferred <= 10 || (veux_spawn_policy_deferred % 32) == 0) {
++						printf("VEUX SPAWN DEV ALLOW: rule=pid1-xpcproxy-driver-bootarg hook=exec_validate_spawnattr_policy/IOCurrentTaskHasEntitlement count=%u parent_pid=1 target=%s original_errno=%d apptype=0x%x proctype=0x%x flags=0x%x setexec=%u options=0x%x launch_type=0x%x mac_extensions_size=%u followup=normal-image-signature-vnode-exec-and-launch-constraints\n",
++						    veux_spawn_policy_deferred, veux_spawn_path, EPERM, psa->psa_apptype,
++						    proctype, psa->psa_flags, (psa->psa_flags & POSIX_SPAWN_SETEXEC) != 0,
++						    psa->psa_options, psa->psa_launch_type, px_args.mac_extensions_size);
++					}
++				} else {
++					veux_spawn_policy_failures++;
++					if (veux_spawn_policy_failures <= 10) {
++						printf("VEUX SPAWN DENY: return_site=exec_validate_spawnattr_policy policy=IOCurrentTaskHasEntitlement caller_entitlement=missing entitlement=%s stage=before-exec_activate_image parent_pid=1 target=%s errno=%d apptype=0x%x proctype=0x%x flags=0x%x setexec=%u options=0x%x launch_type=0x%x mac_extensions_size=%u target_csflags=unavailable\n",
++						    POSIX_SPAWN_ENTITLEMENT_DRIVER, veux_spawn_path, error,
++						    psa->psa_apptype, proctype, psa->psa_flags,
++						    (psa->psa_flags & POSIX_SPAWN_SETEXEC) != 0, psa->psa_options,
++						    psa->psa_launch_type, px_args.mac_extensions_size);
++					} else if ((veux_spawn_policy_failures % 32) == 0) {
++						printf("VEUX SPAWN DENY REPEAT: return_site=exec_validate_spawnattr_policy count=%u target=%s errno=%d apptype=0x%x\n",
++						    veux_spawn_policy_failures, veux_spawn_path, error, psa->psa_apptype);
++					}
++					veux_spawn_specific_policy = 1;
++				}
++			}
++#endif
++			if (error != 0 && !veux_spawn_deferred_driver_policy) {
++				goto bad;
++			}
+ 		}
+ 	}
+ 
+@@ -4070,7 +4124,38 @@
+ 	 * Warning: If activation failed after point of no return, it returns error
+ 	 * as 0 and pretends the call succeeded.
+ 	 */
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_spawn_stage = "exec_activate_image";
++#endif
+ 	error = exec_activate_image(imgp);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (error == 0 && veux_trace_spawn && veux_spawn_deferred_driver_policy) {
++		static uint32_t veux_xpcproxy_target_reports;
++		struct _posix_spawnattr *target_psa = imgp->ip_px_sa != NULL ?
++		    (struct _posix_spawnattr *)imgp->ip_px_sa : NULL;
++		veux_xpcproxy_target_reports++;
++		if (veux_xpcproxy_target_reports <= 10 || (veux_xpcproxy_target_reports % 32) == 0) {
++			printf("VEUX SPAWN TARGET: path=%s stage=exec_activate_image result=0 csflags=0x%x CS_VALID=%u CS_PLATFORM_BINARY=%u apptype=0x%x flags=0x%x setexec=%u launch_type=0x%x\n",
++			    veux_spawn_path, imgp->ip_csflags,
++			    (imgp->ip_csflags & CS_VALID) != 0,
++			    (imgp->ip_csflags & CS_PLATFORM_BINARY) != 0,
++			    target_psa != NULL ? target_psa->psa_apptype : 0,
++			    target_psa != NULL ? target_psa->psa_flags : 0,
++			    target_psa != NULL && (target_psa->psa_flags & POSIX_SPAWN_SETEXEC) != 0,
++			    target_psa != NULL ? target_psa->psa_launch_type : 0);
++		}
++	}
++	if (error != 0 && veux_trace_spawn) {
++		static uint32_t veux_activate_failures;
++		veux_activate_failures++;
++		if (veux_activate_failures <= 10 || (veux_activate_failures % 32) == 0) {
++			printf("VEUX SPAWN RETURN: return_site=exec_activate_image stage=exec_mach_imgact+exec_activate_image errno=%d path=%s ip_mac_return=%d ip_cs_error=%p csflags=0x%x attempt=%u\n",
++			    error, veux_spawn_path, imgp->ip_mac_return, imgp->ip_cs_error,
++			    imgp->ip_csflags, veux_activate_failures);
++		}
++	}
++
++#endif
+ #if defined(HAS_APPLE_PAC)
+ 	ml_task_set_jop_pid_from_shared_region(new_task);
+ 	ml_task_set_disable_user_jop(new_task, imgp->ip_flags & IMGPF_NOJOP ? TRUE : FALSE);
+@@ -4246,3 +4313,3 @@
+ 			;
+ 		}
+ 		exec_resettextvp(p, imgp);
+
+ #if CONFIG_MEMORYSTATUS
+ 		/* Set jetsam priority for DriverKit processes */
+@@ -4684,9 +4781,23 @@
+ 
+ 	assert(exec_failure_reason == NULL);
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+-	if (veux_trace_spawn) {
+-		printf("VEUX SPAWN: pid=1 parent=%d name=%s path=%s errno=%d path_errno=%d\n",
+-		    proc_ppid(ap), ap->p_comm, veux_spawn_path, error, veux_spawn_path_error);
++	if (veux_trace_spawn && error != 0 && !veux_spawn_specific_policy) {
++		veux_pid1_spawn_failures++;
++		if (veux_pid1_spawn_failures <= 10) {
++			printf("VEUX SPAWN FAIL: pid=1 parent=%d name=%s path=%s stage=%s errno=%d path_errno=%d attempt=%u\n",
++			    proc_ppid(ap), ap->p_comm, veux_spawn_path, veux_spawn_stage, error,
++			    veux_spawn_path_error, veux_pid1_spawn_failures);
++		} else if ((veux_pid1_spawn_failures % 32) == 0) {
++			printf("VEUX SPAWN REPEAT: pid=1 parent=%d name=%s path=%s stage=%s errno=%d count=%u\n",
++			    proc_ppid(ap), ap->p_comm, veux_spawn_path, veux_spawn_stage, error, veux_pid1_spawn_failures);
++		}
++	} else if (veux_trace_spawn && error == 0) {
++		static uint32_t veux_pid1_spawn_successes;
++		veux_pid1_spawn_successes++;
++		if (veux_pid1_spawn_successes <= 10 || (veux_pid1_spawn_successes % 32) == 0) {
++			printf("VEUX SPAWN OK: pid=1 parent=%d name=%s path=%s count=%u\n",
++			    proc_ppid(ap), ap->p_comm, veux_spawn_path, veux_pid1_spawn_successes);
++		}
+ 	}
+ #endif
+ 	return error;
+--- a/security/mac_process.c
++++ b/security/mac_process.c
+@@ -932,6 +932,9 @@
+ 		void *spawnattr = exec_spawnattr_getmacpolicyinfo(&imgp->ip_px_smpx, mpc->mpc_name, &spawnattrlen);
+ 		struct _posix_spawnattr *psa = (struct _posix_spawnattr *) imgp->ip_px_sa;
+ 		struct launch_constraint_data lcd;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		int hook_result;
++#endif
+ 		lcd.launch_type = CS_LAUNCH_TYPE_NONE;
+ 
+ 		/* Check to see if psa_launch_type was initalized */
+@@ -939,9 +942,33 @@
+ 		        lcd.launch_type = psa->psa_launch_type;
+ 		}
+ 
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		hook_result = hook(curp, original_parent_id, responsible_pid,
++		    spawnattr, spawnattrlen, &lcd, &fatal_failure_desc, &fatal_failure_desc_len);
++		error = mac_error_select(hook_result, error);
++		if (proc_getpid(curp) == 1 && hook_result != 0) {
++			static uint32_t veux_launch_constraint_denials;
++			veux_launch_constraint_denials++;
++			if (veux_launch_constraint_denials <= 10 || (veux_launch_constraint_denials % 32) == 0) {
++				char *trace_path = zalloc(ZV_NAMEI);
++				int trace_pathlen = MAXPATHLEN;
++				const char *path = "(path unavailable)";
++				if (trace_path != NULL && vn_getpath(vp, trace_path, &trace_pathlen) == 0) {
++					path = trace_path;
++				}
++				printf("VEUX MAC DENY: policy=%s hook=mpo_proc_check_launch_constraints caller_pid=1 target=%s hook_errno=%d selected_errno=%d launch_type=0x%x spawnattr_size=%lu csflags=0x%x count=%u\n",
++				    mpc->mpc_name, path, hook_result, error, lcd.launch_type,
++				    (unsigned long)spawnattrlen, imgp->ip_csflags, veux_launch_constraint_denials);
++				if (trace_path != NULL) {
++					zfree(ZV_NAMEI, trace_path);
++				}
++			}
++		}
++#else
+ 		error = mac_error_select(
+ 			hook(curp, original_parent_id, responsible_pid,
+ 			spawnattr, spawnattrlen, &lcd, &fatal_failure_desc, &fatal_failure_desc_len), error);
++#endif
+ 
+ 		/*
+ 		 * Early exit in case of failure in case we have multiple registered callers.
+--- a/security/mac_vfs.c
++++ b/security/mac_vfs.c
+@@ -1266,12 +1266,36 @@
+ 
+ 			size_t spawnattrlen = 0;
+ 			void *spawnattr = exec_spawnattr_getmacpolicyinfo(&imgp->ip_px_smpx, mpc->mpc_name, &spawnattrlen);
+-
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++			int hook_result = hook(cred,
++			    vp, imgp->ip_scriptvp, mac_vnode_label(vp), imgp->ip_scriptlabelp,
++			    imgp->ip_execlabelp, &imgp->ip_ndp->ni_cnd, &imgp->ip_csflags,
++			    spawnattr, spawnattrlen);
++			error = mac_error_select(hook_result, error);
++			if (proc_getpid(vfs_context_proc(ctx)) == 1 && hook_result != 0) {
++			    static uint32_t veux_exec_mac_denials;
++			    veux_exec_mac_denials++;
++			    if (veux_exec_mac_denials <= 10 || (veux_exec_mac_denials % 32) == 0) {
++			        char *trace_path = zalloc(ZV_NAMEI);
++			        int trace_pathlen = MAXPATHLEN;
++			        const char *path = "(path unavailable)";
++			        if (trace_path != NULL && vn_getpath(vp, trace_path, &trace_pathlen) == 0) {
++			            path = trace_path;
++			        }
++			        printf("VEUX MAC HOOK DENY: stage=mac_vnode_check_exec policy=%s hook=mpo_vnode_check_exec path=%s hook_errno=%d selected_errno=%d csflags=0x%x count=%u\n",
++			            mpc->mpc_name, path, hook_result, error, imgp->ip_csflags, veux_exec_mac_denials);
++			        if (trace_path != NULL) {
++			            zfree(ZV_NAMEI, trace_path);
++			        }
++			    }
++			}
++#else
+ 			error = mac_error_select(
+-				hook(cred,
+-				vp, imgp->ip_scriptvp, mac_vnode_label(vp), imgp->ip_scriptlabelp,
+-				imgp->ip_execlabelp, &imgp->ip_ndp->ni_cnd, &imgp->ip_csflags,
+-				spawnattr, spawnattrlen), error);
++			    hook(cred,
++			    vp, imgp->ip_scriptvp, mac_vnode_label(vp), imgp->ip_scriptlabelp,
++			    imgp->ip_execlabelp, &imgp->ip_ndp->ni_cnd, &imgp->ip_csflags,
++			    spawnattr, spawnattrlen), error);
++#endif
+ 		}
+ 		if (mac_policy_list_conditional_busy() != 0) {
+ 			for (; i <= mac_policy_list.maxindex; i++) {
+@@ -1287,12 +1311,36 @@
+ 
+ 				size_t spawnattrlen = 0;
+ 				void *spawnattr = exec_spawnattr_getmacpolicyinfo(&imgp->ip_px_smpx, mpc->mpc_name, &spawnattrlen);
+-
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++				int hook_result = hook(cred,
++				    vp, imgp->ip_scriptvp, mac_vnode_label(vp), imgp->ip_scriptlabelp,
++				    imgp->ip_execlabelp, &imgp->ip_ndp->ni_cnd, &imgp->ip_csflags,
++				    spawnattr, spawnattrlen);
++				error = mac_error_select(hook_result, error);
++				if (proc_getpid(vfs_context_proc(ctx)) == 1 && hook_result != 0) {
++				    static uint32_t veux_exec_mac_denials;
++				    veux_exec_mac_denials++;
++				    if (veux_exec_mac_denials <= 10 || (veux_exec_mac_denials % 32) == 0) {
++				        char *trace_path = zalloc(ZV_NAMEI);
++				        int trace_pathlen = MAXPATHLEN;
++				        const char *path = "(path unavailable)";
++				        if (trace_path != NULL && vn_getpath(vp, trace_path, &trace_pathlen) == 0) {
++				            path = trace_path;
++				        }
++				        printf("VEUX MAC HOOK DENY: stage=mac_vnode_check_exec policy=%s hook=mpo_vnode_check_exec path=%s hook_errno=%d selected_errno=%d csflags=0x%x count=%u\n",
++				            mpc->mpc_name, path, hook_result, error, imgp->ip_csflags, veux_exec_mac_denials);
++				        if (trace_path != NULL) {
++				            zfree(ZV_NAMEI, trace_path);
++				        }
++				    }
++				}
++#else
+ 				error = mac_error_select(
+-					hook(cred,
+-					vp, imgp->ip_scriptvp, mac_vnode_label(vp), imgp->ip_scriptlabelp,
+-					imgp->ip_execlabelp, &imgp->ip_ndp->ni_cnd, &imgp->ip_csflags,
+-					spawnattr, spawnattrlen), error);
++				    hook(cred,
++				    vp, imgp->ip_scriptvp, mac_vnode_label(vp), imgp->ip_scriptlabelp,
++				    imgp->ip_execlabelp, &imgp->ip_ndp->ni_cnd, &imgp->ip_csflags,
++				    spawnattr, spawnattrlen), error);
++#endif
+ 			}
+ 			mac_policy_list_unbusy();
+ 		}
