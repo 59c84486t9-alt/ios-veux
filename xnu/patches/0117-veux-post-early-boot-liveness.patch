@@ -5,17 +5,13 @@ After launchd reports early boot complete, periodically print a bounded
 process/thread snapshot to the framebuffer console. Console output is mirrored
 into the in-memory ring, but this sampler does not flush storage.
 
-diff --git a/osfmk/conf/files b/osfmk/conf/files
---- a/osfmk/conf/files
-+++ b/osfmk/conf/files
-@@ -109,6 +109,7 @@
- osfmk/kern/affinity.c			standard
- osfmk/kern/arcade.c				optional config_arcade
- osfmk/kern/ast.c			standard
-+osfmk/kern/veux_liveness.c		standard
- osfmk/kern/audit_sessionport.c		optional config_audit
- osfmk/kern/backtrace.c			standard
- osfmk/kern/btlog.c			standard
+diff --git a/bsd/conf/files b/bsd/conf/files
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -110,2 +110,3 @@
+ bsd/dev/sweet_sample.c			standard
++bsd/dev/veux_liveness.c			standard
+ bsd/dev/sweet_keys.c			standard
 
 diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
 --- a/osfmk/console/serial_console.c
@@ -81,35 +77,60 @@ diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 +}
  void
  veux_bsd_stage(unsigned int stage)
-diff --git a/osfmk/kern/veux_liveness.c b/osfmk/kern/veux_liveness.c
+diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
+--- a/osfmk/kern/exception.c
++++ b/osfmk/kern/exception.c
+@@ -1049,3 +1049,31 @@
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++/* Keep BSD process enumeration separate from private Mach thread state. */
++void
++veux_live_task_snapshot(task_t task, int *thread_count, uint64_t *user_pc, bool launchd)
++{
++	thread_t thread;
++	int count = 0;
++	uint64_t pc = 0, wait = 0;
++	uint32_t hint = 0;
++	task_lock(task);
++	queue_iterate(&task->threads, thread, thread_t, task_threads) {
++		arm_saved_state_t *ss = find_user_regs(thread);
++		count++;
++		if (pc == 0 && ss != NULL && is_saved_state64(ss)) {
++			pc = get_saved_state_pc(ss);
++		}
++		if (launchd && count == 1) {
++			wait = (uint64_t)thread->wait_event;
++			hint = thread->block_hint;
++		}
++	}
++	task_unlock(task);
++	if (launchd) {
++		printf("VEUX LIVE: launchd thread wait=0x%llx hint=0x%x pc=0x%llx\n", wait, hint, pc);
++	}
++	if (thread_count != NULL) *thread_count = count;
++	if (user_pc != NULL) *user_pc = pc;
++}
++#endif
+ kern_return_t
+diff --git a/bsd/dev/veux_liveness.c b/bsd/dev/veux_liveness.c
 new file mode 100644
 --- /dev/null
-+++ b/osfmk/kern/veux_liveness.c
-@@ -0,0 +1,168 @@
-+#define MACH_KERNEL_PRIVATE 1
++++ b/bsd/dev/veux_liveness.c
+@@ -0,0 +1,139 @@
 +#include <sys/param.h>
-+#include <sys/proc.h>
-+#include <kern/task.h>
-+#include <kern/thread.h>
-+#include <kern/zalloc.h>
-+#include <sys/resourcevar.h>
-+/* Private BSD and Mach headers publish incompatible opaque task accessors
-+ * and duplicate the proc/task zone declaration. The sampler uses proc_task(),
-+ * not task_get_proc_raw() or either zone declaration. */
-+#define task_get_proc_raw veux_unused_task_get_proc_raw
-+#define ZONE_DECLARE_ID(id, type)
-+#include <sys/proc_internal.h>
-+#undef ZONE_DECLARE_ID
-+#undef task_get_proc_raw
 +#include <sys/systm.h>
++#include <sys/proc.h>
++/* Keep process metadata in BSD; Mach thread state comes from OSFMK. */
++#include <sys/proc_internal.h>
++#include <kern/task.h>
++#include <sys/resourcevar.h>
 +#include <os/atomic_private.h>
-+#include <arm/machine_routines.h>
-+#include <arm/thread.h>
-+#include <mach/arm/thread_status.h>
 +#include <pexpert/pexpert.h>
 +
 +extern int hz;
 +extern void veux_idle_sample_report(void);
++extern void veux_live_task_snapshot(task_t, int *, uint64_t *, bool);
 +void veux_liveness_start(void);
 +
 +#define VEUX_LIVE_MAX 16
@@ -160,15 +181,7 @@ new file mode 100644
 +	int nthreads = 0;
 +	uint64_t user_pc = 0;
 +	if (task != TASK_NULL) {
-+		task_lock(task);
-+		nthreads = task->thread_count;
-+		thread_t th;
-+		queue_iterate(&task->threads, th, thread_t, task_threads) {
-+			arm_saved_state_t *ss = find_user_regs(th);
-+			if (ss && is_saved_state64(ss)) user_pc = get_saved_state_pc(ss);
-+			break;
-+		}
-+		task_unlock(task);
++		veux_live_task_snapshot(task, &nthreads, &user_pc, false);
 +	}
 +	process_count++;
 +	thread_count += nthreads;
@@ -196,17 +209,7 @@ new file mode 100644
 +		printf("VEUX LIVE: launchd task unavailable\n");
 +		return;
 +	}
-+	task_lock(task);
-+	thread_t th;
-+	int index = 0;
-+	queue_iterate(&task->threads, th, thread_t, task_threads) {
-+		arm_saved_state_t *ss = find_user_regs(th);
-+		uint64_t pc = (ss && is_saved_state64(ss)) ? get_saved_state_pc(ss) : 0;
-+		printf("VEUX LIVE: launchd thread%d wait=0x%llx hint=0x%x pc=0x%llx\n",
-+		    index++, (uint64_t)th->wait_event, th->block_hint, pc);
-+		if (index == 1) break;
-+	}
-+	task_unlock(task);
++	veux_live_task_snapshot(task, NULL, NULL, true);
 +	proc_rele(p);
 +}
 +

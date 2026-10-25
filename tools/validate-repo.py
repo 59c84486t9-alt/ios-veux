@@ -91,23 +91,23 @@ def validate_patches(verbose=False):
         with open(liveness_path, 'r', errors='ignore') as f:
             liveness = f.read()
         required_liveness = (
-            '+#define MACH_KERNEL_PRIVATE 1\n+#include <sys/param.h>',
-            '+#include <kern/zalloc.h>',
-            '+#include <sys/resourcevar.h>',
-            '+#define task_get_proc_raw veux_unused_task_get_proc_raw',
-            '+#define ZONE_DECLARE_ID(id, type)',
-            '+#undef ZONE_DECLARE_ID',
-            '+#undef task_get_proc_raw',
+            '+#include <sys/param.h>\n+#include <sys/systm.h>\n+#include <sys/proc.h>',
+            '+#include <sys/proc_internal.h>',
             '+#include <kern/task.h>',
-            '+#include <kern/thread.h>',
-            '+#include <arm/thread.h>',
-            '+#include <mach/arm/thread_status.h>',
+            '+#include <sys/resourcevar.h>',
+            '+extern void veux_live_task_snapshot(task_t, int *, uint64_t *, bool);',
             '+void veux_liveness_start(void);',
+            '+\t\tveux_live_task_snapshot(task, &nthreads, &user_pc, false);',
+            '+\tveux_live_task_snapshot(task, NULL, NULL, true);',
+            '+void\n+veux_live_task_snapshot(task_t task, int *thread_count, uint64_t *user_pc, bool launchd)',
         )
         for token in required_liveness:
             if token not in liveness:
                 errors.append(f"0117 liveness source is missing required XNU API declaration/include: {token[1:]}")
         forbidden_liveness = (
+            '+#include <kern/thread.h>',
+            '+#include <arm/thread.h>',
+            '+#include <mach/arm/thread_status.h>',
             '+extern uint64_t get_saved_state_pc(',
             '+extern boolean_t is_saved_state64(',
             '+extern arm_saved_state_t *find_user_regs(',
