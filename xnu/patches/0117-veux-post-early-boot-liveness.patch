@@ -94,7 +94,7 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 +#include <kern/kcdata.h>
 +#include <kern/block_hint.h>
  #include <kern/processor.h>
-@@ -1049,3 +1050,126 @@
+@@ -1049,3 +1050,130 @@
  #endif /* ARM64_BOARD_CONFIG_SWEET */
 -
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
