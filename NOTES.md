@@ -13,10 +13,12 @@
   logging, not a complete audit of every MACF policy hook.
 - Updated the workflow and `tools/kernel-manifest.py` to require patch 0121 and
   assert its main-thread repeated-stack, wait, spawn/exec, exit, and MAC-denial
-  markers. Local `git diff --check`, Python syntax compilation, and reverse
-  applicability against the currently staged XNU source pass. No XNU compile,
-  CI run, wrapper build, or device flash was performed; the patch remains
-  unverified on-device.
+  markers. Python syntax compilation and reverse applicability against the
+  currently staged XNU source pass. `git diff --check` passes for the source,
+  workflow, manifest, and notes changes; it reports whitespace warnings when
+  run over the added unified-diff patch file itself because patch context lines
+  carry the XNU source indentation. No XNU compile, CI run, wrapper build, or
+  device flash was performed; the patch remains unverified on-device.
 - Audited `/Volumes/iOSRoot/System/Library/xpc/launchd.plist` offline
   (SHA-256 `7b41fa308304021a90fb8dfc4ac6224e6c1841fb73e47b7f09efbdd7167c91d1`):
   530 cached daemon records; 49 enabled `RunAtLoad` entries and 3 additional
