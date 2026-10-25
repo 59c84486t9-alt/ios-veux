@@ -119,13 +119,6 @@
  #if defined(HAS_APPLE_PAC)
  	ml_task_set_jop_pid_from_shared_region(new_task);
  	ml_task_set_disable_user_jop(new_task, imgp->ip_flags & IMGPF_NOJOP ? TRUE : FALSE);
-@@ -4246,3 +4313,3 @@
- 			;
- 		}
- 		exec_resettextvp(p, imgp);
-
- #if CONFIG_MEMORYSTATUS
- 		/* Set jetsam priority for DriverKit processes */
 @@ -4684,9 +4781,23 @@
  
  	assert(exec_failure_reason == NULL);
