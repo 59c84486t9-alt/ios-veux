@@ -35,10 +35,9 @@ env:
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
   MACHINE_CONFIG: ${{ inputs.machine_config || 'VEUX' }}
   VEUX_BUILD_ID: ${{ github.run_id }}
-  # Keep the first candidate boot read-only. The VEUX tail logger occupies
-  # userdata blocks and must not be enabled while the HFS+ root volume can
-  # extend through those blocks. RW remains a boot-arg-only experiment.
-  VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128"
+  # Restore the last-known early-boot diagnostics, but default the root to RO.
+  # Both rootrw=1 and ufsrw=1 are required to opt into writable-root testing.
+  VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 veuxlog=1 veuxfb=1 veuxfbconsole=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128"
 
 jobs:
   build:
@@ -52,9 +51,15 @@ jobs:
       - name: Repository and patch structure preflight
         run: |
           python3 tools/validate-repo.py
+          for required in debug=0xc serial=3 cpus=1 veuxfb=1 veuxfbconsole=1 veuxlog=1; do
+            case " $VEUX_BOOT_ARGS " in
+              *" $required "*) ;;
+              *) echo "required diagnostic boot argument missing: $required" >&2; exit 1 ;;
+            esac
+          done
           case " $VEUX_BOOT_ARGS " in
-            *" rootrw=1 "*|*" ufsrw=1 "*|*" veuxlog=1 "*)
-              echo "refusing an RW or userdata-tail-log default boot configuration" >&2
+            *" rootrw=1 "*|*" ufsrw=1 "*)
+              echo "refusing a writable-root default boot configuration" >&2
               exit 1
               ;;
           esac
@@ -66,11 +71,12 @@ jobs:
           git -C dxb checkout -q FETCH_HEAD
           python3 - <<'PY'
           from pathlib import Path
-          patch = Path('xnu/patches/0117-veux-post-early-boot-liveness.patch')
-          source = patch.read_text()
           build_id = __import__('os').environ['VEUX_BUILD_ID']
-          assert '__VEUX_BUILD_ID__' in source
-          patch.write_text(source.replace('__VEUX_BUILD_ID__', build_id))
+          for patch in (Path('xnu/patches/0117-veux-post-early-boot-liveness.patch'),
+                        Path('xnu/patches/0120-veux-unconditional-early-console-build-id.patch')):
+              source = patch.read_text()
+              assert '__VEUX_BUILD_ID__' in source, patch
+              patch.write_text(source.replace('__VEUX_BUILD_ID__', build_id))
           PY
           # 12.5-14.3 use the top-level patches dir; ours go next to blacktop's
           cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/
@@ -206,10 +212,10 @@ jobs:
             grep -Fq 'VEUX_FB_HEIGHT             2400u' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'VEUX_FB_STRIDE             4320u' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'format=a8r8g8b8' xnu/pexpert/arm/pe_serial.c
-            grep -Fq 'PE_parse_boot_argn("veuxfb"' xnu/pexpert/arm/pe_serial.c
-            grep -Fq 'PE_parse_boot_argn("veuxfbconsole"' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'ml_io_map_wcomb((vm_offset_t)VEUX_FB_BASE, VEUX_FB_SIZE)' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'VEUX simplefb marker wrote white 32x32 at 0x85200000' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'VEUX BUILD: ID=' xnu/pexpert/arm/pe_serial.c
+            grep -Fq '0120-veux-unconditional-early-console-build-id.patch' ../patch-status.txt
             grep -Eq 'IORPCMessage[[:space:]]*\*[[:space:]]*kernelContent;' xnu/iokit/IOKit/IORPC.h
             grep -Eq 'IORPCMessage[[:space:]]*\*[[:space:]]*kernelContent;' xnu/iokit/DriverKit/IORPC.h
             grep -Fq 'veux_log_append(c, size)' xnu/osfmk/console/serial_console.c
@@ -258,7 +264,8 @@ jobs:
           assert "veux_pmsg_init()" not in startup, "VEUX pmsg mapping still runs in early kprintf startup"
           assert vm.index("early I/O page tables ready") < vm.index("PE_init_veux_pmsg();"), "VEUX pmsg must wait for early I/O page tables"
           assert "veux_fb_init();" in pmsg_init, "initialize the VEUX framebuffer after early I/O tables are ready"
-          assert "PE_parse_boot_argn(\"veuxfb\"" in probe and "PE_parse_boot_argn(\"veuxfbconsole\"" in probe, "marker and console remain opt-in"
+          assert 'PE_parse_boot_argn("veuxfb"' not in probe and 'PE_parse_boot_argn("veuxfbconsole"' not in probe, "early framebuffer must not depend on optional boot arguments"
+          assert "int write_marker = 1;" in probe and "int enable_console = 1;" in probe, "early framebuffer marker and console are unconditional"
           assert "VEUX_FB_BASE               0x85200000ULL" in region and "VEUX_FB_SIZE               0x00c00000u" in region, "use the supplied simple-framebuffer region"
           assert "VEUX_FB_WIDTH              1080u" in region and "VEUX_FB_HEIGHT             2400u" in region, "use the RGB-probe-validated geometry"
           assert "VEUX_FB_STRIDE             4320u" in region and "format=a8r8g8b8" in region, "use the supplied stride and pixel format"
@@ -266,6 +273,11 @@ jobs:
           assert "address != VEUX_FB_BASE" not in region and "dsi_active" not in region and "VEUX_SDE_BASE" not in region, "do not gate writes on live SDE register checks"
           assert "VEUX simplefb marker wrote white 32x32 at 0x85200000" in region, "successful screen marker must remain uniquely identifiable"
           assert "veux_fb_console_base = fb" in probe and "veux_fb_console_ready = true" in probe, "enable console after the direct map succeeds"
+          assert 'VEUX BUILD: ID=' in probe and 'veux_fb_console_putc(build_id_line[i])' in probe, "print the build ID directly through the framebuffer console"
+          early = Path("xnu/osfmk/arm64/veux_early.c").read_text()
+          stage_fn = early.split("veux_stage_mark_nb(unsigned int cell)", 1)[1].split("veux_stage_flush(void)", 1)[0]
+          assert "veux_stage_mark_nb(unsigned int cell)" in early and "if (cell >= 22) return;" in stage_fn and "PE_parse_boot_argn" not in stage_fn, "early stage cells are compiled independently of veuxfb boot arguments"
+          assert "veux_stage_mark(2);" in early and "veux_stage_mark(3);" in early, "early arm and platform stages mark cells before userland"
           assert "Clear the new line on every advance" in fbcon and "VEUX_FB_CONSOLE_FG" in region, "clear console lines on wrap; keep foreground glyphs"
           assert "veux_fb_console_putc(c)" in kprintf, "route VEUX printk to the simple-framebuffer console"
           assert "veux_log_append(c, size)" in console, "mirror the active XNU console printk path into the UFS log ring"
@@ -285,7 +297,7 @@ jobs:
           assert "defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in Path("xnu/bsd/kern/kern_exit.c").read_text(), "record user-process crash details on VEUX"
           assert "veuxscan" in Path("xnu/osfmk/kern/exception.c").read_text(), "gate heap-string scans by a VEUX boot argument"
           PY
-            echo "Verified VEUX CPU, bounded opt-in userdata logging, direct simple-framebuffer console, AMFI, and opt-in userspace diagnostics"
+            echo "Verified VEUX CPU, bounded userdata logging, unconditional direct simple-framebuffer console/build ID, AMFI, and opt-in userspace diagnostics"
           fi
 
       - name: Host diagnostic bounds checks (synthetic memory only)

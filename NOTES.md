@@ -1,3 +1,48 @@
+## >>> UPDATE 2026-10-24 (401511 display regression and RO baseline) <<<
+
+- Confirmed the comparison point is run 40092567840, the last image documented
+  as reaching launchd's “Early boot complete” line. Run 40151171910 removed
+  `unentitled_ios_sim_launch=1`, `veuxlog=1`, `veuxfb=1`,
+  `veuxfbconsole=1`, `ignition_level=1`, `launchd_unsecure_cache=1`,
+  `wdt=-1`, and `wdt_test=no_user_checkin`, while adding launchd verbose log
+  options. It retained `debug=0xc`, `serial=3`, `cpus=1`, `keepsyms=1`,
+  `-enable_kprintf_spam`, `-noprogress`, and `rd=ufsroot0`. The read-only
+  diagnostic wrapper restores the old arguments except `rootrw=1 ufsrw=1`,
+  and keeps the new launchd verbose options.
+- The read-only diagnostic wrapper is
+  `shim/out/veux-xnu-40092567840/shim-boot-ro-diagnostic.img`, SHA-256
+  `43709dc15a9bf0afe3d05abe6d56885e9124940564fd1c752895b06b542308ec`.
+  It preserves the exact run-400925 kernel payload and phone DTB, changes only
+  the XNU boot arguments, was flashed to `boot_b`, selected slot B, and reboot
+  returned OKAY. ADB and fastboot enumeration are currently empty; visual
+  confirmation of the read-only screen result is still pending. This is not a
+  “good” result until a photo shows the expected build identity and cells.
+- New applied patches in 401511 versus 400925 are 0117 (post-early-boot
+  process liveness sampler), 0118 (stop mountroot retries), and 0119 (require
+  both explicit rootrw/ufsrw flags). 0065 and 0078 were already in the
+  baseline patch list; 0004/0010/0047 and the AppleKeyStore/crypto changes
+  were also not new in that comparison. With `cpus=1`, the single-core setting
+  remains explicit. 401511's shim addresses remain inside the same managed
+  RAM interval: the image end moves by `0x4000`, ADT and boot args follow with
+  no overlap, and the framebuffer alias and below-4-GiB initrd are disjoint.
+- Added patch 0120 from the exact post-patch source artifact for 401511. It
+  removes the `veuxfb`/`veuxfbconsole` early return, unconditionally enables
+  the framebuffer marker/console, and draws the build ID directly through the
+  framebuffer. Its hunk was regenerated with exact line/count context and
+  applied using zero fuzz to the 401511 XNU build-tree artifact. Early stage
+  cells remain boot-argument independent; source assertions now check the
+  stage-cell writer and the early ARM/platform cell calls.
+- The workflow default now restores the run-400925 diagnostics and boot
+  settings while omitting only rootrw/ufsrw; it also retains the new launchd
+  verbose flags. The strict kernel manifest requires patch 0120 and asserts
+  unconditional framebuffer setup, direct on-screen build-ID output, and
+  early cells. Local `validate-repo.py`, Python compilation, patch application
+  to the exact 401511 source tree, workflow source assertions, and
+  `git diff --check` pass. Changes are uncommitted and no new CI run has been
+  dispatched yet. The 401511 wait/stall is not attributed to any one patch;
+  if the read-only baseline is confirmed healthy, the next CI adds the new
+  patches in groups and is not flashed until all strict checks pass.
+
 ## >>> UPDATE 2026-10-24 (strict patch audit, build identity, wrapper verification) <<<
 
 - Kept macOS 13.5 / XNU 8796. The SWEET/VEUX staging scripts 0019, 0020,

@@ -26,12 +26,14 @@ for patch in (
     "0117-veux-post-early-boot-liveness.patch",
     "0118-veux-stop-mountroot-retries.patch",
     "0119-veux-require-explicit-rw-pair.patch",
+    "0120-veux-unconditional-early-console-build-id.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
 
 needles = {
     "build_id_screen_and_ring": f"VEUX BUILD: ID={a.build_id}".encode(),
+    "early_framebuffer_console_entry": b"VEUX simplefb console 1080x2400 stride=4320 format=a8r8g8b8",
     "process_sampler": b"VEUX LIVE: processes=",
     "panic_region_marker": b"VEUX EARLY PANIC:",
     "panic_console_tail_header": b"Last console lines (oldest first; includes mount output):",
@@ -52,6 +54,26 @@ checks = {name: needle in kernel for name, needle in needles.items()}
 source_checks = {}
 vfs = (a.source_root / "bsd/vfs/vfs_subr.c").read_text()
 ufs = (a.source_root / "bsd/dev/sweet_ufs.c").read_text()
+serial = (a.source_root / "pexpert/arm/pe_serial.c").read_text()
+early = (a.source_root / "osfmk/arm64/veux_early.c").read_text()
+fb_init = serial.split("veux_fb_init(void)", 1)[1].split("veux_fb_console_putc(char c)", 1)[0]
+stage_fn = early.split("veux_stage_mark_nb(unsigned int cell)", 1)[1].split("veux_stage_flush(void)", 1)[0]
+source_checks["framebuffer_console_and_marker_are_unconditional"] = (
+    'PE_parse_boot_argn("veuxfb"' not in fb_init
+    and 'PE_parse_boot_argn("veuxfbconsole"' not in fb_init
+    and "int write_marker = 1;" in fb_init
+    and "int enable_console = 1;" in fb_init
+)
+source_checks["direct_framebuffer_build_id_print"] = (
+    'VEUX BUILD: ID=' in fb_init and 'veux_fb_console_putc(build_id_line[i])' in fb_init
+)
+source_checks["early_stage_cells_do_not_depend_on_boot_args"] = (
+    "veux_stage_mark_nb(unsigned int cell)" in early
+    and "if (cell >= 22) return;" in stage_fn
+    and "PE_parse_boot_argn" not in stage_fn
+    and "veux_stage_mark(2);" in early
+    and "veux_stage_mark(3);" in early
+)
 root_alloc = vfs.split("vfs_rootmountalloc_internal(struct vfstable *vfsp", 1)[1].split("vfs_rootmountalloc(", 1)[0]
 source_checks["root_mount_starts_read_only"] = "mp->mnt_flag = MNT_RDONLY | MNT_ROOTFS;" in root_alloc
 mountroot = vfs.split("vfs_mountroot(void)", 1)[1]

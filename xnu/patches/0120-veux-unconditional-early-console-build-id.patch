@@ -1,0 +1,28 @@
+From: ios-veux
+Subject: [PATCH] Make the VEUX early console and build ID unconditional
+
+The early framebuffer console and build ID are the first post-handoff
+diagnostic. Do not make them depend on optional veuxfb boot arguments.
+
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+index d1fe9d9..5a0db2b 100644
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1463,0 +1464 @@ static bool veux_fb_console_ready;
++extern void veux_fb_console_putc(char c);
+@@ -1476,7 +1477,2 @@ veux_fb_init(void)
+-	int write_marker = 0;
+-	int enable_console = 0;
+-	(void)PE_parse_boot_argn("veuxfb", &write_marker, sizeof(write_marker));
+-	(void)PE_parse_boot_argn("veuxfbconsole", &enable_console, sizeof(enable_console));
+-	if (write_marker == 0 && enable_console == 0) {
+-		return;
+-	}
++	int write_marker = 1;
++	int enable_console = 1;
+@@ -1501,0 +1498,5 @@ veux_fb_init(void)
++	/* This line is painted directly, even before the normal console is routed. */
++	static const char build_id_line[] = "VEUX BUILD: ID=__VEUX_BUILD_ID__\n";
++	for (unsigned int i = 0; i < sizeof(build_id_line) - 1; ++i) {
++		veux_fb_console_putc(build_id_line[i]);
++	}
