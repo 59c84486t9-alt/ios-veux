@@ -1,0 +1,265 @@
+--- a/osfmk/kern/exception.c
++++ b/osfmk/kern/exception.c
+@@ -1054,9 +1054,7 @@
+ /* Keep BSD process enumeration separate from private Mach thread state. */
+ struct veux_wait_record {
+ 	uint64_t tid, event, pc, owner, context;
+-	uint32_t state, hint, waitq, nframes, trace_flags, trace_attempted;
+-	int32_t trace_result;
+-	uint64_t frames[6];
++	uint32_t state, hint, waitq;
+ };
+ static const char *
+ veux_wait_kind_name(uint32_t hint)
+@@ -1112,6 +1110,12 @@
+ 	struct veux_wait_record waits[8];
+ 	int count = 0, saved = 0;
+ 	uint64_t pc = 0, wait_hash = 1469598103934665603ULL, wait_classes = 0;
++	uint64_t main_tid = 0, main_event = 0, main_pc = 0, main_owner = 0, main_context = 0;
++	uint32_t main_state = 0, main_hint = 0, main_kind = 0;
++	uint32_t main_trace_attempted = 0, main_trace_flags = 0, main_nframes = 0;
++	int32_t main_trace_result = 0;
++	const char *main_trace_skipped = "no-main-thread";
++	uint64_t main_frames[24] = { 0 };
+ 	task_lock(task);
+ 	queue_iterate(&task->threads, thread, thread_t, task_threads) {
+ 		thread_lock(thread);
+@@ -1125,13 +1129,36 @@
+ 		if (launchd) {
+ 			uint64_t tid = thread_tid(thread), event = (uint64_t)thread->wait_event;
+ 			uint32_t state = thread->state, hint = thread->block_hint;
+-			/* Track wait classes globally, plus stable details for the bounded sample. */
+ 			wait_classes |= (1ULL << (hint & 63));
+ 			wait_classes |= (1ULL << ((kind + 32) & 63));
++			if (count == 1) {
++				/* The first task thread is launchd's main thread. Sample it every pass. */
++				main_tid = tid;
++				main_event = event;
++				main_pc = thread_pc;
++				main_state = state;
++				main_hint = hint;
++				main_kind = kind;
++				if (hint == kThreadWaitSemaphore && thread->waitq.wq_q != NULL) {
++					thread_waitinfo_t wi = { 0 };
++					kdp_sema_find_owner(thread->waitq.wq_q, thread->wait_event, &wi);
++					main_owner = wi.owner;
++					main_context = wi.context;
++				}
++				if (thread->kernel_stack != 0) {
++					main_trace_attempted = 1;
++					main_trace_skipped = "none";
++					extern int machine_trace_thread64(thread_t, char *, char *, int, uint32_t *);
++					main_trace_result = machine_trace_thread64(thread, (char *)main_frames,
++					    (char *)(main_frames + 12), 12, &main_trace_flags);
++					if (main_trace_result > 0)
++						main_nframes = MIN((uint32_t)main_trace_result, 12);
++				} else {
++					main_trace_skipped = "no-kernel-stack";
++				}
++			}
+ 			if (saved < (int)(sizeof(waits) / sizeof(waits[0]))) {
+-				uint64_t owner = 0, context = 0, frames[6] = { 0 };
+-				uint32_t nframes = 0, trace_flags = 0, trace_attempted = 0;
+-				int32_t trace_result = 0;
++				uint64_t owner = 0, context = 0;
+ 				if (hint == kThreadWaitSemaphore && thread->waitq.wq_q != NULL) {
+ 					thread_waitinfo_t wi = { 0 };
+ 					kdp_sema_find_owner(thread->waitq.wq_q, thread->wait_event, &wi);
+@@ -1143,51 +1170,47 @@
+ 				wait_hash = (wait_hash ^ thread_pc) * 1099511628211ULL;
+ 				wait_hash = (wait_hash ^ owner) * 1099511628211ULL;
+ 				wait_hash = (wait_hash ^ context) * 1099511628211ULL;
+-				/* Stack capture is only for the first bounded snapshot. */
+-				if (!previous_launchd_wait_valid && thread->kernel_stack != 0) {
+-					trace_attempted = 1;
+-					extern int machine_trace_thread64(thread_t, char *, char *, int, uint32_t *);
+-					trace_result = machine_trace_thread64(thread, (char *)frames,
+-					    (char *)(frames + 6), 6, &trace_flags);
+-					if (trace_result > 0) nframes = MIN((uint32_t)trace_result, 6);
+-				}
+-				struct veux_wait_record *w = &waits[saved++];
+-				*w = (struct veux_wait_record){ .tid = tid, .event = event, .pc = thread_pc,
+-				    .owner = owner, .context = context, .state = state, .hint = hint,
+-				    .waitq = kind, .nframes = MIN(nframes, 6),
+-				    .trace_flags = trace_flags, .trace_attempted = trace_attempted,
+-				    .trace_result = trace_result };
+-				memcpy(w->frames, frames, sizeof(w->frames));
++				waits[saved++] = (struct veux_wait_record){ .tid = tid, .event = event,
++				    .pc = thread_pc, .owner = owner, .context = context,
++				    .state = state, .hint = hint, .waitq = kind };
+ 			}
+ 		}
+ 		thread_unlock(thread);
+ 	}
+ 	task_unlock(task);
+-	if (launchd && (!previous_launchd_wait_valid || previous_launchd_wait_hash != wait_hash)) {
+-		printf("VEUX WAIT: launchd threads=%d waitq_kind: 1=queue 2=turnstile 3=port 4=select 5=port_set 6=select_set classes=0x%llx signature=0x%llx\n", count, (unsigned long long)wait_classes, (unsigned long long)wait_hash);
+-		for (int i = 0; i < saved; i++) {
+-			printf("VEUX WAIT: tid=%llu state=0x%x kind=%s event=0x%llx hint=0x%x waitq=%u pc=0x%llx owner_pid=%llu context=0x%llx\n",
+-			    (unsigned long long)waits[i].tid, waits[i].state, veux_wait_kind_name(waits[i].hint),
+-			    (unsigned long long)waits[i].event, waits[i].hint, waits[i].waitq,
+-			    (unsigned long long)waits[i].pc, (unsigned long long)waits[i].owner,
+-			    (unsigned long long)waits[i].context);
+-			printf("VEUX STACK: tid=%llu attempted=%u result=%d frames=%u flags=0x%x\n",
+-			    (unsigned long long)waits[i].tid, waits[i].trace_attempted,
+-			    waits[i].trace_result, waits[i].nframes, waits[i].trace_flags);
+-			if (waits[i].nframes != 0) {
+-				printf("VEUX STACK FRAMES: tid=%llu ", (unsigned long long)waits[i].tid);
+-				for (uint32_t j = 0; j < waits[i].nframes; j++)
+-					printf("%s0x%llx", j ? "," : "", (unsigned long long)waits[i].frames[j]);
+-				printf("\n");
+-			}
+-		}
+-		if (!previous_launchd_wait_valid) veux_live_launchd_vm(task, pc);
+-		previous_launchd_wait_hash = wait_hash;
+-		previous_launchd_wait_valid = true;
++	if (launchd) {
++		printf("VEUX MAIN WAIT: tid=%llu state=0x%x kind=%s event=0x%llx hint=0x%x waitq=%u user_pc=0x%llx owner_pid=%llu context=0x%llx\n",
++		    (unsigned long long)main_tid, main_state, veux_wait_kind_name(main_hint),
++		    (unsigned long long)main_event, main_hint, main_kind,
++		    (unsigned long long)main_pc, (unsigned long long)main_owner,
++		    (unsigned long long)main_context);
++		printf("VEUX STACK MAIN: tid=%llu attempted=%u skipped: %s result=%d frames=%u flags=0x%x\n",
++		    (unsigned long long)main_tid, main_trace_attempted, main_trace_skipped,
++		    main_trace_result, main_nframes, main_trace_flags);
++		printf("VEUX STACK MAIN FRAMES: tid=%llu", (unsigned long long)main_tid);
++		for (uint32_t i = 0; i < main_nframes; i++)
++			printf(" %u=0x%llx", i, (unsigned long long)main_frames[i]);
++		if (main_nframes == 0) printf(" none");
++		printf("\n");
++		if (!previous_launchd_wait_valid || previous_launchd_wait_hash != wait_hash) {
++			printf("VEUX WAIT: launchd threads=%d waitq_kind: 1=queue 2=turnstile 3=port 4=select 5=port_set 6=select_set classes=0x%llx signature=0x%llx\n",
++			    count, (unsigned long long)wait_classes, (unsigned long long)wait_hash);
++			for (int i = 0; i < saved; i++) {
++				printf("VEUX WAIT: tid=%llu state=0x%x kind=%s event=0x%llx hint=0x%x waitq=%u pc=0x%llx owner_pid=%llu context=0x%llx\n",
++				    (unsigned long long)waits[i].tid, waits[i].state,
++				    veux_wait_kind_name(waits[i].hint), (unsigned long long)waits[i].event,
++				    waits[i].hint, waits[i].waitq, (unsigned long long)waits[i].pc,
++				    (unsigned long long)waits[i].owner, (unsigned long long)waits[i].context);
++			}
++			if (!previous_launchd_wait_valid) veux_live_launchd_vm(task, pc);
++			previous_launchd_wait_hash = wait_hash;
++			previous_launchd_wait_valid = true;
++		}
+ 	}
+ 	if (thread_count != NULL) *thread_count = count;
+ 	if (user_pc != NULL) *user_pc = pc;
+ }
++
+ #endif
+ kern_return_t
+ bsd_exception(
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -3388,6 +3388,19 @@
+ 	struct vnode_attr *origvap = NULL;
+ 	struct uthread  *uthread = 0;   /* compiler complains if not set to 0*/
+ 	int error, sig;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	int veux_trace_spawn = (proc_getpid(ap) == 1);
++	int veux_spawn_path_error = 0;
++	size_t veux_spawn_path_len = 0;
++	char veux_spawn_path[256] = "<not-copied>";
++	if (veux_trace_spawn) {
++		veux_spawn_path_error = copyinstr(uap->path, veux_spawn_path,
++		    sizeof(veux_spawn_path), &veux_spawn_path_len);
++		if (veux_spawn_path_error != 0) {
++			strlcpy(veux_spawn_path, "<copyinstr-failed>", sizeof(veux_spawn_path));
++		}
++	}
++#endif
+ 	int is_64 = IS_64BIT_PROCESS(p);
+ 	struct vfs_context context;
+ 	struct user__posix_spawn_args_desc px_args = {};
+@@ -4670,6 +4683,12 @@
+ 	}
+ 
+ 	assert(exec_failure_reason == NULL);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (veux_trace_spawn) {
++		printf("VEUX SPAWN: pid=1 parent=%d name=%s path=%s errno=%d path_errno=%d\n",
++		    proc_ppid(ap), ap->p_comm, veux_spawn_path, error, veux_spawn_path_error);
++	}
++#endif
+ 	return error;
+ }
+ 
+@@ -4885,6 +4904,17 @@
+ 	struct __mac_execve_args muap;
+ 	int err;
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
++	int veux_trace_exec = (proc_getpid(p) == 1);
++	int veux_exec_path_error = 0;
++	size_t veux_exec_path_len = 0;
++	char veux_exec_path[256] = "<not-copied>";
++	if (veux_trace_exec) {
++		veux_exec_path_error = copyinstr(uap->fname, veux_exec_path,
++		    sizeof(veux_exec_path), &veux_exec_path_len);
++		if (veux_exec_path_error != 0) {
++			strlcpy(veux_exec_path, "<copyinstr-failed>", sizeof(veux_exec_path));
++		}
++	}
+ 	if (strncmp(p->p_comm, "mount", 5) == 0) {
+ 		extern void veux_bsd_stage(unsigned int stage);
+ 		extern void veux_lifecycle_stage(unsigned int);
+@@ -4901,6 +4931,12 @@
+ 	muap.envp = uap->envp;
+ 	muap.mac_p = USER_ADDR_NULL;
+ 	err = __mac_execve(p, &muap, retval);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (veux_trace_exec) {
++		printf("VEUX EXEC: pid=1 name=%s path=%s errno=%d path_errno=%d\n",
++		    p->p_comm, veux_exec_path, err, veux_exec_path_error);
++	}
++#endif
+ 
+ 	return err;
+ }
+@@ -6288,6 +6324,15 @@
+ #if CONFIG_MACF
+ 	error = mac_vnode_check_exec(imgp->ip_vfs_context, vp, imgp);
+ 	if (error) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		if (proc_getpid(p) == 1 || proc_ppid(p) == 1) {
++			char path[256] = "<copyinstr-failed>";
++			size_t path_len = 0;
++			(void)copyinstr(imgp->ip_user_fname, path, sizeof(path), &path_len);
++			printf("VEUX MAC DENY: policy=mac_vnode_check_exec op=exec pid=%d name=%s target=%s errno=%d\n",
++			    proc_getpid(p), p->p_comm, path, error);
++		}
++#endif
+ 		return error;
+ 	}
+ #endif
+@@ -6299,6 +6344,15 @@
+ 		action |= KAUTH_VNODE_READ_DATA;
+ 	}
+ 	if ((error = vnode_authorize(vp, NULL, action, imgp->ip_vfs_context)) != 0) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		if (proc_getpid(p) == 1 || proc_ppid(p) == 1) {
++			char path[256] = "<copyinstr-failed>";
++			size_t path_len = 0;
++			(void)copyinstr(imgp->ip_user_fname, path, sizeof(path), &path_len);
++			printf("VEUX MAC DENY: policy=vnode_authorize op=exec pid=%d name=%s target=%s errno=%d\n",
++			    proc_getpid(p), p->p_comm, path, error);
++		}
++#endif
+ 		return error;
+ 	}
+ 
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -2118,6 +2118,13 @@
+ void
+ proc_exit(proc_t p)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	int veux_status = (int)p->p_xstat;
++	int veux_exit_status = WIFEXITED(veux_status) ? WEXITSTATUS(veux_status) : -1;
++	int veux_signal = WIFSIGNALED(veux_status) ? WTERMSIG(veux_status) : 0;
++	printf("VEUX EXIT: pid=%d name=%s status=0x%x exit_status=%d signal=%d\n",
++	    proc_getpid(p), p->p_comm, (unsigned int)veux_status, veux_exit_status, veux_signal);
++#endif
+ 	proc_t q;
+ 	proc_t pp;
+ 	struct task *task = proc_task(p);

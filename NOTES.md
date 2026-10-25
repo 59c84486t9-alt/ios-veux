@@ -1,3 +1,46 @@
+## >>> UPDATE 2026-10-25 (launchd main-thread diagnostics and offline job cache audit) <<<
+
+- Added `xnu/patches/0121-veux-launchd-main-stack-exec-trace.patch`. It samples
+  launchd pid 1's first task thread on every 10-second liveness pass, prints
+  that main thread's wait kind/event/user PC, and attempts up to 12 kernel
+  frames each pass. An unattempted capture prints `skipped: no-main-thread` or
+  `skipped: no-kernel-stack`; an attempted capture says `skipped: none` and
+  reports result/frame count. These are kernel frames, not EL0 user frames.
+  The existing per-thread wait inventory remains signature-gated.
+- Patch 0121 adds pid-1 `posix_spawn` and `execve` result/path records, process
+  exit status/signal records, and exec authorization denial messages for the
+  `mac_vnode_check_exec` and `vnode_authorize` sites. This is targeted exec-path
+  logging, not a complete audit of every MACF policy hook.
+- Updated the workflow and `tools/kernel-manifest.py` to require patch 0121 and
+  assert its main-thread repeated-stack, wait, spawn/exec, exit, and MAC-denial
+  markers. Local `git diff --check`, Python syntax compilation, and reverse
+  applicability against the currently staged XNU source pass. No XNU compile,
+  CI run, wrapper build, or device flash was performed; the patch remains
+  unverified on-device.
+- Audited `/Volumes/iOSRoot/System/Library/xpc/launchd.plist` offline
+  (SHA-256 `7b41fa308304021a90fb8dfc4ac6224e6c1841fb73e47b7f09efbdd7167c91d1`):
+  530 cached daemon records; 49 enabled `RunAtLoad` entries and 3 additional
+  enabled `MinimalBootProfile` entries (52 unique immediate/profile candidates).
+  All 530 cached plist paths exist in the mounted root. One enabled RunAtLoad
+  binary is absent: `com.apple.factory.NFQRCoded` at
+  `/Developer/usr/local/libexec/NFQRCoded`; the other 51 candidates' Program
+  paths exist. `configd`, `securityd`, and `trustd` are profile-only entries;
+  `lockdownd` is both RunAtLoad and MinimalBootProfile. The cache does not
+  encode launchd boot-task phases or a serialized startup order: RunAtLoad
+  identifies eligible jobs, not proof they ran immediately after early boot.
+- Wrote the complete cache-derived inventory to
+  `docs/launchd-cache-inventory-2026-10-25.tsv` (530 data rows), including
+  RunAtLoad, KeepAlive, profile/mode flags, Disabled, plist existence and
+  Program existence. Alphabetical TSV order is not launch order.
+- SWEET's local notes document boot-task completion and daemon startup: boot
+  0039 reports LaunchDaemons starting (lockdownd pid 106 and identityservicesd
+  pid 114 both crash); boot 0041 reports backboardd, bluetoothd, fairplayd.H2,
+  SpringBoard and xpcproxy running; later v14 notes confirm SpringBoard,
+  backboardd and Setup remain on screen. The raw logs referenced by those notes
+  are not present in this checkout, so an exact SWEET job-by-job exec order
+  cannot be recovered here. The evidence does show SWEET progressed past the
+  phase where this VEUX run appears idle.
+
 ## >>> UPDATE 2026-10-24 (401511 display regression and RO baseline) <<<
 
 - Confirmed the comparison point is run 40092567840, the last image documented

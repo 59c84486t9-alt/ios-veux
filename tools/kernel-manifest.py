@@ -33,6 +33,7 @@ for patch in (
     "0118-veux-stop-mountroot-retries.patch",
     "0119-veux-require-explicit-rw-pair.patch",
     "0120-veux-unconditional-early-console-build-id.patch",
+    "0121-veux-launchd-main-stack-exec-trace.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -45,8 +46,13 @@ needles = {
     "waitq_kind_classifier": b"waitq_kind: 1=queue 2=turnstile 3=port",
     "launchd_wait_kind_names": b"semaphore",
     "launchd_semaphore_owner_context": b"owner_pid=%llu context=0x%llx",
-    "launchd_kernel_stack_frames": b"VEUX STACK: tid=%llu attempted=%u result=%d frames=%u flags=0x%x",
-    "launchd_kernel_stack_frame_values": b"VEUX STACK FRAMES: tid=%llu ",
+    "launchd_main_thread_wait": b"VEUX MAIN WAIT: tid=%llu state=0x%x kind=%s",
+    "launchd_main_thread_stack_each_sample": b"VEUX STACK MAIN: tid=%llu attempted=%u skipped: %s result=%d frames=%u flags=0x%x",
+    "launchd_main_thread_stack_frames": b"VEUX STACK MAIN FRAMES: tid=%llu",
+    "pid1_spawn_attempts": b"VEUX SPAWN: pid=1 parent=%d name=%s path=%s errno=%d path_errno=%d",
+    "pid1_exec_attempts": b"VEUX EXEC: pid=1 name=%s path=%s errno=%d path_errno=%d",
+    "process_exit_status_and_signal": b"VEUX EXIT: pid=%d name=%s status=0x%x exit_status=%d signal=%d",
+    "exec_mac_denials": b"VEUX MAC DENY: policy=mac_vnode_check_exec",
     "launchd_vm_region_and_shared_cache": b"VEUX VM: launchd shared_base=",
     "panic_region_marker": b"VEUX EARLY PANIC:",
     "panic_console_tail_header": b"Last console lines (oldest first; includes mount output):",
@@ -93,21 +99,32 @@ source_checks["launchd_waits_are_classified_by_waitq_type"] = (
     and "thread_tid(thread)" in exception
     and "VEUX WAIT: tid=" in exception
 )
-source_checks["launchd_wait_diagnostics_are_bounded_and_change_gated"] = (
+source_checks["launchd_main_stack_is_attempted_each_sample_with_explicit_skip_reason"] = (
     "struct veux_wait_record waits[8];" in exception
-    and "uint64_t pc = 0, wait_hash = 1469598103934665603ULL, wait_classes = 0;" in exception
-    and "wait_classes |= (1ULL << (hint & 63));" in exception
-    and "wait_classes |= (1ULL << ((kind + 32) & 63));" in exception
-    and "wait_hash = (wait_hash ^ context) * 1099511628211ULL;" in exception
-    and "if (launchd && (!previous_launchd_wait_valid || previous_launchd_wait_hash != wait_hash))" in exception
-    and "if (!previous_launchd_wait_valid && thread->kernel_stack != 0)" in exception
-    and "trace_attempted = 1;" in exception
-    and "trace_result = machine_trace_thread64(thread" in exception
-    and "if (trace_result > 0) nframes = MIN((uint32_t)trace_result, 6);" in exception
-    and "VEUX STACK: tid=%llu attempted=%u result=%d frames=%u flags=0x%x" in exception
-    and "wait_hash = (wait_hash ^ event) * 1099511628211ULL;" in exception
-    and "wait_hash = (wait_hash ^ thread_pc) * 1099511628211ULL;" in exception
+    and "if (count == 1)" in exception
+    and "if (thread->kernel_stack != 0)" in exception
+    and "main_trace_attempted = 1;" in exception
+    and "main_trace_result = machine_trace_thread64(thread" in exception
+    and "MIN((uint32_t)main_trace_result, 12)" in exception
+    and 'main_trace_skipped = "no-kernel-stack";' in exception
+    and 'main_trace_skipped = "no-main-thread";' in exception
+    and "VEUX STACK MAIN: tid=%llu attempted=%u skipped: %s result=%d frames=%u flags=0x%x" in exception
+    and "VEUX STACK MAIN FRAMES: tid=%llu" in exception
+    and "previous_launchd_wait_hash != wait_hash" in exception
+    and "if (!previous_launchd_wait_valid && thread->kernel_stack != 0)" not in exception
 )
+source_checks["pid1_exec_spawn_exit_and_mac_trace_hooks"] = (
+    "veux_trace_spawn = (proc_getpid(ap) == 1);" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
+    and "VEUX SPAWN: pid=1 parent=%d name=%s path=%s errno=%d path_errno=%d" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
+    and "veux_trace_exec = (proc_getpid(p) == 1);" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
+    and "VEUX EXEC: pid=1 name=%s path=%s errno=%d path_errno=%d" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
+    and "VEUX MAC DENY: policy=mac_vnode_check_exec" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
+    and "VEUX MAC DENY: policy=vnode_authorize" in (a.source_root / "bsd/kern/kern_exec.c").read_text()
+    and "VEUX EXIT: pid=%d name=%s status=0x%x exit_status=%d signal=%d" in (a.source_root / "bsd/kern/kern_exit.c").read_text()
+    and "WIFEXITED(veux_status)" in (a.source_root / "bsd/kern/kern_exit.c").read_text()
+    and "WIFSIGNALED(veux_status)" in (a.source_root / "bsd/kern/kern_exit.c").read_text()
+)
+
 source_checks["launchd_vm_report_is_present"] = (
     "veux_live_launchd_vm(task, pc);" in exception
     and "VEUX VM: launchd pc=" in exception

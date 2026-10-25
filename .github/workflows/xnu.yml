@@ -136,8 +136,8 @@ jobs:
             grep -Fq 'kdp_sema_find_owner(thread->waitq.wq_q' xnu/osfmk/kern/exception.c
             grep -Fq 'owner_pid=%llu context=0x%llx' xnu/osfmk/kern/exception.c
             grep -Fq 'machine_trace_thread64(thread' xnu/osfmk/kern/exception.c
-            grep -Fq 'VEUX STACK: tid=%llu attempted=%u result=%d frames=%u flags=0x%x' xnu/osfmk/kern/exception.c
-            grep -Fq 'VEUX STACK FRAMES: tid=%llu ' xnu/osfmk/kern/exception.c
+            grep -Fq 'VEUX STACK MAIN: tid=%llu attempted=%u skipped: %s result=%d frames=%u flags=0x%x' xnu/osfmk/kern/exception.c
+            grep -Fq 'VEUX STACK MAIN FRAMES: tid=%llu' xnu/osfmk/kern/exception.c
             grep -Fq 'VEUX VM: launchd shared_base=' xnu/osfmk/kern/exception.c
             grep -Fq 'veux_reboot_request((uint32_t)howto' xnu/bsd/kern/kern_shutdown.c
             grep -Fq 'VEUX reboot requested howto=0x%x' xnu/bsd/kern/kern_shutdown.c
@@ -222,6 +222,14 @@ jobs:
             grep -Fq 'VEUX simplefb marker wrote white 32x32 at 0x85200000' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'VEUX BUILD: ID=' xnu/pexpert/arm/pe_serial.c
             grep -Fq '0120-veux-unconditional-early-console-build-id.patch' ../patch-status.txt
+            grep -Fq '0121-veux-launchd-main-stack-exec-trace.patch' ../patch-status.txt
+            grep -Fq 'VEUX STACK MAIN: tid=%llu attempted=%u skipped: %s result=%d frames=%u flags=0x%x' xnu/osfmk/kern/exception.c
+            grep -Fq 'main_trace_result = machine_trace_thread64(thread' xnu/osfmk/kern/exception.c
+            grep -Fq 'VEUX MAIN WAIT: tid=%llu' xnu/osfmk/kern/exception.c
+            grep -Fq 'VEUX SPAWN: pid=1 parent=%d name=%s path=%s errno=%d path_errno=%d' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'VEUX EXEC: pid=1 name=%s path=%s errno=%d path_errno=%d' xnu/bsd/kern/kern_exec.c
+            grep -Fq 'VEUX EXIT: pid=%d name=%s status=0x%x exit_status=%d signal=%d' xnu/bsd/kern/kern_exit.c
+            grep -Fq 'VEUX MAC DENY: policy=mac_vnode_check_exec' xnu/bsd/kern/kern_exec.c
             grep -Eq 'IORPCMessage[[:space:]]*\*[[:space:]]*kernelContent;' xnu/iokit/IOKit/IORPC.h
             grep -Eq 'IORPCMessage[[:space:]]*\*[[:space:]]*kernelContent;' xnu/iokit/DriverKit/IORPC.h
             grep -Fq 'veux_log_append(c, size)' xnu/osfmk/console/serial_console.c
