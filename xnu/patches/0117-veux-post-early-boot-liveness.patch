@@ -86,9 +86,12 @@ diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 --- a/osfmk/kern/exception.c
 +++ b/osfmk/kern/exception.c
-@@ -81,1 +81,2 @@
+@@ -79,4 +79,5 @@
+ #include <kern/ipc_tt.h>
+ #include <kern/task.h>
  #include <kern/thread.h>
 +#include <kern/waitq.h>
+ #include <kern/processor.h>
 @@ -1049,3 +1050,79 @@
  #endif /* ARM64_BOARD_CONFIG_SWEET */
 -
