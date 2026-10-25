@@ -86,18 +86,41 @@ diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 --- a/osfmk/kern/exception.c
 +++ b/osfmk/kern/exception.c
-@@ -79,4 +79,5 @@
+@@ -79,4 +79,7 @@
  #include <kern/ipc_tt.h>
  #include <kern/task.h>
  #include <kern/thread.h>
 +#include <kern/waitq.h>
++#include <kern/kcdata.h>
++#include <kern/block_hint.h>
  #include <kern/processor.h>
-@@ -1049,3 +1050,81 @@
+@@ -1049,3 +1050,126 @@
  #endif /* ARM64_BOARD_CONFIG_SWEET */
 -
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +/* Keep BSD process enumeration separate from private Mach thread state. */
-+struct veux_wait_record { uint64_t tid, event, pc; uint32_t state, hint, waitq; };
++struct veux_wait_record {
++	uint64_t tid, event, pc, owner, context;
++	uint32_t state, hint, waitq, nframes;
++	uint64_t frames[6];
++};
++static const char *
++veux_wait_kind_name(uint32_t hint)
++{
++	switch (hint) {
++	case kThreadWaitSemaphore: return "semaphore";
++	case kThreadWaitPortReceive: return "ipc-receive";
++	case kThreadWaitPortSend: return "ipc-send";
++	case kThreadWaitKernelMutex: return "mutex";
++	case kThreadWaitUserLock: return "ulock";
++	case kThreadWaitKernelRWLockRead: return "rwlock-read";
++	case kThreadWaitKernelRWLockWrite: return "rwlock-write";
++	case kThreadWaitPThreadMutex: return "pthread-mutex";
++	case kThreadWaitPThreadCondVar: return "pthread-condvar";
++	case kThreadWaitParkedWorkQueue: return "workqueue-parked";
++	default: return "other";
++	}
++}
 +static void
 +veux_live_launchd_vm(task_t task, uint64_t pc)
 +{
@@ -148,11 +171,32 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 +		if (launchd) {
 +			uint64_t tid = thread_tid(thread), event = (uint64_t)thread->wait_event;
 +			uint32_t state = thread->state, hint = thread->block_hint;
++			uint64_t owner = 0, context = 0, frames[6] = { 0 };
++			uint32_t nframes = 0, trace_flags = 0;
++			if (hint == kThreadWaitSemaphore && thread->waitq.wq_q != NULL) {
++				thread_waitinfo_t wi = { 0 };
++				kdp_sema_find_owner(thread->waitq.wq_q, thread->wait_event, &wi);
++				owner = wi.owner;
++				context = wi.context;
++			}
++			if (thread->kernel_stack != 0) {
++				extern int machine_trace_thread64(thread_t, char *, char *, int, uint32_t *);
++				nframes = (uint32_t)machine_trace_thread64(thread, (char *)frames,
++				    (char *)(frames + 6), 6, &trace_flags);
++			}
 +			wait_hash = (wait_hash ^ tid) * 1099511628211ULL;
 +			wait_hash = (wait_hash ^ event) * 1099511628211ULL;
 +			wait_hash = (wait_hash ^ (((uint64_t)state << 32) | ((uint64_t)hint << 16) | kind)) * 1099511628211ULL;
++			wait_hash = (wait_hash ^ owner) * 1099511628211ULL;
++			wait_hash = (wait_hash ^ context) * 1099511628211ULL;
++			for (uint32_t frame = 0; frame < nframes; frame++)
++				wait_hash = (wait_hash ^ frames[frame]) * 1099511628211ULL;
 +			if (saved < (int)(sizeof(waits) / sizeof(waits[0]))) {
-+				waits[saved++] = (struct veux_wait_record){ tid, event, thread_pc, state, hint, kind };
++				struct veux_wait_record *w = &waits[saved++];
++				*w = (struct veux_wait_record){ .tid = tid, .event = event, .pc = thread_pc,
++				    .owner = owner, .context = context, .state = state, .hint = hint,
++				    .waitq = kind, .nframes = MIN(nframes, 6) };
++				memcpy(w->frames, frames, sizeof(w->frames));
 +			}
 +		}
 +		thread_unlock(thread);
@@ -161,10 +205,17 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 +	if (launchd && (!previous_launchd_wait_valid || previous_launchd_wait_hash != wait_hash)) {
 +		printf("VEUX WAIT: launchd threads=%d waitq_kind: 1=queue 2=turnstile 3=port 4=select 5=port_set 6=select_set\n", count);
 +		for (int i = 0; i < saved; i++) {
-+			printf("VEUX WAIT: tid=%llu state=0x%x event=0x%llx hint=0x%x waitq=%u pc=0x%llx\n",
-+			    (unsigned long long)waits[i].tid, waits[i].state,
++			printf("VEUX WAIT: tid=%llu state=0x%x kind=%s event=0x%llx hint=0x%x waitq=%u pc=0x%llx owner_pid=%llu context=0x%llx\n",
++			    (unsigned long long)waits[i].tid, waits[i].state, veux_wait_kind_name(waits[i].hint),
 +			    (unsigned long long)waits[i].event, waits[i].hint, waits[i].waitq,
-+			    (unsigned long long)waits[i].pc);
++			    (unsigned long long)waits[i].pc, (unsigned long long)waits[i].owner,
++			    (unsigned long long)waits[i].context);
++			if (waits[i].nframes != 0) {
++				printf("VEUX STACK: tid=%llu frames=", (unsigned long long)waits[i].tid);
++				for (uint32_t j = 0; j < waits[i].nframes; j++)
++					printf("%s0x%llx", j ? "," : "", (unsigned long long)waits[i].frames[j]);
++				printf("\n");
++			}
 +		}
 +		veux_live_launchd_vm(task, pc);
 +		previous_launchd_wait_hash = wait_hash;
