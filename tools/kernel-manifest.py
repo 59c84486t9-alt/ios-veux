@@ -14,6 +14,12 @@ ap.add_argument("--source-root", required=True, type=Path)
 ap.add_argument("--output", required=True, type=Path)
 a = ap.parse_args()
 
+boot_args = set(a.boot_args.split())
+if not {"rootrw=1", "ufsrw=1"}.issubset(boot_args):
+    raise SystemExit("VEUX build manifest requires the explicit rootrw=1 ufsrw=1 experiment args")
+if "veuxlog=1" in boot_args:
+    raise SystemExit("VEUX build manifest refuses veuxlog=1 because its userdata-tail range may overlap HFS+")
+
 kernel = a.kernel.read_bytes()
 status = a.patch_status.read_text().splitlines()
 bad = [line for line in status if " FAILED" in line or "ALLOWLIST_STALE" in line]
@@ -35,6 +41,9 @@ needles = {
     "build_id_screen_and_ring": f"VEUX BUILD: ID={a.build_id}".encode(),
     "early_framebuffer_console_entry": b"VEUX simplefb console 1080x2400 stride=4320 format=a8r8g8b8",
     "process_sampler": b"VEUX LIVE: processes=",
+    "launchd_thread_wait_classifier": b"VEUX WAIT: launchd threads=",
+    "waitq_kind_classifier": b"waitq_kind: 1=queue 2=turnstile 3=port",
+    "launchd_vm_region_and_shared_cache": b"VEUX VM: launchd shared_base=",
     "panic_region_marker": b"VEUX EARLY PANIC:",
     "panic_console_tail_header": b"Last console lines (oldest first; includes mount output):",
     "panic_console_tail_symbol": b"veux_fb_panic_console_tail",
@@ -67,6 +76,22 @@ source_checks["framebuffer_console_and_marker_are_unconditional"] = (
 source_checks["direct_framebuffer_build_id_print"] = (
     'VEUX BUILD: ID=' in fb_init and 'veux_fb_console_putc(build_id_line[i])' in fb_init
 )
+live_sampler = (a.source_root / "bsd/dev/veux_liveness.c").read_text()
+exception = (a.source_root / "osfmk/kern/exception.c").read_text()
+source_checks["liveness_does_not_emit_unchanged_cpu_counters"] = (
+    "old->user_us != e->user_us" not in live_sampler
+    and "old->system_us != e->system_us" not in live_sampler
+    and "old->user_pc != e->user_pc" not in live_sampler
+)
+source_checks["launchd_waits_are_classified_by_waitq_type"] = (
+    "waitq_type(thread->waitq)" in exception
+    and "thread_tid(thread)" in exception
+    and "VEUX WAIT: tid=" in exception
+)
+source_checks["launchd_vm_report_is_present"] = (
+    "veux_live_launchd_vm(task, pc);" in exception
+    and "VEUX VM: launchd pc=" in exception
+)
 source_checks["early_stage_cells_do_not_depend_on_boot_args"] = (
     "veux_stage_mark_nb(unsigned int cell)" in early
     and "if (cell >= 22) return;" in stage_fn
@@ -93,7 +118,7 @@ source_checks["rootrw_and_ufsrw_both_required_for_writable_ufs"] = (
     and "su.writable = (rw == 1 && rootrw == 1);" in ufs
 )
 if not all(source_checks.values()):
-    raise SystemExit("dual-argument rootrw/ufsrw source policy check failed: " + repr(source_checks))
+    raise SystemExit("kernel source policy check failed: " + repr(source_checks))
 missing = [name for name, passed in checks.items() if not passed]
 if missing:
     raise SystemExit("kernel manifest checks failed: " + ", ".join(missing))
@@ -124,6 +149,7 @@ manifest = {
     "kernel_sha256": hashlib.sha256(kernel).hexdigest(),
     "kernel_path": str(a.kernel),
     "boot_args": a.boot_args,
+    "root_mode_requested": "rw" if {"rootrw=1", "ufsrw=1"}.issubset(boot_args) else "ro",
     "wrapper": "assembled on host with the phone DTB; see adjacent wrapper manifest",
 }
 a.output.parent.mkdir(parents=True, exist_ok=True)

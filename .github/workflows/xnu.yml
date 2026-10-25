@@ -35,9 +35,9 @@ env:
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
   MACHINE_CONFIG: ${{ inputs.machine_config || 'VEUX' }}
   VEUX_BUILD_ID: ${{ github.run_id }}
-  # Restore the last-known early-boot diagnostics, but default the root to RO.
-  # Both rootrw=1 and ufsrw=1 are required to opt into writable-root testing.
-  VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 veuxlog=1 veuxfb=1 veuxfbconsole=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128"
+  # The root is intentionally RW only when both explicit args are present.
+  # Keep veuxlog disabled: its fixed userdata-tail range can overlap HFS+.
+  VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 rootrw=1 ufsrw=1 veuxfb=1 veuxfbconsole=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128"
 
 jobs:
   build:
@@ -51,17 +51,14 @@ jobs:
       - name: Repository and patch structure preflight
         run: |
           python3 tools/validate-repo.py
-          for required in debug=0xc serial=3 cpus=1 veuxfb=1 veuxfbconsole=1 veuxlog=1; do
+          for required in debug=0xc serial=3 cpus=1 veuxfb=1 veuxfbconsole=1 rootrw=1 ufsrw=1; do
             case " $VEUX_BOOT_ARGS " in
               *" $required "*) ;;
               *) echo "required diagnostic boot argument missing: $required" >&2; exit 1 ;;
             esac
           done
           case " $VEUX_BOOT_ARGS " in
-            *" rootrw=1 "*|*" ufsrw=1 "*)
-              echo "refusing a writable-root default boot configuration" >&2
-              exit 1
-              ;;
+            *" veuxlog=1 "*) echo "refusing the overlapping persistent tail logger" >&2; exit 1 ;;
           esac
 
       - name: Fetch build script
@@ -133,6 +130,9 @@ jobs:
             grep -Fq 'bsd/dev/veux_liveness.c' xnu/bsd/conf/files
             grep -Fq 'veux_liveness_start();' xnu/osfmk/console/serial_console.c
             grep -Fq 'VEUX LIVE: processes=' xnu/bsd/dev/veux_liveness.c
+            grep -Fq 'VEUX WAIT: launchd threads=' xnu/osfmk/kern/exception.c
+            grep -Fq 'waitq_kind: 1=queue 2=turnstile 3=port' xnu/osfmk/kern/exception.c
+            grep -Fq 'VEUX VM: launchd shared_base=' xnu/osfmk/kern/exception.c
             grep -Fq 'veux_reboot_request((uint32_t)howto' xnu/bsd/kern/kern_shutdown.c
             grep -Fq 'VEUX reboot requested howto=0x%x' xnu/bsd/kern/kern_shutdown.c
             grep -Fq 'message_hex=' xnu/bsd/kern/kern_shutdown.c

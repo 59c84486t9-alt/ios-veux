@@ -4,11 +4,12 @@ Subject: [PATCH] Preserve VEUX console tail in a non-overlapping panic screen
 diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -1443,7 +1443,26 @@
+@@ -1443,7 +1443,27 @@
  #define VEUX_FB_CONSOLE_FG         0xffffffffu
  
  extern unsigned char iso_font[256 * 16];
-+#define VEUX_PANIC_TAIL_LINES 20u
++#define VEUX_PANIC_TAIL_LINES 25u
++#define VEUX_FB_PANIC_TAIL_TOP 1672u
 +#define VEUX_PANIC_TAIL_COLS (VEUX_FB_WIDTH / (8u * VEUX_FB_CONSOLE_SCALE))
 +static char veux_panic_tail[VEUX_PANIC_TAIL_LINES][VEUX_PANIC_TAIL_COLS];
 +static uint32_t veux_panic_tail_head, veux_panic_tail_count = 1, veux_panic_tail_col;
@@ -44,7 +45,7 @@ diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
  	if (!veux_fb_console_ready || veux_fb_console_base == NULL) return;
  	veux_fb_panic_col = veux_fb_panic_row = 0;
 -	for (uint32_t y = 1816; y < 2072; ++y)
-+	for (uint32_t y = VEUX_FB_CONSOLE_TOP; y < 2072; ++y)
++	for (uint32_t y = VEUX_FB_PANIC_TAIL_TOP; y < 2072; ++y)
  		for (uint32_t x = 0; x < VEUX_FB_WIDTH; ++x)
  			veux_fb_console_base[y * (veux_fb_console_stride / 4u) + x] = 0xff000000;
  }
@@ -53,7 +54,7 @@ diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
  	if (!veux_fb_console_ready || veux_fb_console_base == NULL) return;
  	const uint32_t cols = VEUX_FB_WIDTH / 8u;
 -	const uint32_t rows = (2072u - 1816u) / 16u;
-+	const uint32_t rows = (2072u - VEUX_FB_CONSOLE_TOP) / 16u;
++	const uint32_t rows = (2072u - VEUX_FB_PANIC_TAIL_TOP) / 16u;
  	if (c == '\r') { veux_fb_panic_col = 0; return; }
  	if (c == '\n' || veux_fb_panic_col >= cols) {
  		veux_fb_panic_col = 0;
@@ -62,7 +63,7 @@ diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
  	const unsigned char *glyph = iso_font + (uint32_t)ch * 16u;
  	uint32_t x0 = veux_fb_panic_col * 8u;
 -	uint32_t y0 = 1816u + veux_fb_panic_row * 16u;
-+	uint32_t y0 = VEUX_FB_CONSOLE_TOP + veux_fb_panic_row * 16u;
++	uint32_t y0 = VEUX_FB_PANIC_TAIL_TOP + veux_fb_panic_row * 16u;
  	for (uint32_t gy = 0; gy < 16; ++gy) {
  		volatile uint32_t *line = veux_fb_console_base + (y0 + gy) * (veux_fb_console_stride / 4u) + x0;
  		for (uint32_t gx = 0; gx < 8; ++gx)

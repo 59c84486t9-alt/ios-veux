@@ -67,46 +67,103 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
 --- a/osfmk/arm64/veux_early.c
 +++ b/osfmk/arm64/veux_early.c
-@@ -851,3 +851,9 @@
+@@ -851,3 +851,15 @@
  }
 +void
 +veux_idle_sample_report(void)
 +{
-+ printf("VEUX IDLE: samples=%llu ticks=%llu..%llu pset_runq=%llu rt_runq=%llu\n",
-+     vw_idle_samples, vw_tick_start, vw_tick_end, vw_runq, vw_rt);
++ static bool have_previous;
++ static uint64_t previous_runq, previous_rt;
++ if (!have_previous || previous_runq != vw_runq || previous_rt != vw_rt) {
++     printf("VEUX IDLE: pset_runq=%llu rt_runq=%llu\n", vw_runq, vw_rt);
++     previous_runq = vw_runq;
++     previous_rt = vw_rt;
++     have_previous = true;
++ }
 +}
  void
  veux_bsd_stage(unsigned int stage)
 diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 --- a/osfmk/kern/exception.c
 +++ b/osfmk/kern/exception.c
-@@ -1049,3 +1049,31 @@
+@@ -81,1 +81,2 @@
+ #include <kern/thread.h>
++#include <kern/waitq.h>
+@@ -1049,3 +1050,77 @@
  #endif /* ARM64_BOARD_CONFIG_SWEET */
 -
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +/* Keep BSD process enumeration separate from private Mach thread state. */
++struct veux_wait_record { uint64_t tid, event, pc; uint32_t state, hint, waitq; };
++static void
++veux_live_launchd_vm(task_t task, uint64_t pc)
++{
++	vm_shared_region_t sr = vm_shared_region_get(task);
++	if (sr != NULL) {
++		printf("VEUX VM: launchd shared_base=0x%llx first=0x%llx slide=0x%x size=0x%llx\n",
++		    (unsigned long long)sr->sr_base_address,
++		    (unsigned long long)sr->sr_first_mapping, sr->sr_slide,
++		    (unsigned long long)sr->sr_size);
++		vm_shared_region_deallocate(sr);
++	} else {
++		printf("VEUX VM: launchd shared_region=none\n");
++	}
++	vm_map_t map = get_task_map_reference(task);
++	if (map == VM_MAP_NULL) return;
++	vm_map_entry_t entry;
++	vm_map_lock_read(map);
++	if (vm_map_lookup_entry(map, (vm_map_offset_t)pc, &entry)) {
++		printf("VEUX VM: launchd pc=0x%llx region=0x%llx-0x%llx prot=%d/%d tag=%d\n",
++		    (unsigned long long)pc, (unsigned long long)entry->vme_start,
++		    (unsigned long long)entry->vme_end, entry->protection,
++		    entry->max_protection, (int)VME_ALIAS(entry));
++	} else {
++		printf("VEUX VM: launchd pc=0x%llx region=not-found\n", (unsigned long long)pc);
++	}
++	vm_map_unlock_read(map);
++	vm_map_deallocate(map);
++}
 +void
 +veux_live_task_snapshot(task_t task, int *thread_count, uint64_t *user_pc, bool launchd)
 +{
++	static bool previous_launchd_wait_valid;
++	static uint64_t previous_launchd_wait_hash;
 +	thread_t thread;
-+	int count = 0;
-+	uint64_t pc = 0, wait = 0;
-+	uint32_t hint = 0;
++	struct veux_wait_record waits[64];
++	int count = 0, saved = 0;
++	uint64_t pc = 0, wait_hash = 1469598103934665603ULL;
 +	task_lock(task);
 +	queue_iterate(&task->threads, thread, thread_t, task_threads) {
++		thread_lock(thread);
 +		arm_saved_state_t *ss = find_user_regs(thread);
++		uint64_t thread_pc = ss != NULL && is_saved_state64(ss) ? get_saved_state_pc(ss) : 0;
++		uint32_t kind = (uint32_t)waitq_type(thread->waitq);
 +		count++;
-+		if (pc == 0 && ss != NULL && is_saved_state64(ss)) {
-+			pc = get_saved_state_pc(ss);
++		if (pc == 0 && thread_pc != 0) pc = thread_pc;
++		if (launchd) {
++			uint64_t tid = thread_tid(thread), event = (uint64_t)thread->wait_event;
++			uint32_t state = thread->state, hint = thread->block_hint;
++			wait_hash = (wait_hash ^ tid) * 1099511628211ULL;
++			wait_hash = (wait_hash ^ event) * 1099511628211ULL;
++			wait_hash = (wait_hash ^ (((uint64_t)state << 32) | ((uint64_t)hint << 16) | kind)) * 1099511628211ULL;
++			if (saved < (int)(sizeof(waits) / sizeof(waits[0]))) {
++				waits[saved++] = (struct veux_wait_record){ tid, event, thread_pc, state, hint, kind };
++			}
 +		}
-+		if (launchd && count == 1) {
-+			wait = (uint64_t)thread->wait_event;
-+			hint = thread->block_hint;
-+		}
++		thread_unlock(thread);
 +	}
 +	task_unlock(task);
-+	if (launchd) {
-+		printf("VEUX LIVE: launchd thread wait=0x%llx hint=0x%x pc=0x%llx\n", wait, hint, pc);
++	if (launchd && (!previous_launchd_wait_valid || previous_launchd_wait_hash != wait_hash)) {
++		printf("VEUX WAIT: launchd threads=%d waitq_kind: 1=queue 2=turnstile 3=port 4=select 5=port_set 6=select_set\n", count);
++		for (int i = 0; i < saved; i++) {
++			printf("VEUX WAIT: tid=%llu state=0x%x event=0x%llx hint=0x%x waitq=%u pc=0x%llx\n",
++			    (unsigned long long)waits[i].tid, waits[i].state,
++			    (unsigned long long)waits[i].event, waits[i].hint, waits[i].waitq,
++			    (unsigned long long)waits[i].pc);
++		}
++		veux_live_launchd_vm(task, pc);
++		previous_launchd_wait_hash = wait_hash;
++		previous_launchd_wait_valid = true;
 +	}
 +	if (thread_count != NULL) *thread_count = count;
 +	if (user_pc != NULL) *user_pc = pc;
@@ -117,7 +174,7 @@ diff --git a/bsd/dev/veux_liveness.c b/bsd/dev/veux_liveness.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/veux_liveness.c
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,165 @@
 +#include <sys/param.h>
 +#include <sys/systm.h>
 +#include <sys/proc.h>
@@ -142,6 +199,8 @@ new file mode 100644
 +};
 +static struct veux_live_entry live_entries[VEUX_LIVE_MAX], previous_entries[VEUX_LIVE_MAX];
 +static unsigned int live_count, previous_live_count, process_count, thread_count;
++static unsigned int previous_process_count, previous_thread_count;
++static bool live_have_snapshot;
 +static int live_pids[VEUX_SEEN_MAX], previous_pids[VEUX_SEEN_MAX];
 +static unsigned int live_pid_count, previous_pid_count;
 +static int live_chan;
@@ -217,6 +276,8 @@ new file mode 100644
 +veux_liveness_thread(__unused void *arg, __unused wait_result_t wr)
 +{
 +	for (;;) {
++		previous_process_count = process_count;
++		previous_thread_count = thread_count;
 +		memcpy(previous_pids, live_pids, live_pid_count * sizeof(live_pids[0]));
 +		previous_pid_count = live_pid_count;
 +		memcpy(previous_entries, live_entries, live_count * sizeof(live_entries[0]));
@@ -224,8 +285,26 @@ new file mode 100644
 +		live_pid_count = 0;
 +		live_count = process_count = thread_count = 0;
 +		proc_iterate(PROC_ALLPROCLIST, veux_live_proc, NULL, NULL, NULL);
-+		printf("VEUX LIVE: processes=%u threads=%u\n", process_count, thread_count);
++		bool changed = !live_have_snapshot || process_count != previous_process_count ||
++		    thread_count != previous_thread_count;
++		for (unsigned int i = 0; !changed && i < live_count; i++) {
++			struct veux_live_entry *e = &live_entries[i];
++			bool found = false;
++			for (unsigned int j = 0; j < previous_live_count; j++) {
++				struct veux_live_entry *old = &previous_entries[j];
++				if (old->pid == e->pid) {
++					found = true;
++					if (old->ppid != e->ppid || old->state != e->state ||
++					    old->threads != e->threads ||
++					    strncmp(old->name, e->name, sizeof(e->name)) != 0) changed = true;
++					break;
++				}
++			}
++			if (!found) changed = true;
++		}
 +		veux_idle_sample_report();
++		if (changed) {
++			printf("VEUX LIVE: processes=%u threads=%u\n", process_count, thread_count);
 +		for (unsigned int i = 0; i < live_count; i++) {
 +			struct veux_live_entry *e = &live_entries[i];
 +			const char *mark = e->pid == 1 ? "launchd" : (e->ppid == 1 ? "child" : "");
@@ -239,6 +318,10 @@ new file mode 100644
 +			    (unsigned long long)e->user_us, (unsigned long long)e->system_us,
 +			    (unsigned long long)e->user_delta_us, (unsigned long long)e->system_delta_us,
 +			    e->threads, (unsigned long long)e->user_pc, mark, is_new ? " NEW" : "");
++		}
++			live_have_snapshot = true;
++		} else {
++			for (unsigned int i = 0; i < live_count; i++) (void)veux_pid_seen(live_entries[i].pid);
 +		}
 +		veux_live_launchd();
 +		(void)tsleep(&live_chan, PWAIT, "veuxlive", 10 * hz);
