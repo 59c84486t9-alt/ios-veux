@@ -89,7 +89,7 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 @@ -81,1 +81,2 @@
  #include <kern/thread.h>
 +#include <kern/waitq.h>
-@@ -1049,3 +1050,77 @@
+@@ -1049,3 +1050,79 @@
  #endif /* ARM64_BOARD_CONFIG_SWEET */
 -
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
