@@ -85,6 +85,7 @@ source_checks["liveness_does_not_emit_unchanged_cpu_counters"] = (
 )
 source_checks["launchd_waits_are_classified_by_waitq_type"] = (
     "waitq_type(thread->waitq)" in exception
+    and "thread->waitq.wq_q != NULL" in exception
     and "thread_tid(thread)" in exception
     and "VEUX WAIT: tid=" in exception
 )

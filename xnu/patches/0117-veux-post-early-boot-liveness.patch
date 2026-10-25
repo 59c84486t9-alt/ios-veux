@@ -92,7 +92,7 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
  #include <kern/thread.h>
 +#include <kern/waitq.h>
  #include <kern/processor.h>
-@@ -1049,3 +1050,79 @@
+@@ -1049,3 +1050,81 @@
  #endif /* ARM64_BOARD_CONFIG_SWEET */
 -
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
@@ -140,7 +140,9 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 +		thread_lock(thread);
 +		arm_saved_state_t *ss = find_user_regs(thread);
 +		uint64_t thread_pc = ss != NULL && is_saved_state64(ss) ? get_saved_state_pc(ss) : 0;
-+		uint32_t kind = (uint32_t)waitq_type(thread->waitq);
++		/* Runnable threads may have no wait queue; waitq_type dereferences it. */
++		uint32_t kind = thread->waitq.wq_q != NULL ?
++		    (uint32_t)waitq_type(thread->waitq) : 0;
 +		count++;
 +		if (pc == 0 && thread_pc != 0) pc = thread_pc;
 +		if (launchd) {
