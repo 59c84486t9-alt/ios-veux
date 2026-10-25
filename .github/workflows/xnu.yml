@@ -136,7 +136,8 @@ jobs:
             grep -Fq 'kdp_sema_find_owner(thread->waitq.wq_q' xnu/osfmk/kern/exception.c
             grep -Fq 'owner_pid=%llu context=0x%llx' xnu/osfmk/kern/exception.c
             grep -Fq 'machine_trace_thread64(thread' xnu/osfmk/kern/exception.c
-            grep -Fq 'VEUX STACK: tid=%llu frames=' xnu/osfmk/kern/exception.c
+            grep -Fq 'VEUX STACK: tid=%llu attempted=%u result=%d frames=%u flags=0x%x' xnu/osfmk/kern/exception.c
+            grep -Fq 'VEUX STACK FRAMES: tid=%llu ' xnu/osfmk/kern/exception.c
             grep -Fq 'VEUX VM: launchd shared_base=' xnu/osfmk/kern/exception.c
             grep -Fq 'veux_reboot_request((uint32_t)howto' xnu/bsd/kern/kern_shutdown.c
             grep -Fq 'VEUX reboot requested howto=0x%x' xnu/bsd/kern/kern_shutdown.c

@@ -45,7 +45,8 @@ needles = {
     "waitq_kind_classifier": b"waitq_kind: 1=queue 2=turnstile 3=port",
     "launchd_wait_kind_names": b"semaphore",
     "launchd_semaphore_owner_context": b"owner_pid=%llu context=0x%llx",
-    "launchd_kernel_stack_frames": b"VEUX STACK: tid=%llu frames=",
+    "launchd_kernel_stack_frames": b"VEUX STACK: tid=%llu attempted=%u result=%d frames=%u flags=0x%x",
+    "launchd_kernel_stack_frame_values": b"VEUX STACK FRAMES: tid=%llu ",
     "launchd_vm_region_and_shared_cache": b"VEUX VM: launchd shared_base=",
     "panic_region_marker": b"VEUX EARLY PANIC:",
     "panic_console_tail_header": b"Last console lines (oldest first; includes mount output):",
@@ -91,6 +92,21 @@ source_checks["launchd_waits_are_classified_by_waitq_type"] = (
     and "thread->waitq.wq_q != NULL" in exception
     and "thread_tid(thread)" in exception
     and "VEUX WAIT: tid=" in exception
+)
+source_checks["launchd_wait_diagnostics_are_bounded_and_change_gated"] = (
+    "struct veux_wait_record waits[8];" in exception
+    and "uint64_t pc = 0, wait_hash = 1469598103934665603ULL, wait_classes = 0;" in exception
+    and "wait_classes |= (1ULL << (hint & 63));" in exception
+    and "wait_classes |= (1ULL << ((kind + 32) & 63));" in exception
+    and "wait_hash = (wait_hash ^ context) * 1099511628211ULL;" in exception
+    and "if (launchd && (!previous_launchd_wait_valid || previous_launchd_wait_hash != wait_hash))" in exception
+    and "if (!previous_launchd_wait_valid && thread->kernel_stack != 0)" in exception
+    and "trace_attempted = 1;" in exception
+    and "trace_result = machine_trace_thread64(thread" in exception
+    and "if (trace_result > 0) nframes = MIN((uint32_t)trace_result, 6);" in exception
+    and "VEUX STACK: tid=%llu attempted=%u result=%d frames=%u flags=0x%x" in exception
+    and "wait_hash = (wait_hash ^ event) * 1099511628211ULL;" in exception
+    and "wait_hash = (wait_hash ^ thread_pc) * 1099511628211ULL;" in exception
 )
 source_checks["launchd_vm_report_is_present"] = (
     "veux_live_launchd_vm(task, pc);" in exception

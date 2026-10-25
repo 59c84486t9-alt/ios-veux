@@ -94,14 +94,15 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 +#include <kern/kcdata.h>
 +#include <kern/block_hint.h>
  #include <kern/processor.h>
-@@ -1049,3 +1050,130 @@
+@@ -1049,3 +1050,141 @@
  #endif /* ARM64_BOARD_CONFIG_SWEET */
 -
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +/* Keep BSD process enumeration separate from private Mach thread state. */
 +struct veux_wait_record {
 +	uint64_t tid, event, pc, owner, context;
-+	uint32_t state, hint, waitq, nframes;
++	uint32_t state, hint, waitq, nframes, trace_flags, trace_attempted;
++	int32_t trace_result;
 +	uint64_t frames[6];
 +};
 +static const char *
@@ -155,9 +156,9 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 +	static bool previous_launchd_wait_valid;
 +	static uint64_t previous_launchd_wait_hash;
 +	thread_t thread;
-+	struct veux_wait_record waits[64];
++	struct veux_wait_record waits[8];
 +	int count = 0, saved = 0;
-+	uint64_t pc = 0, wait_hash = 1469598103934665603ULL;
++	uint64_t pc = 0, wait_hash = 1469598103934665603ULL, wait_classes = 0;
 +	task_lock(task);
 +	queue_iterate(&task->threads, thread, thread_t, task_threads) {
 +		thread_lock(thread);
@@ -171,31 +172,38 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 +		if (launchd) {
 +			uint64_t tid = thread_tid(thread), event = (uint64_t)thread->wait_event;
 +			uint32_t state = thread->state, hint = thread->block_hint;
-+			uint64_t owner = 0, context = 0, frames[6] = { 0 };
-+			uint32_t nframes = 0, trace_flags = 0;
-+			if (hint == kThreadWaitSemaphore && thread->waitq.wq_q != NULL) {
-+				thread_waitinfo_t wi = { 0 };
-+				kdp_sema_find_owner(thread->waitq.wq_q, thread->wait_event, &wi);
-+				owner = wi.owner;
-+				context = wi.context;
-+			}
-+			if (thread->kernel_stack != 0) {
-+				extern int machine_trace_thread64(thread_t, char *, char *, int, uint32_t *);
-+				nframes = (uint32_t)machine_trace_thread64(thread, (char *)frames,
-+				    (char *)(frames + 6), 6, &trace_flags);
-+			}
-+			wait_hash = (wait_hash ^ tid) * 1099511628211ULL;
-+			wait_hash = (wait_hash ^ event) * 1099511628211ULL;
-+			wait_hash = (wait_hash ^ (((uint64_t)state << 32) | ((uint64_t)hint << 16) | kind)) * 1099511628211ULL;
-+			wait_hash = (wait_hash ^ owner) * 1099511628211ULL;
-+			wait_hash = (wait_hash ^ context) * 1099511628211ULL;
-+			for (uint32_t frame = 0; frame < nframes; frame++)
-+				wait_hash = (wait_hash ^ frames[frame]) * 1099511628211ULL;
++			/* Track wait classes globally, plus stable details for the bounded sample. */
++			wait_classes |= (1ULL << (hint & 63));
++			wait_classes |= (1ULL << ((kind + 32) & 63));
 +			if (saved < (int)(sizeof(waits) / sizeof(waits[0]))) {
++				uint64_t owner = 0, context = 0, frames[6] = { 0 };
++				uint32_t nframes = 0, trace_flags = 0, trace_attempted = 0;
++				int32_t trace_result = 0;
++				if (hint == kThreadWaitSemaphore && thread->waitq.wq_q != NULL) {
++					thread_waitinfo_t wi = { 0 };
++					kdp_sema_find_owner(thread->waitq.wq_q, thread->wait_event, &wi);
++					owner = wi.owner;
++					context = wi.context;
++				}
++				wait_hash = (wait_hash ^ event) * 1099511628211ULL;
++				wait_hash = (wait_hash ^ (((uint64_t)state << 32) | ((uint64_t)hint << 16) | kind)) * 1099511628211ULL;
++				wait_hash = (wait_hash ^ thread_pc) * 1099511628211ULL;
++				wait_hash = (wait_hash ^ owner) * 1099511628211ULL;
++				wait_hash = (wait_hash ^ context) * 1099511628211ULL;
++				/* Stack capture is only for the first bounded snapshot. */
++				if (!previous_launchd_wait_valid && thread->kernel_stack != 0) {
++					trace_attempted = 1;
++					extern int machine_trace_thread64(thread_t, char *, char *, int, uint32_t *);
++					trace_result = machine_trace_thread64(thread, (char *)frames,
++					    (char *)(frames + 6), 6, &trace_flags);
++					if (trace_result > 0) nframes = MIN((uint32_t)trace_result, 6);
++				}
 +				struct veux_wait_record *w = &waits[saved++];
 +				*w = (struct veux_wait_record){ .tid = tid, .event = event, .pc = thread_pc,
 +				    .owner = owner, .context = context, .state = state, .hint = hint,
-+				    .waitq = kind, .nframes = MIN(nframes, 6) };
++				    .waitq = kind, .nframes = MIN(nframes, 6),
++				    .trace_flags = trace_flags, .trace_attempted = trace_attempted,
++				    .trace_result = trace_result };
 +				memcpy(w->frames, frames, sizeof(w->frames));
 +			}
 +		}
@@ -203,21 +211,24 @@ diff --git a/osfmk/kern/exception.c b/osfmk/kern/exception.c
 +	}
 +	task_unlock(task);
 +	if (launchd && (!previous_launchd_wait_valid || previous_launchd_wait_hash != wait_hash)) {
-+		printf("VEUX WAIT: launchd threads=%d waitq_kind: 1=queue 2=turnstile 3=port 4=select 5=port_set 6=select_set\n", count);
++		printf("VEUX WAIT: launchd threads=%d waitq_kind: 1=queue 2=turnstile 3=port 4=select 5=port_set 6=select_set classes=0x%llx signature=0x%llx\n", count, (unsigned long long)wait_classes, (unsigned long long)wait_hash);
 +		for (int i = 0; i < saved; i++) {
 +			printf("VEUX WAIT: tid=%llu state=0x%x kind=%s event=0x%llx hint=0x%x waitq=%u pc=0x%llx owner_pid=%llu context=0x%llx\n",
 +			    (unsigned long long)waits[i].tid, waits[i].state, veux_wait_kind_name(waits[i].hint),
 +			    (unsigned long long)waits[i].event, waits[i].hint, waits[i].waitq,
 +			    (unsigned long long)waits[i].pc, (unsigned long long)waits[i].owner,
 +			    (unsigned long long)waits[i].context);
++			printf("VEUX STACK: tid=%llu attempted=%u result=%d frames=%u flags=0x%x\n",
++			    (unsigned long long)waits[i].tid, waits[i].trace_attempted,
++			    waits[i].trace_result, waits[i].nframes, waits[i].trace_flags);
 +			if (waits[i].nframes != 0) {
-+				printf("VEUX STACK: tid=%llu frames=", (unsigned long long)waits[i].tid);
++				printf("VEUX STACK FRAMES: tid=%llu ", (unsigned long long)waits[i].tid);
 +				for (uint32_t j = 0; j < waits[i].nframes; j++)
 +					printf("%s0x%llx", j ? "," : "", (unsigned long long)waits[i].frames[j]);
 +				printf("\n");
 +			}
 +		}
-+		veux_live_launchd_vm(task, pc);
++		if (!previous_launchd_wait_valid) veux_live_launchd_vm(task, pc);
 +		previous_launchd_wait_hash = wait_hash;
 +		previous_launchd_wait_valid = true;
 +	}
