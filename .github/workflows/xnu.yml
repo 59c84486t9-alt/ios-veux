@@ -153,7 +153,7 @@ jobs:
             grep -Fq '#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/iokit/Kernel/IOService.cpp
             grep -Fq '!defined(ARM64_BOARD_CONFIG_SWEET) && !defined(ARM64_BOARD_CONFIG_VEUX)' xnu/iokit/Kernel/IOService.cpp
             grep -Fq 'veux_panic_screen(panic_format_str, panic_args, panic_caller)' xnu/osfmk/kern/debug.c
-            grep -Fq 'VEUX_FB_CONSOLE_TOP + veux_fb_panic_row * 16u' xnu/pexpert/arm/pe_serial.c
+            grep -Fq 'VEUX_FB_PANIC_TAIL_TOP + veux_fb_panic_row * 16u' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'veux_fb_panic_console_tail(void)' xnu/pexpert/arm/pe_serial.c
             grep -Fq 'defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/bsd/sweet_hfs/core/hfs_vfsutils.c
             grep -Fq 'defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)' xnu/bsd/vm/vm_unix.c
