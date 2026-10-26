@@ -1,3 +1,22 @@
+## >>> UPDATE 2026-10-27 (read-only mount boot failure; corrected probe wrapper prepared) <<<
+
+- User supplied two photos from the probe boot. They show `mount_hfs` reporting
+  `Read-only file system`, the VEUX mount helper exiting with status 1, then
+  launchd/mount panic. This matches the documented behavior of this root image:
+  it requires the explicit `rootrw=1 ufsrw=1` pair to boot. The photos do not
+  show a `VEUX TOUCH PROBE` line or usable SE8 values, so no touch-state result
+  can be claimed yet.
+- Rebuilt and verified the same CI kernel/phone DTB wrapper with
+  `rootrw=1 ufsrw=1` restored and `veuxtouchprobe=1` retained. It preserves the
+  known bootable mount configuration; the touch probe code itself remains
+  read-only (no SE/GCC/TLMM writes and no I2C). Wrapper:
+  `/tmp/veux-touch-probe-40420136793/shim-boot-veux-touchprobe-rw-40420136793.img`
+  SHA-256 `311cfa91c1bc6a0eda3766655456008e5a652593eec5edbe6b16390ffee11395`.
+  Exact CI kernel and phone DTB verification passed.
+- After the panic report, neither ADB nor Fastboot enumerated on the host.
+  The corrected wrapper is prepared but not flashed yet. Waiting for the user
+  to return the phone to Fastboot; only `boot_b` may be written, never `boot_a`.
+
 ## >>> UPDATE 2026-10-27 (read-only SE8 probe built and booted) <<<
 
 - Corrected patch registration ordering in commit `38ee1a8` and pushed to
