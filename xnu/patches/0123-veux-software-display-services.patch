@@ -150,16 +150,98 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
  	for (uint32_t layer = 0; layer < SWEET_FB_LAYERS; layer++) {
  		uint32_t id = get32(rec, 0x54 + 4 * layer);
  		const uint8_t *a = rec + 0x64 + 16 * layer;
-@@ -390,12 +439,30 @@
+@@ -321,35 +374,33 @@
+ 		if (w <= 0 || h <= 0) {
+ 			w = (int32_t)s->width;
+ 			h = (int32_t)s->height;
+ 		}
+-		if (sx < 0 || sy < 0) {
+-			sx = sy = 0;
+-		}
+-		if (dx < 0 || dy < 0) {
+-			dx = dy = 0;
+-		}
+-		/* Logical (presented) display coordinates -> panel coordinates. */
+-		dx -= fOffX;
+-		dy -= fOffY;
+-		if (dx < 0) {
+-			sx -= dx;
+-			w += dx;
+-			dx = 0;
+-		}
+-		if (dy < 0) {
+-			sy -= dy;
+-			h += dy;
+-			dy = 0;
+-		}
+-		if (w > (int32_t)s->width - sx) {
+-			w = (int32_t)s->width - sx;
+-		}
+-		if (h > (int32_t)s->height - sy) {
+-			h = (int32_t)s->height - sy;
+-		}
+-		if (w > (int32_t)fWidth - dx) {
+-			w = (int32_t)fWidth - dx;
+-		}
+-		if (h > (int32_t)fHeight - dy) {
+-			h = (int32_t)fHeight - dy;
+-		}
++		/* Clip in 64-bit coordinates: the layer record contains signed 32-bit
++		 * values, and offset/crop arithmetic can exceed that range. */
++		int64_t csx = sx, csy = sy, cdx = (int64_t)dx - fOffX;
++		int64_t cdy = (int64_t)dy - fOffY, cw = w, ch = h;
++		if (csx < 0) { cdx -= csx; cw += csx; csx = 0; }
++		if (csy < 0) { cdy -= csy; ch += csy; csy = 0; }
++		if (cdx < 0) { csx -= cdx; cw += cdx; cdx = 0; }
++		if (cdy < 0) { csy -= cdy; ch += cdy; cdy = 0; }
++		if (csx < 0 || csy < 0 || cdx < 0 || cdy < 0 || cw <= 0 || ch <= 0) {
++			cw = ch = 0;
++			csx = csy = cdx = cdy = 0;
++		} else if (csx >= (int64_t)s->width || csy >= (int64_t)s->height ||
++		    cdx >= (int64_t)fWidth || cdy >= (int64_t)fHeight) {
++			cw = ch = 0;
++		} else {
++			if (cw > (int64_t)s->width - csx) cw = (int64_t)s->width - csx;
++			if (ch > (int64_t)s->height - csy) ch = (int64_t)s->height - csy;
++			if (cw > (int64_t)fWidth - cdx) cw = (int64_t)fWidth - cdx;
++			if (ch > (int64_t)fHeight - cdy) ch = (int64_t)fHeight - cdy;
++		}
++		/* Keep the existing loop/index types safe on unusual display sizes. */
++		if (cw > INT32_MAX) cw = INT32_MAX;
++		if (ch > INT32_MAX) ch = INT32_MAX;
++		if (csx > INT32_MAX || csy > INT32_MAX || cdx > INT32_MAX || cdy > INT32_MAX) {
++			csx = csy = cdx = cdy = cw = ch = 0;
++		}
++		sx = (int32_t)csx; sy = (int32_t)csy;
++		dx = (int32_t)cdx; dy = (int32_t)cdy;
++		w = (int32_t)cw; h = (int32_t)ch;
+@@ -382,6 +413,15 @@
+-		uint64_t last = (uint64_t)s->offset + (uint64_t)(sy + h - 1) * s->bytesPerRow +
+-		    (uint64_t)(sx + w) * 4;
++		uint64_t last = 0;
++		bool extent_ok = w > 0 && h > 0;
++		uint64_t row = h > 0 ? (uint64_t)sy + (uint64_t)h - 1 : 0;
++		uint64_t x_end = ((uint64_t)sx + (uint64_t)w) * 4;
++		uint64_t base = s->offset;
++		if (s->bytesPerRow == 0 || x_end > UINT64_MAX - base ||
++		    row > (UINT64_MAX - base - x_end) / (s->bytesPerRow ? s->bytesPerRow : 1)) {
++			extent_ok = false;
++		} else {
++			last = base + row * s->bytesPerRow + x_end;
++		}
+-		if (w <= 0 || h <= 0 || s->elementWidth != 1 || s->elementHeight != 1 ||
++		if (!extent_ok || s->elementWidth != 1 || s->elementHeight != 1 ||
  		    s->memory == NULL || last > s->memory->getLength()) {
  			src = 0;
  		}
+@@ -390,9 +439,27 @@
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +		if (s->pixelFormat != SWEET_FB_FORMAT_BGRA) src = 0;
 +#endif
  		if (src != 0 && bpe == 4) {
 +
- 			for (int32_t y = 0; y < h; y++) {
+-			for (int32_t y = 0; y < h; y++) {
++			for (int64_t y = 0; y < h; y++) {
  				memcpy((void *)(fPixels + (uint64_t)(dy + y) * fRowBytes + (uint64_t)dx * 4),
  				    (const void *)(src + s->offset + (uint64_t)(sy + y) * s->bytesPerRow + (uint64_t)sx * 4),
  				    (size_t)w * 4);

@@ -183,6 +183,19 @@ source_checks["veux_gui_scanout_requires_exact_firmware_geometry"] = all(
         's->pixelFormat != SWEET_FB_FORMAT_BGRA',
     )
 )
+clip = fb.split("/* Clip in 64-bit coordinates:", 1)[1].split("uint64_t last = 0;", 1)[0]
+source_checks["veux_gui_rectangle_clipping_uses_checked_wide_arithmetic"] = (
+    "int64_t csx" in clip and "int64_t cdx" in clip
+    and "INT32_MAX" in clip and "csx = (int32_t)csx" in clip
+    and "dx -= fOffX" not in clip and "w += dx" not in clip
+    and "(int32_t)s->width - sx" not in clip
+)
+source_checks["veux_gui_surface_extent_checks_prevent_unsigned_wrap"] = all(
+    token in fb for token in (
+        "bool extent_ok = w > 0 && h > 0;", "UINT64_MAX - base - x_end",
+        "row * s->bytesPerRow + x_end", "if (!extent_ok || s->elementWidth != 1",
+    )
+)
 source_checks["veux_gui_console_handoff_is_explicit_after_valid_present"] = (
     'PE_parse_boot_argn("veux_gui_noconsole", &quiet, sizeof(quiet)) && quiet == 1' in fb
     and fb.index('VEUX GUI: first valid software display present') > fb.index('if (src != 0 && bpe == 4)')

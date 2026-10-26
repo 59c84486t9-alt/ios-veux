@@ -28,6 +28,8 @@ static volatile uint32_t *veux_fb_console_base=memory;
 static unsigned veux_fb_console_stride=4320,veux_fb_console_col,veux_fb_console_row;
 static bool veux_fb_console_ready=true;
 static unsigned char iso_font[128*16];
+static int veux_gui_console_muted;
+static bool panic_active(void) { return false; }
 '''
 post=r'''
 int main(void) {
