@@ -2680,10 +2680,14 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   the CI kernel and embedded ADT and that wrapper payload, DTB and boot args
   match the supplied inputs. Boot args include `veux_gui=1
   veux_gui_noconsole=1` with the established RW pair.
-- No GUI-build image was flashed and no phone reboot was performed. The
-  entitlement-repaired root at SHA-256
-  `d7777c229e7dc012a3e86a5d9f54ab4fc4bf74e443526fe2f11562f0d2b2d691`
-  remains the current root; do not restore the older stripped-entitlement
-  image. On-device GUI behavior remains unvalidated. Build and wrapper
-  verification are not device validation; obtain user confirmation before any
-  destructive phone write.
+- User confirmed flashing. Fastboot verified serial `4078cac030c8`, product
+  `veux`, unlocked, active slot B, and `boot_b` size `0x8000000`; the wrapper
+  hash matched the verified manifest. Flashed only the wrapper to `boot_b`
+  (`Sending` and `Writing` both OKAY), then issued `fastboot reboot` (OKAY).
+  No userdata or other partition was written; the entitlement-repaired root
+  was left in place. Do not restore the older stripped-entitlement image.
+- After reboot, both ADB and Fastboot enumeration were empty. No screen photo
+  or video has confirmed build ID `40252779285` or GUI behavior, so this is a
+  successful flash/reboot command but not on-device GUI validation. Await
+  screen evidence before claiming the display handoff works; further
+  destructive phone writes require confirmation.
