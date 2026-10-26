@@ -550,3 +550,23 @@ CFData-reading paths seen in the captured crash reports. A new CI build and
 boot test must still confirm patch application, kernel compilation, successful
 display-list creation, IOMFB client selectors, first present, and SpringBoard
 handoff separately.
+
+CI **40369369423** then passed on commit `1f46527d7c86d956da5c2ee27fc379f8ee099e72`:
+the ordered patches, XNU build, synthetic framebuffer bounds checks, feature
+manifest and artifact packaging succeeded. Patches 0123–0128 are APPLIED; the
+CI kernel SHA-256 is
+`09be0aeefe7d435a5895f7cf886cfc795fe216e91633caf7ab86afc014dea663`.
+The new payload and wrapper were independently verified against that exact
+kernel, the retained verified shim/header, embedded ADT and phone DTB. The
+wrapper SHA-256 is
+`2a7badfbd2139f9ff472754f33f48d138b7ca42da84f8304e437afa92652d628`.
+
+Fastboot identified serial `4078cac030c8`, product `veux`, unlocked state,
+slot A active, and `boot_b` capacity `0x8000000`. The wrapper was written only
+to `boot_b`; transfer and write returned OKAY, slot B selection returned OKAY,
+and reboot returned OKAY. The entitlement-repaired root image was preserved.
+Neither ADB nor Fastboot enumerated at the 15- and 45-second checks after
+reboot. This is a green build and successful flash, but the display-list fix
+and SpringBoard GUI are not yet confirmed on-device. The next runtime capture
+should show build ID 40369369423, no backboardd display-list exception, and an
+IOMFB client/selector/first-present followed by SpringBoard handoff.

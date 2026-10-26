@@ -3096,6 +3096,34 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   build tree with 0/1 failures; repository validation and `git diff --check`
   pass. The framebuffer rectangle clipping in 0123 already uses 64-bit
   intermediates and checks source byte extents before copying; no further
-  signed-overflow defect was apparent in this audit. Pending: ordered
-  patch/CI, wrapper verification, and a `boot_b` test. No new
-  device write has occurred. Preserve the entitlement-repaired root.
+  signed-overflow defect was apparent in this audit. CI, wrapper verification,
+  and the `boot_b` write completed as documented below. Preserve the
+  entitlement-repaired root.
+
+### Device-type correction — green CI, verified wrapper, and boot_b flash — 2026-10-26
+
+- Commit `1f46527d7c86d956da5c2ee27fc379f8ee099e72` was pushed. Local
+  `SweetFramebuffer.cpp` compile against the previous successful CI build tree
+  passed (0/1 failures); repo validation and `git diff --check` passed.
+- CI [40369369423](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40369369423)
+  completed successfully. XNU compile, host framebuffer bounds tests, feature
+  manifest and artifact uploads passed; patches 0123–0128 are APPLIED. Kernel
+  SHA-256: `09be0aeefe7d435a5895f7cf886cfc795fe216e91633caf7ab86afc014dea663`.
+- Built payload from that CI kernel and the ADT in the prior verified wrapper.
+  Reused its verified shim/header/phone DTB, adding `veuxsandbox=1` and
+  `veuxiolog=backboardd,SpringBoard`. Independent verification passed for the
+  CI build ID, exact payload reconstruction, DTB, boot args and patch status.
+  Wrapper:
+  `shim/out/veux-xnu-40369369423-sandbox-iokit-trace/shim-boot-veux-xnu-40369369423-sandbox-iokit-trace.img`
+  SHA-256: `2a7badfbd2139f9ff472754f33f48d138b7ca42da84f8304e437afa92652d628`.
+- Fastboot confirmed device `4078cac030c8`, product `veux`, unlocked, slot A
+  active, `boot_b` size `0x8000000`. Wrote only `boot_b` (send/write OKAY),
+  selected slot B (OKAY), and rebooted (OKAY). The entitlement-repaired root
+  remains untouched. At 15 and 45 seconds neither ADB nor Fastboot enumerated;
+  there is no current screen evidence. This confirms build and flash, not GUI
+  success. Request a current screen/video capture to verify build ID 40369369423,
+  display-list enumeration, client selectors/present, and SpringBoard handoff.
+- Removed temporary userdata raw/clone captures, analysis mount, dyld symbol
+  cache, downloaded buildtree and compile logs after analysis. The verified
+  wrapper and adjacent manifest are retained; no entitlement-repaired root or
+  user-provided media was removed.
