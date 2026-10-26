@@ -226,6 +226,9 @@ jobs:
             grep -Fq '0122-veux-xpcproxy-driver-spawn-gate.patch' ../patch-status.txt
             grep -Fq '0123-veux-software-display-services.patch' ../patch-status.txt
             grep -Fq '0124-veux-display-enumeration-trace.patch' ../patch-status.txt
+            grep -Fq '0125-veux-software-framebuffer-registry-properties.patch' ../patch-status.txt
+            grep -Fq 'setProperty("IOMFBLaunchFDR", false)' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
+            grep -Fq 'VEUX GUI: IOMFB client ready process=%s' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'VEUX GUI: validated firmware framebuffer; software scanout only' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'VEUX GUI: first valid software display present' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'VEUX GUI: /arm-io found; disp0=%u' xnu/iokit/Kernel/arm/VeuxPlatformExpert.cpp

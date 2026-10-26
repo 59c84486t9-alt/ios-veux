@@ -166,3 +166,29 @@ plist runs it for the `com.apple.fdr.load` matching event when a service has
 `IOMFBLaunchFDR=true`; the nonzero exit is worth investigating but does not by
 itself explain the missing `CADisplay`. No new phone write was made for these
 clips.
+
+## Earlier boot-state clips — IMG_0731.mov through IMG_0733.mov
+
+The user identified these three clips as earlier boot-state footage than
+IMG_0735/0736. They show the early kernel sequence: `AppleCLCD` starts from
+`disp0`, the ADT framebuffer passes validation, the physical surface and
+mapping/workloop/lock/client array are created, the service registers at
+1080x2400, and `/arm-io` contains `disp0`. Nub publication and AppleCLCD startup
+are therefore not the remaining gap.
+
+The exact payload embedded in wrapper 40258406080 was checked directly. Its
+ADT contains `/arm-io/disp0` with `device_type=display-subsystem`,
+`compatible=sweet,display`, canvas 1125x2436, plus the validated
+`/chosen/framebuffer@85200000` region 1080x2400, stride 4320, format
+`a8r8g8b8`. This rules out a stale local `shim/out/veux.adt` as evidence about
+the flashed wrapper; the local generated file was from an older build and
+lacks `disp0`, while the actual embedded ADT is correct.
+
+Patch 0125 makes the display geometry explicit on the live IOKit provider,
+disables panel-FDR loading for the software-only provider, and logs user-client
+initialization and successful start with the process name. The FDR loader's
+status-1 exit is adjacent evidence, not yet established as the cause of
+SpringBoard's nil display. The next CI build and boot test must check which
+process opens the client, whether selectors are called, and whether a first
+valid software present occurs. No GUI fix or successful hardware result is
+claimed from these clips.

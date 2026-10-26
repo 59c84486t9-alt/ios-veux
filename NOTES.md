@@ -2805,3 +2805,27 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Next: inspect the IOMobileFramebuffer-to-CADisplay registration path and the
   `IOMFB_FDR_Loader` failure. No phone write was made for these clips; do not
   claim GUI bring-up succeeded.
+
+### Earlier IMG_0731–IMG_0733 boot sequence and registry-path follow-up — 2026-10-26
+
+- The user clarified these clips predate IMG_0735/0736. OCR plus visual review
+  confirms AppleCLCD starts from `disp0`, validates the firmware framebuffer,
+  creates its surface/mapping/workloop/lock/client list, registers at
+  1080x2400, and finds `/arm-io/disp0`. Nub publication and AppleCLCD startup
+  are therefore not the remaining gap.
+- Extracted the exact ADT embedded in wrapper 40258406080 (not the stale local
+  `shim/out/veux.adt`): it has `/arm-io/disp0` with
+  `device_type=display-subsystem`, `compatible=sweet,display`, canvas
+  1125x2436, and the validated 1080x2400 / 4320-stride framebuffer node.
+- Patch `0125-veux-software-framebuffer-registry-properties.patch` explicitly
+  republishes geometry on the live IOKit provider, sets
+  `IOMFBLaunchFDR=false` because this service has no panel firmware loader,
+  and logs the process name/result through user-client init/start. This tests
+  whether the main display path opens the connection and calls selectors. The
+  FDR exit is not yet proven causal; no GUI success is claimed.
+- Patch `0125` applies with zero fuzz to the 40258406080 packaged post-0124
+  XNU source. `tools/validate-repo.py` passes. Next: local compile-check the
+  changed translation unit, update the kernel feature manifest, commit/push,
+  run strict CI, package and independently verify the wrapper, then flash only
+  `boot_b` when the phone is available. At last check, both ADB and Fastboot
+  were disconnected. Preserve the repaired root and do not touch userdata.

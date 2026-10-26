@@ -37,6 +37,7 @@ for patch in (
     "0122-veux-xpcproxy-driver-spawn-gate.patch",
     "0123-veux-software-display-services.patch",
     "0124-veux-display-enumeration-trace.patch",
+    "0125-veux-software-framebuffer-registry-properties.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -51,6 +52,8 @@ needles = {
     "software_gui_driver_start_trace": b"VEUX GUI: AppleCLCD start provider=%s",
     "software_gui_driver_state_trace": b"VEUX GUI: surface=%u id=%u mapping=%u workloop=%u lock=%u clients=%u",
     "software_gui_userclient_start_trace": b"VEUX GUI: IOMFB user client provider=%s framebuffer=%u",
+    "software_gui_userclient_init_trace": b"VEUX GUI: IOMFB client initialized process=%s type=%u",
+    "software_gui_userclient_ready_trace": b"VEUX GUI: IOMFB client ready process=%s",
     "software_gui_swap_trace": b"VEUX GUI: framebuffer swap %u mask=0x%x",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",

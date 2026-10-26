@@ -1,0 +1,43 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -252,6 +252,16 @@
+ 	setProperty(kIOUserClientClassKey, "IOMobileFramebufferUserClient");
+ 	setProperty("external", false);
+ 	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	/* Keep the nub properties IOMFB reads explicit in the service's provider. */
++	if (provider != NULL) {
++		provider->setProperty("device_type", "display-subsystem");
++		provider->setProperty("canvas-width", (unsigned long long)fLogicalW, 32);
++		provider->setProperty("canvas-height", (unsigned long long)fLogicalH, 32);
++	}
++	/* This software provider has no panel FDR or physical display controller. */
++	setProperty("IOMFBLaunchFDR", false);
++#endif
+ 	registerService();
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	IOLog("VEUX GUI: AppleCLCD registered size=%ux%u surface=%u\n", fWidth, fHeight, fSurface->id);
+@@ -499,6 +509,11 @@
+ 		return false;
+ 	}
+ 	fTask = owningTask;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	char name[32];
++	proc_selfname(name, sizeof(name));
++	IOLog("VEUX GUI: IOMFB client initialized process=%s type=%u\n", name, type);
++#endif
+ 	return true;
+ }
+ 
+@@ -520,6 +535,11 @@
+ 		return false;
+ 	}
+ 	fFB->addClient(this);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	char name[32];
++	proc_selfname(name, sizeof(name));
++	IOLog("VEUX GUI: IOMFB client ready process=%s\n", name);
++#endif
+ 	return true;
+ }
+ 
