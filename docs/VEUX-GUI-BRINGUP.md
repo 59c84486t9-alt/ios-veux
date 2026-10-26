@@ -271,10 +271,12 @@ build/run ID, boot-args, and patch-status checks. Wrapper SHA-256 is
 The image is ready at
 `shim/out/veux-xnu-40268776775-rw-gui/shim-boot-veux-xnu-40268776775-rw-gui.img`.
 
-No flash occurred: Fastboot and ADB showed no connected device, and USB
-enumeration found no phone. The only authorized target remains `boot_b`; do
-not write userdata or alter the entitlement-repaired root. After the phone
-returns in Fastboot, verify product `veux`, unlocked state, slot B and
-`boot_b` capacity before writing this wrapper. A successful write/reboot still
-requires a later video showing IOMFB client readiness/first present and the
-SpringBoard result to validate the hypothesis.
+The first flash attempt was deferred because the phone was absent from
+Fastboot, ADB, and USB enumeration. After the user reconnected it in Fastboot,
+the device reported product `veux`, unlocked, slot B, and `boot_b` capacity
+`0x8000000`. The wrapper hash matched its manifest. Fastboot `Sending` and
+`Writing` for only `boot_b` returned OKAY, followed by reboot OKAY. No userdata
+or other partition was written; the entitlement-repaired root remains in
+place. ADB and Fastboot were absent 15 seconds after reboot. The GUI result
+still requires later on-device evidence for client-ready/first-present and
+SpringBoard outcome.

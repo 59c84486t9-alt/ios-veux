@@ -2930,3 +2930,18 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `boot_b`, as previously authorized. Preserve the entitlement-repaired root.
   Build and wrapper verification do not prove GUI success; get later on-device
   evidence for client-ready/first-present and SpringBoard outcome.
+
+### Patch 0127 boot_b flash — 2026-10-26
+
+- After the user reconnected the phone, Fastboot reported serial `4078cac030c8`,
+  product `veux`, unlocked `yes`, current slot `b`, and `boot_b` capacity
+  `0x8000000`. The verified wrapper SHA-256 matched its adjacent manifest:
+  `21d6bb6a2bf80d84d6ef11a7bcd76924664e5083d46f7f0f8851faa47e32b7e7`.
+- Flashed only `boot_b` with wrapper from CI 40268776775. Fastboot `Sending`
+  and `Writing` both returned OKAY; `fastboot reboot` returned OKAY. No
+  userdata or other partition was written. The entitlement-repaired root was
+  preserved; do not restore the stripped-entitlement image.
+- Fifteen seconds after reboot, neither Fastboot nor ADB enumerated. This
+  confirms the flash/reboot command sequence, not on-device GUI success. Await
+  longer runtime evidence for patch 0127's list-property marker, IOMFB client
+  ready/first present, and SpringBoard's main-display result.
