@@ -35,6 +35,7 @@ for patch in (
     "0120-veux-unconditional-early-console-build-id.patch",
     "0121-veux-launchd-main-stack-exec-trace.patch",
     "0122-veux-xpcproxy-driver-spawn-gate.patch",
+    "0123-veux-software-display-services.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -42,6 +43,12 @@ for patch in (
 needles = {
     "build_id_screen_and_ring": f"VEUX BUILD: ID={a.build_id}".encode(),
     "early_framebuffer_console_entry": b"VEUX simplefb console 1080x2400 stride=4320 format=a8r8g8b8",
+    "software_gui_validated_scanout": b"VEUX GUI: validated firmware framebuffer; software scanout only",
+    "software_gui_invalid_scanout_rejected": b"VEUX GUI: refusing unvalidated firmware framebuffer",
+    "software_gui_first_present": b"VEUX GUI: first valid software display present",
+    "surface_service": b"IOCoreSurfaceRoot",
+    "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
+    "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",
     "process_sampler": b"VEUX LIVE: processes=",
     "launchd_thread_wait_classifier": b"VEUX WAIT: launchd threads=",
     "waitq_kind_classifier": b"waitq_kind: 1=queue 2=turnstile 3=port",
@@ -158,6 +165,37 @@ source_checks["xpcproxy_driver_spawn_exception_is_bootarg_gated_entitlement_only
     and "veux_exec_mac_denials % 32" in (a.source_root / "security/mac_vfs.c").read_text()
     and "VEUX MAC HOOK DENY: stage=mac_vnode_check_exec policy=%s hook=mpo_vnode_check_exec" in (a.source_root / "security/mac_vfs.c").read_text()
     and "VEUX MAC DENY: policy=%s hook=mpo_proc_check_launch_constraints" in (a.source_root / "security/mac_process.c").read_text()
+)
+
+fb = (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
+surface = (a.source_root / "iokit/Kernel/arm/SweetSurface.cpp").read_text()
+watchdog = (a.source_root / "iokit/Kernel/arm/SweetWatchdog.cpp").read_text()
+platform = (a.source_root / "iokit/Kernel/arm/VeuxPlatformExpert.cpp").read_text()
+source_checks["veux_gui_services_require_explicit_bootarg"] = all(
+    'PE_parse_boot_argn("veux_gui", &gui, sizeof(gui))' in text
+    and 'gui != 1' in text for text in (fb, surface, watchdog)
+) and 'gui == 1' in platform and "('disp0')" in platform
+source_checks["veux_gui_scanout_requires_exact_firmware_geometry"] = all(
+    text in fb for text in (
+        '"/chosen/framebuffer@85200000"', 'reg[0] != 0x85200000ULL',
+        'reg[1] != 0x00c00000ULL', '*width != 1080', '*height != 2400',
+        '*stride != 4320', 'memcmp(format, "a8r8g8b8", sizeof("a8r8g8b8"))',
+        's->pixelFormat != SWEET_FB_FORMAT_BGRA',
+    )
+)
+source_checks["veux_gui_console_handoff_is_explicit_after_valid_present"] = (
+    'PE_parse_boot_argn("veux_gui_noconsole", &quiet, sizeof(quiet)) && quiet == 1' in fb
+    and fb.index('VEUX GUI: first valid software display present') > fb.index('if (src != 0 && bpe == 4)')
+    and 'veux_fb_gui_handoff();' in fb
+    and 'if (veux_gui_console_muted) return;' in early
+    and 'veux_gui_console_muted = 0;' in serial
+)
+
+console_putc = serial.split("veux_fb_console_putc(char c)\n{", 1)[1].split("const uint32_t cols", 1)[0]
+source_checks["veux_gui_mute_preserves_capture_and_panic_screen"] = (
+    console_putc.index("veux_panic_tail_capture(c);") < console_putc.index("veux_gui_console_muted")
+    and fb.count("if (panic_active()) return;") >= 2
+    and "veux_gui_console_muted = 0; /* Terminal diagnostics reclaim the screen. */" in early
 )
 
 source_checks["launchd_vm_report_is_present"] = (

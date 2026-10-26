@@ -1,0 +1,384 @@
+diff --git a/iokit/Kernel/arm/SweetSurface.h b/iokit/Kernel/arm/SweetSurface.h
+--- a/iokit/Kernel/arm/SweetSurface.h
++++ b/iokit/Kernel/arm/SweetSurface.h
+@@ -10,7 +10,7 @@
+ 
+ #include <pexpert/arm64/board_config.h>
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include <IOKit/IOMemoryDescriptor.h>
+ #include <IOKit/IOBufferMemoryDescriptor.h>
+ #include <libkern/c++/OSObject.h>
+diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.cpp
+--- a/iokit/Kernel/arm/SweetSurface.cpp
++++ b/iokit/Kernel/arm/SweetSurface.cpp
+@@ -27,8 +27,9 @@
+  */
+ #include "SweetSurface.h"
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include <IOKit/IOService.h>
++#include <pexpert/pexpert.h>
+ #include <IOKit/IOUserClient.h>
+ #include <IOKit/IOKitKeys.h>
+ #include <IOKit/IOLib.h>
+@@ -389,6 +390,13 @@
+ bool
+ IOCoreSurfaceRoot::start(IOService *provider)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	uint32_t gui = 0;
++	if (!PE_parse_boot_argn("veux_gui", &gui, sizeof(gui)) || gui != 1) {
++		return false;
++	}
++#endif
++
+ 	if (!IOService::start(provider)) {
+ 		return false;
+ 	}
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -36,9 +36,10 @@
+  */
+ #include "SweetSurface.h"
+ 
++extern "C" void veux_fb_gui_handoff(void);
+ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include <IOKit/IOService.h>
+ #include <IOKit/IOUserClient.h>
+ #include <IOKit/IOKitKeys.h>
+@@ -48,7 +49,11 @@
+ #include <IOKit/IOTimerEventSource.h>
+ #include <IOKit/system.h>
+ #include <pexpert/pexpert.h>
++#include <pexpert/device_tree.h>
+ #include <kern/clock.h>
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++#include <kern/debug.h>
++#endif
+ #include <sys/proc.h>
+ 
+ enum {
+@@ -152,16 +157,50 @@
+ bool
+ AppleCLCD::start(IOService *provider)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	uint32_t gui = 0;
++	if (!PE_parse_boot_argn("veux_gui", &gui, sizeof(gui)) || gui != 1) {
++		return false;
++	}
++#endif
++
++#if !defined(ARM64_BOARD_CONFIG_VEUX)
+ 	PE_Video video;
++#endif
+ 
+ 	if (!IOService::start(provider)) {
+ 		return false;
+ 	}
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	/* Boot_Video can be zero in VEUX wrappers; use the validated ADT scanout. */
++	DTEntry entry;
++	const uint64_t *reg;
++	const uint32_t *width, *height, *stride;
++	const char *format;
++	unsigned int size;
++	if (SecureDTLookupEntry(NULL, "/chosen/framebuffer@85200000", &entry) != kSuccess ||
++	    SecureDTGetProperty(entry, "reg", (const void **)&reg, &size) != kSuccess || size != 16 ||
++	    reg[0] != 0x85200000ULL || reg[1] != 0x00c00000ULL ||
++	    SecureDTGetProperty(entry, "width", (const void **)&width, &size) != kSuccess || size != 4 || *width != 1080 ||
++	    SecureDTGetProperty(entry, "height", (const void **)&height, &size) != kSuccess || size != 4 || *height != 2400 ||
++	    SecureDTGetProperty(entry, "stride", (const void **)&stride, &size) != kSuccess || size != 4 || *stride != 4320 ||
++	    SecureDTGetProperty(entry, "format", (const void **)&format, &size) != kSuccess ||
++	    size != sizeof("a8r8g8b8") || memcmp(format, "a8r8g8b8", sizeof("a8r8g8b8")) != 0) {
++		IOLog("VEUX GUI: refusing unvalidated firmware framebuffer\n");
++		return false;
++	}
++	fPhys = reg[0];
++	fWidth = *width;
++	fHeight = *height;
++	fRowBytes = *stride;
++	IOLog("VEUX GUI: validated firmware framebuffer; software scanout only\n");
++#else
+ 	PE_current_console(&video);
+ 	fPhys = video.v_baseAddr;
+ 	fWidth = (uint32_t)video.v_width;
+ 	fHeight = (uint32_t)video.v_height;
+ 	fRowBytes = (uint32_t)video.v_rowBytes;
++#endif
+ 	if (fPhys == 0 || fWidth == 0 || fHeight == 0 || fRowBytes < fWidth * 4) {
+ 		IOLog("SWEET FB: no boot framebuffer\n");
+ 		return false;
+@@ -209,6 +248,10 @@
+ void
+ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	/* A terminal panic owns the framebuffer, including the captured tail. */
++	if (panic_active()) return;
++#endif
+ 	AppleCLCD *fb = (AppleCLCD *)owner;
+ 	uint64_t now = mach_absolute_time();
+ 	uint64_t count = ++fb->fVsyncCount;
+@@ -311,9 +354,14 @@
+ void
+ AppleCLCD::present(const uint8_t *rec)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	/* A terminal panic owns the framebuffer, including the captured tail. */
++	if (panic_active()) return;
++#endif
+ 	uint32_t mask = get32(rec, 0x104);
+ 
+ 
++#if !defined(ARM64_BOARD_CONFIG_VEUX)
+ 	if (!fConsolePaused) {
+ 		int quiet = 0;
+ 		fConsolePaused = true;
+@@ -324,6 +372,7 @@
+ 		}
+ 	}
+ 
++#endif
+ 	for (uint32_t layer = 0; layer < SWEET_FB_LAYERS; layer++) {
+ 		uint32_t id = get32(rec, 0x54 + 4 * layer);
+ 		const uint8_t *a = rec + 0x64 + 16 * layer;
+@@ -390,12 +439,30 @@
+ 		    s->memory == NULL || last > s->memory->getLength()) {
+ 			src = 0;
+ 		}
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		if (s->pixelFormat != SWEET_FB_FORMAT_BGRA) src = 0;
++#endif
+ 		if (src != 0 && bpe == 4) {
++
+ 			for (int32_t y = 0; y < h; y++) {
+ 				memcpy((void *)(fPixels + (uint64_t)(dy + y) * fRowBytes + (uint64_t)dx * 4),
+ 				    (const void *)(src + s->offset + (uint64_t)(sy + y) * s->bytesPerRow + (uint64_t)sx * 4),
+ 				    (size_t)w * 4);
+ 			}
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++			__asm__ volatile("dsb sy" ::: "memory");
++#endif
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++			if (!fConsolePaused) {
++				/* Only a validated layer copy can hand the screen to userland. */
++				fConsolePaused = true;
++				IOLog("VEUX GUI: first valid software display present\n");
++				uint32_t quiet = 0;
++				if (PE_parse_boot_argn("veux_gui_noconsole", &quiet, sizeof(quiet)) && quiet == 1) {
++					veux_fb_gui_handoff();
++				}
++			}
++#endif
+ 		}
+ 		s->release();
+ 	}
+diff --git a/iokit/Kernel/arm/SweetWatchdog.cpp b/iokit/Kernel/arm/SweetWatchdog.cpp
+--- a/iokit/Kernel/arm/SweetWatchdog.cpp
++++ b/iokit/Kernel/arm/SweetWatchdog.cpp
+@@ -16,8 +16,9 @@
+  */
+ #include <pexpert/arm64/board_config.h>
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include <IOKit/IOService.h>
++#include <pexpert/pexpert.h>
+ #include <IOKit/IOUserClient.h>
+ #include <IOKit/IOKitKeys.h>
+ #include <IOKit/IOLib.h>
+@@ -43,6 +44,13 @@
+ bool
+ IOWatchdog::start(IOService *provider)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	uint32_t gui = 0;
++	if (!PE_parse_boot_argn("veux_gui", &gui, sizeof(gui)) || gui != 1) {
++		return false;
++	}
++#endif
++
+ 	if (!IOService::start(provider)) {
+ 		return false;
+ 	}
+diff --git a/iokit/Kernel/arm/VeuxPlatformExpert.cpp b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+--- a/iokit/Kernel/arm/VeuxPlatformExpert.cpp
++++ b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+@@ -9,6 +9,7 @@
+ #include <IOKit/IOPlatformExpert.h>
+ #include <IOKit/IODeviceTreeSupport.h>
+ #include <IOKit/IOLib.h>
++#include <pexpert/pexpert.h>
+ 
+ class VeuxPlatformExpert : public IODTPlatformExpert {
+ 	OSDeclareDefaultStructors(VeuxPlatformExpert);
+@@ -60,5 +61,14 @@
+ 		cpus->release();
+ 	}
+ 	createNubs(this, IODTFindMatchingEntries(root, kIODTExclusive, excludeList()));
++	/* No AppleARMIO publishes disp0; reuse the software display nub only. */
++	uint32_t gui = 0;
++	if (PE_parse_boot_argn("veux_gui", &gui, sizeof(gui)) && gui == 1) {
++		IORegistryEntry *armio = root->childFromPath("arm-io", gIODTPlane);
++		if (armio != NULL) {
++			createNubs(this, IODTFindMatchingEntries(armio, 0, "('disp0')"));
++			armio->release();
++		}
++	}
+ }
+ #endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -46,6 +46,22 @@
+     "     'IOProviderClass' = IOPlatformDevice;"
+     "     'IONameMatch'     = 'qcom,kryo';"
+     "     'IOProbeScore'    = 10000:32;"
++    "   },"
++    /* Startup of these compatibility services requires veux_gui=1. */
++    "   {"
++    "     'IOClass'         = IOWatchdog;"
++    "     'IOProviderClass' = IOResources;"
++    "     'IOMatchCategory' = IOWatchdog;"
++    "   },"
++    "   {"
++    "     'IOClass'         = IOCoreSurfaceRoot;"
++    "     'IOProviderClass' = IOResources;"
++    "     'IOMatchCategory' = IOCoreSurfaceRoot;"
++    "   },"
++    "   {"
++    "     'IOClass'         = AppleCLCD;"
++    "     'IOProviderClass' = IOPlatformDevice;"
++    "     'IONameMatch'     = 'sweet,display';"
+     "   },"
+ #endif
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1462,6 +1462,13 @@
+ static uint32_t veux_fb_console_stride;
+ static uint32_t veux_fb_console_col, veux_fb_console_row;
+ static bool veux_fb_console_ready;
++/* Explicit first-present handoff: log capture continues while GUI owns pixels. */
++int veux_gui_console_muted;
++void
++veux_fb_gui_handoff(void)
++{
++	veux_gui_console_muted = 1;
++}
+ extern void veux_fb_console_putc(char c);
+ 
+ static void
+@@ -1519,6 +1526,7 @@
+ 		return;
+ 	}
+ 	veux_panic_tail_capture(c);
++	if (veux_gui_console_muted && !panic_active()) return;
+ 	const uint32_t cols = VEUX_FB_WIDTH / (8u * VEUX_FB_CONSOLE_SCALE);
+ 	const uint32_t rows = (800u - VEUX_FB_CONSOLE_TOP) / (16u * VEUX_FB_CONSOLE_SCALE);
+ 	if (c == '\r') {
+@@ -1564,6 +1572,7 @@
+ void
+ veux_fb_console_hello_block(void)
+ {
++	if (veux_gui_console_muted && !panic_active()) return;
+ 	if (!veux_fb_console_ready || veux_fb_console_base == NULL) {
+ 		return;
+ 	}
+@@ -1582,6 +1591,7 @@
+ void
+ veux_fb_panic_begin(void)
+ {
++	veux_gui_console_muted = 0;
+ 	if (!veux_fb_console_ready || veux_fb_console_base == NULL) return;
+ 	veux_fb_panic_col = veux_fb_panic_row = 0;
+ 	for (uint32_t y = VEUX_FB_PANIC_TAIL_TOP; y < 2072; ++y)
+diff --git a/osfmk/arm64/veux_early.c b/osfmk/arm64/veux_early.c
+--- a/osfmk/arm64/veux_early.c
++++ b/osfmk/arm64/veux_early.c
+@@ -179,6 +179,7 @@
+  * narrow identity alias; arm_vm_init switches us to a permanent kernel VA. */
+ uint32_t veux_exception_seen;
+ uintptr_t veux_stage_fb = 0x85200000;
++extern int veux_gui_console_muted;
+ void
+ veux_early_relocate(uint64_t base)
+ {
+@@ -188,6 +189,7 @@
+ void
+ veux_stage_mark_nb(unsigned int cell)
+ {
++ if (veux_gui_console_muted) return;
+ 	static const uint32_t colors[22] = {
+ 		0xffff0000u, 0xffff8000u, 0xffffff00u,
+ 		0xff00ff00u, 0xff00ffffu, 0xffff00ffu,
+@@ -296,6 +298,7 @@
+ static void
+ vd_digit(unsigned int x, unsigned int y, unsigned int digit)
+ {
++ if (veux_gui_console_muted) return;
+  static const uint32_t font[16] = {
+   0x6999996, 0x2622227, 0x691248f, 0xe161196,
+   0x226af22, 0xf8e1196, 0x688e996, 0xf124444,
+@@ -527,6 +530,7 @@
+ static void
+ vd_publish(void)
+ {
++ if (veux_gui_console_muted) return;
+  if (vd_busy || !vd_dirty || vd_phase == 1 || vd_phase == 3) return;
+  vd_busy = true;
+  bool full = vd_panics || (vd_aborts && (!vd_first_valid || vd_report.result ||
+@@ -602,8 +606,10 @@
+  for (unsigned int i = 0; i < 3; i++) snapshot->pa[i] = snapshot->desc[i] = snapshot->par[i] = 0;
+  vd_cell(1);
+  volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
+- for (unsigned int y = 2240; y < 2272; y++)
+-  for (unsigned int x = 160; x < 192; x++) fb[y * 1080 + x] = 0xff101010;
++ if (!veux_gui_console_muted) {
++  for (unsigned int y = 2240; y < 2272; y++)
++   for (unsigned int x = 160; x < 192; x++) fb[y * 1080 + x] = 0xff101010;
++ }
+  uint64_t saved_par = __builtin_arm_rsr64("PAR_EL1");
+  struct vd_walk before = vd_walk_far(far);
+  for (unsigned int i = 0; i < 3; i++) {
+@@ -679,6 +685,7 @@
+ void
+ veux_diag_panic(uint64_t pc)
+ {
++ veux_gui_console_muted = 0; /* Terminal diagnostics reclaim the screen. */
+  ++vd_panics; vd_cell(4); vd_row(9, vd_panics, pc);
+  vd_phase = 4; vd_dirty = true; vd_publish(); /* terminal panic aborts measurement */
+ }
+@@ -740,6 +747,7 @@
+ static void
+ vw_show(void)
+ {
++ if (veux_gui_console_muted) return;
+  if (vd_busy || vd_phase == 1 || vd_phase == 3 || vd_full_shown) return;
+  vd_busy = true;
+  volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
+@@ -867,6 +875,7 @@
+  static const uint32_t colors[22] = {0xffffffff,0xffffff00,0xff00ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffff0000,0xff0080ff,0xff80ff00,0xffff8000,0xff00ffff,0xffff00ff,0xffffffff,0xff4040ff,0xff40ff40,0xffff4040,0xff40ff40,0xffff2020,0xff00ffff,0xffff00ff,0xff40ff40,0xffff2020};
+  if (stage >= 22) return;
+  vw_bsd_mask |= 1ULL << stage;
++ if (veux_gui_console_muted) return;
+  volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
+  unsigned cell = stage < 16 ? stage : stage - 16;
+  unsigned y0 = stage < 16 ? 2080 : 2208;
+@@ -878,6 +887,7 @@
+ void
+ veux_lifecycle_stage(unsigned int stage)
+ {
++	if (veux_gui_console_muted) return;
+ 	static const uint32_t colors[6] = {0xffffffff, 0xffff8000, 0xffff00ff, 0xffff0000, 0xff00ffff, 0xff40ff40};
+ 	if (stage >= 6) return;
+ 	volatile uint32_t *fb = (volatile uint32_t *)veux_stage_fb;
