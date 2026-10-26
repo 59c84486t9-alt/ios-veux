@@ -3426,5 +3426,26 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   slot B, confirmed it active, and rebooted. Fastboot send/write, slot
   selection, and reboot all returned OKAY. `boot_a` was not written. At 97
   seconds, the host saw no ADB, Fastboot, or phone USB device; the physical
-  display result is pending. Recovery evidence before this test had empty
-  pstore, no `/proc/last_kmsg`, and no current `VEUXLOG1` ring.
+  display result was still pending then. Recovery evidence before this test
+  had empty pstore, no `/proc/last_kmsg`, and no current `VEUXLOG1` ring.
+
+### First lock-screen handoff — 404131 sandbox wrapper — 2026-10-27
+
+- After the sandbox-enabled boot, the user reported the Apple logo appeared,
+  faded to black, and a small asterisk appeared. The user then reported that
+  the device had booted and supplied a photo showing the iOS lock screen with
+  the camera shortcut and home indicator. This confirms a SpringBoard GUI
+  handoff; the earlier asterisk was not a terminal boot failure.
+- The host still did not enumerate ADB or Fastboot at 00:06 CET; the phone was
+  at the iOS lock screen. No reboot or further flash was performed. `boot_b`
+  remains the verified sandbox/iolog wrapper, and `boot_a` remains untouched.
+- The lock screen date/time read “Wednesday, December 31” and “4:02,” so the
+  device clock appears unset or stale. User unlock/home interaction has not
+  yet been confirmed.
+- Compared with the plain 404131 wrapper, this successful wrapper adds
+  `veuxsandbox=1` and `veuxiolog=backboardd,SpringBoard`. Enabling the opt-in
+  sandbox compatibility policy is the leading explanation for the improved
+  display/GUI path; the test changed both arguments together, so the sandbox
+  flag's causal role is strongly suggested but not isolated experimentally.
+  Preserve the successful state; do not reboot or flash until the user wants
+  another test.

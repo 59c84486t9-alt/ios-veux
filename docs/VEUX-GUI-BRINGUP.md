@@ -1,6 +1,22 @@
 # VEUX software display bring-up
 
-## Observed blocker
+## Current status — lock-screen handoff
+
+On 2026-10-27, the user supplied a photo showing the iOS lock screen after
+booting the 40413116842 kernel with `veuxsandbox=1` and
+`veuxiolog=backboardd,SpringBoard`. This is the first confirmed GUI handoff
+for this VEUX test: SpringBoard rendered the lock screen. The user reported
+that the Apple logo first appeared, faded to black, and a small asterisk
+appeared before the lock screen came up; that intermediate mark was not a
+terminal boot failure.
+
+The sandbox-enabled wrapper was flashed only to `boot_b`; `boot_a` remains
+untouched. The host does not enumerate ADB or Fastboot after iOS reaches the
+lock screen, so use the on-device UI to confirm swipe/unlock behavior. Preserve
+this booted state; no further flash or reboot is needed to establish GUI
+success.
+
+## Historical blocker — build 402315 / IMG_0724
 
 IMG_0724.mov follows slot-B reboot with kernel 40231594906 and the entitlement-
 repaired root (`d7777c229e7dc012a3e86a5d9f54ab4fc4bf74e443526fe2f11562f0d2b2d691`).
