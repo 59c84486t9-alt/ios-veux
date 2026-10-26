@@ -347,6 +347,33 @@ backboardd exits. Patch 0128 adds a compact kernel snapshot of AppleCLCD
 registration, FDR/display-list property setter results, IOMFB client init/ready
 counts and callers, selectors seen, last selector caller, swap calls, and the
 first successful software present. It emits only on SpringBoard/backboardd
-exit and does not alter display behavior. The candidate compiles against the
-402687 build tree; strict CI and a verified boot wrapper are the next gates.
-This is intended to make the next failure actionable, not to claim a GUI fix.
+exit and does not alter display behavior. The candidate compiled against the
+402687 build tree. Strict CI and a verified boot wrapper have now passed; the
+remaining gate is on-device evidence from the boot below. This is intended to
+make the next failure actionable, not to claim a GUI fix.
+
+### Patch 0128 diagnostic build and boot_b flash — CI 40329697379
+
+Strict CI [40329697379](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40329697379)
+passed on commit `e899b868b4ef8d9ee64a6f499aeef67dade56361`. XNU compilation,
+host framebuffer bounds checks, the kernel feature manifest, build-tree
+packaging, and artifact upload all succeeded; `0128-veux-gui-exit-summary.patch`
+is marked APPLIED. Kernel SHA-256 is
+`29337e2eb8323317f0275597b49335d1540cd5c613b802fb662d6e898a5ce984`.
+
+The boot-v2 wrapper uses that exact CI kernel, the previously verified shim
+kernel/header and embedded ADT, and phone DTB SHA-256
+`08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`. The
+independent wrapper verifier confirmed payload reconstruction, build/run ID,
+boot arguments, DTB, and patch status. Wrapper SHA-256 is
+`e35b50e5920c2bb3575a8f30f6f51fcb52f9412239e7608ebf5cb2413d9488b2`; image:
+`shim/out/veux-xnu-40329697379-rw-gui/shim-boot-veux-xnu-40329697379-rw-gui.img`.
+
+Fastboot identified serial `4078cac030c8`, product `veux`, unlocked `yes`,
+and `boot_b` capacity `0x8000000`. Flashing only `boot_b`, selecting slot B,
+and rebooting returned OKAY. No userdata or other partition was written; the
+entitlement-repaired root was preserved. After reboot, neither ADB nor Fastboot
+enumerated on the host at the 10-second check. This confirms the flash/reboot
+sequence, not that the kernel reached the GUI. The next evidence needed is a
+screen capture showing build ID `40329697379` and the exit summary, especially
+IOMFB client/selector/present counts and SpringBoard/backboardd exit status.
