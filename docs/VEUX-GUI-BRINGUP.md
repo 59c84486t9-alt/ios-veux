@@ -446,3 +446,33 @@ unobserved. The next evidence should show `VEUX Sandbox: permissive policy
 registered`, whether backboardd reaches IOMobileFramebuffer matching/open, and
 whether SpringBoard gets a main `CADisplay`. CI/build success and flash success
 do not establish GUI success.
+
+## IMG_0777–IMG_0778 sandbox-enabled boot evidence
+
+The still repeats patch-0127's successful AppleCLCD registration at 1080x2400
+and successful FDR/display-list property setter calls. These values confirm
+provider setup only; they do not show framework display enumeration or GUI
+handoff.
+
+Both clips show `SWEET Sandbox: ... op ...` callbacks for `containermanager`,
+`distnoted`, and `cfprefsd`. The sandbox syscall hook is therefore active in
+these boots, although the explicit policy-registration result line is not
+visible. IMG_0777 shows launchd starting SpringBoard, then `driverkitd` SIGKILL
+and `logd privilege 1002 denied`. IMG_0778 shows backboardd SIGABRT (Mach
+exception namespace 2/code 6), followed by `IOMFB_FDR_Loader` SIGABRT. Neither
+clip exposes the patch-0128 exit summary, build ID, or a readable SpringBoard
+main-display result. The register dump is not a SpringBoard crash report.
+
+This evidence means the previous sandbox-omission hypothesis is insufficient:
+the sandbox syscall callback is running, but privilege checks are a separate
+MAC hook. Current code grants only `PRIV_WORK_INTERVAL` and returns `EPERM` for
+other privilege requests. The `logd` denial is visible, but does not establish
+that it caused the display failure. Next correlate per-process privilege
+denials with the `IOMFB_FDR_Loader` and backboardd stack traces, then use the
+0128 exit summary to check whether any IOMFB client issued selectors or
+presented a frame.
+
+The host detected the phone in Fastboot on slot B. `fastboot reboot recovery`
+returned OKAY, but neither ADB nor Fastboot enumerated afterward. No new
+recovery log read or partition write occurred during this check. The
+entitlement-repaired root remains preserved.

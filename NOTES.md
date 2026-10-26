@@ -2990,3 +2990,27 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Prepared the next wrapper from that same green CI kernel, adding both `veuxsandbox=1` and `veuxiolog=backboardd,SpringBoard`. Remote build and local `tools/verify-veux-wrapper.py` both passed; exact kernel SHA-256 remains `29337e2eb8323317f0275597b49335d1540cd5c613b802fb662d6e898a5ce984`, DTB SHA-256 remains `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`, wrapper SHA-256 is `6f4ff70eb38990a9cc454b21d917d23655d92e56188056ebf1109ccd563b6786`. No source changed, so this reuses the successful CI result rather than dispatching a redundant kernel build. The phone has not been seen in Fastboot after the previous reboot; this wrapper is ready but not yet flashed.
 - Fastboot reappeared on serial `4078cac030c8`; product `veux`, unlocked `yes`, current slot B, and `boot_b` capacity `0x8000000` were verified. Flashed only `boot_b` with the wrapper above, selected B, and rebooted; all Fastboot operations returned OKAY. No userdata or root-image write occurred. At 10 seconds after reboot, neither ADB nor Fastboot enumerated. The sandbox-enabled build is flashed, but its runtime effect and GUI outcome are not yet observed.
 - Next: obtain the current boot's full screen or reconnect ADB. Look for `VEUX Sandbox: permissive policy registered`, then IOKit matching/open traces from backboardd and SpringBoard's main `CADisplay` outcome. Treat successful CI, wrapper verification, flash, and GUI validation as separate results. Preserve the entitlement-repaired root and do not write userdata.
+
+### IMG_0777–IMG_0778 sandbox-enabled boot evidence — 2026-10-26
+
+- The still repeats patch-0127 framebuffer setup: AppleCLCD registers the
+  validated 1080x2400 software surface and the FDR/display-list property
+  setters report success. This confirms provider setup, not a framework
+  `CADisplay` or GUI handoff.
+- Both clips show `SWEET Sandbox: ... op ...` callbacks for `containermanager`,
+  `distnoted`, and `cfprefsd`. The sandbox syscall hook is active in these
+  boots. The explicit policy-registration result is not visible.
+- IMG_0777 shows launchd starting SpringBoard, then `driverkitd` terminated
+  with SIGKILL and `logd privilege 1002 denied`. IMG_0778 shows backboardd
+  terminating with SIGABRT (Mach exception namespace 2/code 6), followed by
+  `IOMFB_FDR_Loader` SIGABRT. The full patch-0128 exit summary, build ID, and a
+  readable SpringBoard CADisplay result are not visible.
+- The sandbox-omission hypothesis is no longer sufficient: sandbox syscall
+  callbacks are visibly running. Privilege denial is a separate MAC check;
+  current code grants only `PRIV_WORK_INTERVAL` and returns `EPERM` for other
+  privileges. Investigate the exact process/privilege denials and the FDR
+  loader/backboardd stacks before changing grants or display behavior.
+- The phone was detected in Fastboot on slot B. `fastboot reboot recovery`
+  returned OKAY, but neither ADB nor Fastboot enumerated afterward. No new
+  recovery log read or partition write occurred in this turn. Preserve the
+  entitlement-repaired root and the already-flashed sandbox wrapper.
