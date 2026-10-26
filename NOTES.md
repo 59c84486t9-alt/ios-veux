@@ -3382,3 +3382,22 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   identify the screen and restore Fastboot/recovery access, then collect
   read-only boot evidence before changing another partition. `boot_a` remains
   untouched.
+
+### IMG_0791 video — current diagnostic screen
+
+- The 8.70-second `IMG_0791.mov` shows the XNU diagnostic console throughout.
+  SpringBoard pid 183 exits with SIGTRAP at PC `0x1d35c8ca8`; the visible
+  slide `0x37c60000` yields unslid `0x19b968ca8`, the already symbolicated
+  `-[FBSDisplayMonitor _initWithBookendObserver:transformer:]+1160` trap when
+  `CADisplay.displays.firstObject` is nil. The console's GUI summary says
+  `registered=1 fdr=0x3 list=0x7 init=1/0:IOMFB_FDR_Loader
+  ready=1:IOMFB_FDR_Loader ... selectors=0x0 swaps=0 present=0`. Backboardd
+  then exits with SIGABRT. This is a userspace display-enumeration/handoff
+  failure after XNU and SpringBoard start, not evidence that the kernel never
+  booted.
+- No CI/build ID is visible. The exit-summary format is the same as the
+  earlier patch-0128 clips; patch 0128 is also present in 40413116842, so the
+  clip cannot identify which wrapper produced it or prove the AppleKeyStore
+  registration change ran. At 23:55 CET the host still saw no ADB, Fastboot,
+  or phone USB device. Once recovery access returns, read back `boot_b` and
+  collect boot-specific display/AppleKeyStore evidence before another write.
