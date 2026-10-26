@@ -3476,3 +3476,19 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   handoff and clock requirements are understood should a reviewed power/reset
   sequence and HID event polling be enabled. Keep the successful default path
   unchanged and use boot_b for tests.
+
+### VEUX read-only touch probe — patch 0131 in progress — 2026-10-27
+
+- Added `xnu/patches/0131-veux-touch-readonly-se8-probe.patch`. It adds a
+  VEUX-only probe called after UFS root setup and gated by `veuxtouchprobe=1`.
+  It reads the GENI SE8 firmware/status/clock/IRQ/FIFO state, Blair GCC SE8
+  clock source/branch state, and TLMM pin state for 19/20/21/22/44/51. Source
+  has no GPIO/GCC/SE write path and sends no I2C transaction.
+- Added the patch to the strict kernel manifest and workflow source assertions.
+  Patch applies with zero fuzz to a locally modeled post-0086 UFS context;
+  Python compilation, repository validation (130 patch files, 0001-0131), and
+  `git diff --check` pass. XNU compilation, CI, wrapper creation, and device
+  readout remain pending.
+- Keep the probe opt-in; the lock-screen boot is still the baseline. Do not
+  add the boot arg to the existing wrapper until a strict CI kernel passes.
+  Then use `boot_b` for the diagnostic and leave `boot_a` untouched.

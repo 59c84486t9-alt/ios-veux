@@ -111,6 +111,15 @@ GPIO power/reset sequence and event polling/HID delivery. Keep the default
 image unchanged and test only from `boot_b`, preserving the lock-screen boot
 and `boot_a`.
 
+## Read-only SE8 probe — patch 0131
+
+Patch 0131 adds a first diagnostic behind `veuxtouchprobe=1`. It snapshots the
+SE8 firmware/status/clock/IRQ/FIFO registers, the Blair GCC SE8 source and
+branch state, and TLMM config/input-output registers for GPIOs 19, 20, 21, 22,
+44 and 51. It does not write controller, clock, GPIO, or PMIC registers and
+does not issue I2C. The normal boot path is unchanged when the argument is
+absent. Build and on-device results are pending; this is not touch support.
+
 ## Validation and pending hardware test
 
 Local syntax checks: all seven changed translation units passed; after the
