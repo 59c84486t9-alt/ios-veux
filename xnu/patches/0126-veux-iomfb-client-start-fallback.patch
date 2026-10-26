@@ -1,0 +1,50 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -260,7 +260,13 @@
+ 		provider->setProperty("canvas-height", (unsigned long long)fLogicalH, 32);
+ 	}
+ 	/* This software provider has no panel FDR or physical display controller. */
+-	setProperty("IOMFBLaunchFDR", false);
++	bool providerFDRDisabled = false;
++	if (provider != NULL) {
++		providerFDRDisabled = provider->setProperty("IOMFBLaunchFDR", false);
++	}
++	bool serviceFDRDisabled = setProperty("IOMFBLaunchFDR", false);
++	IOLog("VEUX GUI: FDR policy provider=%u service=%u\n",
++	    (unsigned int)providerFDRDisabled, (unsigned int)serviceFDRDisabled);
+ #endif
+ 	registerService();
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+@@ -509,6 +515,10 @@
+ 		return false;
+ 	}
+ 	fTask = owningTask;
++	fFB = NULL;
++	fPort = MACH_PORT_NULL;
++	bzero(fFunc, sizeof(fFunc));
++	bzero(fRefcon, sizeof(fRefcon));
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	char name[32];
+ 	proc_selfname(name, sizeof(name));
+@@ -528,12 +538,18 @@
+ 	if (fFB == NULL) {
+ 		return false;
+ 	}
+-	if (!IOUserClient::start(provider)) {
++	bool baseStarted = IOUserClient::start(provider);
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+-		IOLog("VEUX GUI: IOMFB user client base start failed\n");
+-#endif
++	if (!baseStarted) {
++		/* IOService::start is a no-op on this XNU, but keep the software
++		 * framebuffer usable if the user-client superclass rejects it. */
++		IOLog("VEUX GUI: IOMFB base start rejected; continuing software client\n");
++	}
++#else
++	if (!baseStarted) {
+ 		return false;
+ 	}
++#endif
+ 	fFB->addClient(this);
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	char name[32];
