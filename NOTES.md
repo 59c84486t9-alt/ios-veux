@@ -1,3 +1,27 @@
+## >>> UPDATE 2026-10-27 (read-only SE8 probe built and booted) <<<
+
+- Corrected patch registration ordering in commit `38ee1a8` and pushed to
+  `origin/veux-xnu-build`. CI run `40420136793` succeeded on that commit:
+  patches 0062, 0072, and 0131 all report APPLIED; the kernel feature manifest,
+  packaging, and artifact upload passed. Kernel SHA-256:
+  `8601c4a84b6c38edda46a5d262cf8c0d77b173954bc0a23d29b909874a2825f8`.
+- Installed the missing AArch64 cross compiler and assembled a verified
+  diagnostic wrapper at `/tmp/veux-touch-probe-40420136793/
+  shim-boot-veux-touchprobe-40420136793.img`; SHA-256
+  `fb107e9a51bd6382a82b40318720a35b93443f98734732d2da4ce593aa078a09`.
+  Its payload and phone DTB match the verified inputs. Boot args enable
+  `veuxtouchprobe=1`, retain sandbox/iolog, and omit `rootrw=1` and `ufsrw=1`.
+- The probe only snapshots SE8, GCC, and TLMM registers and logs them; it does
+  not issue I2C or touch HID events. It cannot itself make touch work. The next
+  driver milestone depends on reading its hardware state.
+- Fastboot product `veux`, unlocked, slot B, `boot_b` capacity 128 MiB.
+  Temporary `fastboot boot` is unsupported (`unknown command`), so used the
+  user's prior explicit authorization to flash only `boot_b`; flash and reboot
+  returned OKAY. `boot_a` was not touched. First and later USB checks showed
+  neither ADB nor Fastboot enumeration. Waiting for the user to report the
+  display or provide a short startup video to capture the framebuffer-console
+  probe output. No touch implementation has been tested on-device yet.
+
 ## >>> UPDATE 2026-10-27 (read-only VEUX touch probe patch retry) <<<
 
 - The first strict CI attempt (run 40418972288) stopped before compilation:
