@@ -7,18 +7,6 @@ snapshot for the phone's SE8, GCC and touch GPIOs. It performs no MMIO writes
 and sends no I2C transactions; this captures ABL handoff state before any
 controller or power sequencing is attempted.
 
-diff --git a/bsd/conf/files b/bsd/conf/files
-index 6630131..3cf2834 100644
---- a/bsd/conf/files
-+++ b/bsd/conf/files
-@@ -108,6 +108,7 @@ bsd/dev/sweet_ufs.c			standard
- bsd/dev/sweet_sample.c			standard
- bsd/dev/sweet_keys.c			standard
- bsd/dev/sweet_touch.c			standard
-+bsd/dev/veux_touch_probe.c		standard
- bsd/dev/sweet_rpmh.c			standard
- bsd/dev/sweet_spmi.c			standard
- bsd/dev/sweet_usb.c			standard
 diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 index 7adee14..a32f477 100644
 --- a/bsd/dev/sweet_ufs.c
@@ -108,7 +96,7 @@ index 0000000..d5de204
 +	vm_offset_t gcc = ml_io_map(VEUX_TOUCH_GCC_PA, VEUX_TOUCH_GCC_SIZE);
 +	vm_offset_t tlmm = ml_io_map(VEUX_TOUCH_TLMM_PA, VEUX_TOUCH_TLMM_SIZE);
 +	if (!se || !gcc || !tlmm) {
-+		printf("VEUX TOUCH PROBE: read-only SE8 mapping failed se=%u gcc=%u tlmm=%u\n",
++		printf("VEUX TOUCH PROBE: read-only SE8 mapping failed se=%d gcc=%d tlmm=%d\n",
 +		    se != 0, gcc != 0, tlmm != 0);
 +		return;
 +	}

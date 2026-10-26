@@ -1,3 +1,19 @@
+## >>> UPDATE 2026-10-27 (read-only VEUX touch probe patch retry) <<<
+
+- The first strict CI attempt (run 40418972288) stopped before compilation:
+  patch 0131's `bsd/conf/files` hunk did not apply after the existing board
+  patch sequence. Moved the probe source registration into patch 0062 beside
+  the existing SWEET device registrations and removed the duplicate late hunk.
+  The actual probe remains opt-in (`veuxtouchprobe=1`) and reads SE8/GCC/TLMM
+  registers only; it does not configure pins/clocks, write registers, or send
+  I2C transactions, so it cannot generate touch events itself.
+- Corrected the mapping-failure format specifiers to `%d` for integer boolean
+  expressions. `tools/validate-repo.py` passes (130 patches); Python manifest
+  compilation passes; `git diff --check` passes for non-patch source files.
+- The patch fix has not yet been pushed or built. No wrapper was created and
+  the phone was not touched. Keep the lock-screen baseline intact and leave
+  `boot_a` unwritten; build validation is the next step.
+
 ## >>> UPDATE 2026-10-25 (launchd main-thread diagnostics and offline job cache audit) <<<
 
 - Added `xnu/patches/0121-veux-launchd-main-stack-exec-trace.patch`. It samples
