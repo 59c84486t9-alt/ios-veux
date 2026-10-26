@@ -19,9 +19,8 @@ diff --git a/iokit/Kernel/arm/VeuxPlatformExpert.cpp b/iokit/Kernel/arm/VeuxPlat
 diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -168,8 +168,15 @@
- 		return false;
- 	}
+@@ -168,7 +168,14 @@
+ 	PE_Video video;
  #endif
  
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
@@ -35,7 +34,7 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
  		return false;
  	}
  #if defined(ARM64_BOARD_CONFIG_VEUX)
-@@ -199,5 +206,11 @@
+@@ -220,6 +227,12 @@
  	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, SWEET_FB_FORMAT_BGRA);
  	fPixels = fSurface != NULL ? fSurface->kernelAddress() : 0;
  	fWorkLoop = IOWorkLoop::workLoop();
@@ -47,18 +46,20 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
 +#endif
  	if (fLock == NULL || fClients == NULL || fPixels == 0 || fWorkLoop == NULL) {
  		IOLog("SWEET FB: setup failed\n");
-@@ -223,5 +238,8 @@
+ 		OSSafeReleaseNULL(fSurface);    /* stays published: also held by the table */
+@@ -240,6 +253,9 @@
  	setProperty("external", false);
  	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
  	registerService();
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +	IOLog("VEUX GUI: AppleCLCD registered size=%ux%u surface=%u\n", fWidth, fHeight, fSurface->id);
 +#endif
- 	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u\n",
- 	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id);
-@@ -1218,6 +1236,12 @@
- AppleCLCD::swap(const uint8_t *rec)
- {
+ 	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u, presented as %ux%u\n",
+ 	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id, fLogicalW, fLogicalH);
+ 	return true;
+@@ -359,6 +375,12 @@
+ 	if (panic_active()) return;
+ #endif
  	uint32_t mask = get32(rec, 0x104);
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +	static uint32_t veux_gui_swap_logs;
@@ -67,9 +68,9 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
 +	}
 +#endif
  
- 	if (!fConsolePaused) {
- 		int quiet = 0;
-@@ -1306,9 +1329,19 @@
+ 
+ #if !defined(ARM64_BOARD_CONFIG_VEUX)
+@@ -484,9 +506,19 @@
  IOMobileFramebufferUserClient::start(IOService *provider)
  {
  	fFB = OSDynamicCast(AppleCLCD, provider);

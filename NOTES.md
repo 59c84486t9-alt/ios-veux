@@ -2736,3 +2736,19 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Next: commit and push the trace patch, run strict XNU CI, assemble/verify its
   wrapper, then obtain confirmation before writing the new wrapper to `boot_b`.
   Keep the entitlement-repaired root and do not restore the older image.
+
+### Display enumeration trace patch-application repair — 2026-10-26
+
+- CI run `40257589855` failed before XNU compilation: patches through `0123`
+  applied, but trace patch `0124` was authored against the pre-`0123`
+  `SweetFramebuffer.cpp` layout. The package-buildtree failure was downstream
+  because no kernel object was produced.
+- Rebuilt the framebuffer portion of `0124` from the successful CI run
+  `40252779285` packaged source tree, which contains the exact post-`0123`
+  source. The updated trace hunks cover AppleCLCD startup/setup/registration,
+  first display presents and IOMFB user-client start. The patch applies with
+  `git apply --check` to that packaged source; `tools/validate-repo.py` and
+  Python syntax validation pass.
+- Next: commit and push the correction, run strict XNU CI, then package and
+  independently verify the new wrapper. Keep the entitlement-repaired root;
+  phone writes remain limited to the confirmed `boot_b` wrapper operation.
