@@ -538,18 +538,35 @@ shared-cache image shows this display-list block enumerates children of
 `CFDataGetLength`/`CFDataGetBytes` before comparing it with
 `display-subsystem` and `ext-display-subsystem`.
 
-Patch 0125 had republished `device_type` on AppleCLCD's provider using the
-`const char *` `setProperty` overload, which produces an OSString. The
-framework treats the property as CFData, causing the Objective-C
-`doesNotRecognizeSelector` exception in display-list enumeration. Patch 0125
-now publishes a NUL-terminated byte array with the `(key, bytes, length)`
-overload, matching the existing DeviceTree `device_type` representation; the
-dependent 0126 patch offsets were advanced to follow the expanded 0125 hunk.
-This and the earlier canvas-width/height OSData correction address both
-CFData-reading paths seen in the captured crash reports. A new CI build and
-boot test must still confirm patch application, kernel compilation, successful
-display-list creation, IOMFB client selectors, first present, and SpringBoard
-handoff separately.
+The report's `imageOffset=31420` maps to the instruction immediately after
+`CFDataGetBytes` in the iOS 16.7.16 display-list block, but it does not identify
+which `/arm-io` child supplied the bad object. The captured report has no unique
+build ID, so its presence on the userdata volume does not prove it came from
+CI 40369369423.
+
+### Follow-up: normalize all `/arm-io` display types
+
+The earlier theory that `device_type` on `disp0` was an OSString was incorrect.
+XNU has a two-argument string setter and a three-argument `void *` byte-data
+setter; patch 0125 calls the latter because it supplies a length. Its original
+`char *` buffer already becomes OSData. The explicit cast in commit `bed5c50`
+does not change runtime behavior. Apple's implementation is visible in
+[IORegistryEntry.cpp](https://github.com/apple-oss-distributions/xnu/blob/main/iokit/Kernel/IORegistryEntry.cpp).
+
+Patch 0129 now works on the actual `IODeviceTree` `/arm-io` node before the
+display nub is published. It canonicalizes `disp0` to NUL-terminated
+`display-subsystem` OSData, converts any string-valued sibling `device_type` to
+OSData, and replaces missing or unexpected values with empty OSData. It logs
+each child's type and data length. This covers a wrong property on any child,
+which the framework's display-list loop reads with `CFDataGetBytes`; whether
+that is the captured failure remains a hypothesis until the next crash report
+or successful display enumeration confirms it.
+
+The first CI run for the redundant cast, 40380782893, was canceled after
+correcting the overload analysis. Patch 0129 compiles locally against the
+40369369423 packaged build tree (0/1 failures), and its patch applies exactly
+to that tree. Strict CI, wrapper build/verification, flash, and on-device
+display/SpringBoard validation are still pending.
 
 CI **40369369423** then passed on commit `1f46527d7c86d956da5c2ee27fc379f8ee099e72`:
 the ordered patches, XNU build, synthetic framebuffer bounds checks, feature

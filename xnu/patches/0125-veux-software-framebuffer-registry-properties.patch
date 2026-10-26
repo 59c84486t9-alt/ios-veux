@@ -1,6 +1,6 @@
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -252,6 +252,22 @@
+@@ -252,6 +252,20 @@
  	setProperty(kIOUserClientClassKey, "IOMobileFramebufferUserClient");
  	setProperty("external", false);
  	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
@@ -9,9 +9,7 @@
 +	if (provider != NULL) {
 +		/* IOMFB reads device_type through CFDataGetLength/CFDataGetBytes. */
 +		static char kVEUXDisplaySubsystem[] = "display-subsystem";
-+		/* Force the OSData overload; char * selects the OSString overload. */
-+		provider->setProperty("device_type",
-+		    static_cast<void *>(kVEUXDisplaySubsystem),
++		provider->setProperty("device_type", kVEUXDisplaySubsystem,
 +		    sizeof(kVEUXDisplaySubsystem));
 +		/* IOMobileFramebuffer getEDTProperty reads these values as CFData. */
 +		provider->setProperty("canvas-width", &fLogicalW, sizeof(fLogicalW));
@@ -23,7 +21,7 @@
  	registerService();
  #if defined(ARM64_BOARD_CONFIG_VEUX)
  	IOLog("VEUX GUI: AppleCLCD registered size=%ux%u surface=%u\n", fWidth, fHeight, fSurface->id);
-@@ -499,6 +514,11 @@
+@@ -499,6 +512,11 @@
  		return false;
  	}
  	fTask = owningTask;
@@ -35,7 +33,7 @@
  	return true;
  }
  
-@@ -520,6 +540,11 @@
+@@ -520,6 +538,11 @@
  		return false;
  	}
  	fFB->addClient(this);

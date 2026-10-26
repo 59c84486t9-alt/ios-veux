@@ -3087,18 +3087,18 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   is `IOMobileFramebufferCreateDisplayList+252` ->
   `CA::WindowServer::display_count_of_type` ->
   `-[CAWindowServer _detectDisplays]`. Disassembly reads each `/arm-io` child's
-  `device_type` using `CFDataGetLength`/`CFDataGetBytes`. Patch 0125 still
-  published this property with the string overload (OSString), causing the
-  same type mismatch previously fixed for canvas dimensions.
-- Patch 0125 now publishes NUL-terminated `display-subsystem` bytes as OSData.
-  Updated 0126's downstream hunk offsets to account for the enlarged 0125
-  block. The changed `SweetFramebuffer.cpp` compiles against the previous CI
-  build tree with 0/1 failures; repository validation and `git diff --check`
-  pass. The framebuffer rectangle clipping in 0123 already uses 64-bit
-  intermediates and checks source byte extents before copying; no further
-  signed-overflow defect was apparent in this audit. CI, wrapper verification,
-  and the `boot_b` write completed as documented below. Preserve the
-  entitlement-repaired root.
+  `device_type` using `CFDataGetLength`/`CFDataGetBytes`. The earlier claim
+  that patch 0125's three-argument setter produced OSString was incorrect: that
+  call uses XNU's `void *` byte-data overload. Commit `1f46527` changed the
+  original two-argument string setter to this three-argument form and therefore
+  did publish OSData. The crash report has no build ID, so it may be persisted
+  from an earlier boot. The later explicit cast in `bed5c50` is redundant.
+- The framebuffer rectangle clipping in 0123 uses 64-bit intermediates and
+  checks source byte extents before copying; no further signed-overflow defect
+  was apparent in that audit. The follow-up patch 0129 normalizes every direct
+  `/arm-io` child before display-nub publication in case another child has a
+  non-Data `device_type`; details and runtime caveats are in the latest section
+  below. Preserve the entitlement-repaired root.
 
 ### Device-type correction — green CI, verified wrapper, and boot_b flash — 2026-10-26
 
@@ -3127,3 +3127,31 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   cache, downloaded buildtree and compile logs after analysis. The verified
   wrapper and adjacent manifest are retained; no entitlement-repaired root or
   user-provided media was removed.
+
+### IOMFB display-list property normalization follow-up — 2026-10-26
+
+- The recovery-captured backboardd report has `imageOffset=31420` in
+  `IOMobileFramebuffer`, mapping to the instruction immediately after
+  `CFDataGetBytes` in the iOS 16.7.16 display-list block. It has no unique build
+  ID, so it cannot be attributed conclusively to CI 40369369423 or prove which
+  `/arm-io` child supplied the unexpected object.
+- Correction to the earlier diagnosis: XNU's two-argument string setter creates
+  OSString; the three-argument `setProperty(key, char *, length)` call in patch
+  0125 resolves to the `void *` byte-data setter and already creates OSData.
+  Commit `bed5c50`'s explicit mutable `void *` cast is behaviorally redundant.
+  The overload implementations are in
+  [IORegistryEntry.cpp](https://github.com/apple-oss-distributions/xnu/blob/main/iokit/Kernel/IORegistryEntry.cpp).
+- Patch 0129 normalizes `device_type` on every direct `/arm-io` child in the
+  DeviceTree plane before creating the display nub: `disp0` gets canonical
+  `display-subsystem` OSData; strings become OSData; missing or unsupported
+  values become empty OSData. It logs each child type/length. This addresses
+  the unchecked framework byte reads if any sibling has a non-Data value, but
+  remains a hypothesis pending runtime enumeration evidence.
+- Local compile against build tree 40369369423 passed (0/1 failures), and
+  patch application reproduced the compiled source byte-for-byte. Repository
+  validation checks 128 patches and passes. CI 40380782893, dispatched for the
+  redundant cast, was canceled. The new 0129 CI has not started; no new wrapper
+  has been assembled and no phone partition has been written.
+- Phone remains connected to root recovery ADB with slot `_a`; no partition was
+  written. The large host-only raw/COW captures were detached and deleted. The
+  entitlement-fixed userdata image remains untouched.

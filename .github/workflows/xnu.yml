@@ -230,6 +230,9 @@ jobs:
             grep -Fq '0126-veux-iomfb-client-start-fallback.patch' ../patch-status.txt
             grep -Fq '0127-veux-iomfb-display-list-properties.patch' ../patch-status.txt
             grep -Fq '0128-veux-gui-exit-summary.patch' ../patch-status.txt
+            grep -Fq '0129-veux-normalize-iomfb-device-types.patch' ../patch-status.txt
+            grep -Fq 'veuxNormalizeArmioDeviceTypes(armio);' xnu/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+            grep -Fq 'VEUX GUI: disp0 device_type canonicalized=%u previous=%s' xnu/iokit/Kernel/arm/VeuxPlatformExpert.cpp
             grep -Fq 'setProperty("IOMFBLaunchFDR", false)' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'setProperty("dfr", false)' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'setProperty("AppleTV", false)' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp

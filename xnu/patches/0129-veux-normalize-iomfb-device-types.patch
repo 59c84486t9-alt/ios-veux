@@ -1,0 +1,100 @@
+--- a/iokit/Kernel/arm/VeuxPlatformExpert.cpp
++++ b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+@@ -9,6 +9,9 @@
+ #include <IOKit/IOPlatformExpert.h>
+ #include <IOKit/IODeviceTreeSupport.h>
+ #include <IOKit/IOLib.h>
++#include <libkern/c++/OSData.h>
++#include <libkern/c++/OSString.h>
++#include <string.h>
+ #include <pexpert/pexpert.h>
+ 
+ class VeuxPlatformExpert : public IODTPlatformExpert {
+@@ -23,6 +26,79 @@
+ 
+ OSDefineMetaClassAndStructors(VeuxPlatformExpert, IODTPlatformExpert);
+ 
++static void
++veuxNormalizeArmioDeviceTypes(IORegistryEntry *armio)
++{
++	static char kVEUXDisplaySubsystem[] = "display-subsystem";
++	OSIterator *children = armio->getChildIterator(gIODTPlane);
++	if (children == NULL) {
++		IOLog("VEUX GUI: /arm-io child iterator unavailable\n");
++		return;
++	}
++
++	IORegistryEntry *child;
++	while ((child = (IORegistryEntry *)children->getNextObject()) != NULL) {
++		const char *name = child->getName();
++		OSObject *property = child->copyProperty("device_type");
++		OSData *data = OSDynamicCast(OSData, property);
++		if (name != NULL && strcmp(name, "disp0") == 0) {
++			OSData *expected = OSData::withBytes(kVEUXDisplaySubsystem,
++			    sizeof(kVEUXDisplaySubsystem));
++			bool set = expected != NULL &&
++			    child->setProperty("device_type", expected);
++			IOLog("VEUX GUI: disp0 device_type canonicalized=%u previous=%s\n",
++			    (unsigned int)set, property != NULL ?
++			    property->getMetaClass()->getClassName() : "missing");
++			if (expected != NULL) {
++				expected->release();
++			}
++		} else if (data != NULL) {
++			IOLog("VEUX GUI: /arm-io child=%s device_type=OSData length=%u\n",
++			    name != NULL ? name : "(unnamed)", data->getLength());
++		} else if (property != NULL) {
++			OSString *string = OSDynamicCast(OSString, property);
++			if (string != NULL && string->getCStringNoCopy() != NULL) {
++				const char *bytes = string->getCStringNoCopy();
++				unsigned int length = (unsigned int)strlen(bytes) + 1;
++				OSData *replacement = OSData::withBytes(bytes, length);
++				bool set = replacement != NULL &&
++				    child->setProperty("device_type", replacement);
++				IOLog("VEUX GUI: /arm-io child=%s device_type=%s converted=%u\n",
++				    name != NULL ? name : "(unnamed)",
++				    property->getMetaClass()->getClassName(),
++				    (unsigned int)set);
++				if (replacement != NULL) {
++					replacement->release();
++				}
++			} else {
++				OSData *empty = OSData::withBytes(NULL, 0);
++				bool set = empty != NULL &&
++				    child->setProperty("device_type", empty);
++				IOLog("VEUX GUI: /arm-io child=%s device_type=%s replaced_empty=%u\n",
++				    name != NULL ? name : "(unnamed)",
++				    property->getMetaClass()->getClassName(),
++				    (unsigned int)set);
++				if (empty != NULL) {
++					empty->release();
++				}
++			}
++		} else {
++			OSData *empty = OSData::withBytes(NULL, 0);
++			bool set = empty != NULL &&
++			    child->setProperty("device_type", empty);
++			IOLog("VEUX GUI: /arm-io child=%s device_type=missing replaced_empty=%u\n",
++			    name != NULL ? name : "(unnamed)", (unsigned int)set);
++			if (empty != NULL) {
++				empty->release();
++			}
++		}
++		if (property != NULL) {
++			property->release();
++		}
++	}
++	children->release();
++}
++
+ bool
+ VeuxPlatformExpert::start(IOService *provider)
+ {
+@@ -66,6 +142,7 @@
+ 	if (PE_parse_boot_argn("veux_gui", &gui, sizeof(gui)) && gui == 1) {
+ 		IORegistryEntry *armio = root->childFromPath("arm-io", gIODTPlane);
+ 		if (armio != NULL) {
++			veuxNormalizeArmioDeviceTypes(armio);
+ 			IORegistryEntry *disp0 = armio->childFromPath("disp0", gIODTPlane);
+ 			IOLog("VEUX GUI: /arm-io found; disp0=%u\n", (unsigned int)(disp0 != NULL));
+ 			if (disp0 != NULL) {

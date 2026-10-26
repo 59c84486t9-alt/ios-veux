@@ -41,6 +41,7 @@ for patch in (
     "0126-veux-iomfb-client-start-fallback.patch",
     "0127-veux-iomfb-display-list-properties.patch",
     "0128-veux-gui-exit-summary.patch",
+    "0129-veux-normalize-iomfb-device-types.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -60,6 +61,7 @@ needles = {
     "software_gui_fdr_provider_policy": b"VEUX GUI: FDR policy provider=%u service=%u",
     "software_gui_iomfb_list_properties": b"VEUX GUI: IOMFB list properties dfr=%u AppleTV=%u external=%u",
     "software_gui_exit_summary": b"VEUX GUI SUMMARY: registered=%u fdr=0x%x list=0x%x",
+    "software_gui_iomfb_device_type_normalization": b"VEUX GUI: disp0 device_type canonicalized=%u previous=%s",
     "software_gui_userclient_base_fallback": b"VEUX GUI: IOMFB base start rejected; continuing software client",
     "software_gui_swap_trace": b"VEUX GUI: framebuffer swap %u mask=0x%x",
     "surface_service": b"IOCoreSurfaceRoot",
