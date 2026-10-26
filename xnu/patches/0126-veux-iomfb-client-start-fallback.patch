@@ -1,9 +1,6 @@
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -260,7 +260,13 @@
- 		provider->setProperty("canvas-height", (unsigned long long)fLogicalH, 32);
- 	}
- 	/* This software provider has no panel FDR or physical display controller. */
+@@ -260,4 +260,10 @@
 -	setProperty("IOMFBLaunchFDR", false);
 +	bool providerFDRDisabled = false;
 +	if (provider != NULL) {

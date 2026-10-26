@@ -3048,3 +3048,7 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `boot_b` under the user's existing authorization. Do not write userdata or
   replace the entitlement-repaired root. On-device success still needs a boot
   showing IOMFB client readiness, selector/present activity, and GUI handoff.
+- CI 40355196690 stopped before compile because downstream patch 0126 still
+  matched the pre-fix numeric canvas setters. Updated its context to the new
+  byte-data property block; the follow-up CI must confirm the complete ordered
+  patch stack and kernel build.

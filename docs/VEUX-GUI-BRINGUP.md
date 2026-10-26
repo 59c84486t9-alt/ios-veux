@@ -513,3 +513,8 @@ with 0/1 failures. This is a source-supported root-cause fix for the observed
 display-list crash. It still needs a new green CI build, an independently
 verified wrapper from that artifact, and on-device evidence of IOMFB client
 selectors/presents and GUI handoff.
+
+The first CI attempt for this fix (40355196690) stopped during patching:
+0126 still expected the previous numeric canvas setters. Its context now
+follows 0125's byte-data properties; a rerun is required to validate the full
+ordered patch stack before creating or flashing a wrapper.
