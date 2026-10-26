@@ -10,9 +10,15 @@
 - Corrected the mapping-failure format specifiers to `%d` for integer boolean
   expressions. `tools/validate-repo.py` passes (130 patches); Python manifest
   compilation passes; `git diff --check` passes for non-patch source files.
-- The patch fix has not yet been pushed or built. No wrapper was created and
-  the phone was not touched. Keep the lock-screen baseline intact and leave
-  `boot_a` unwritten; build validation is the next step.
+- The first corrected branch run (40419703193, commit 404ef0d) confirmed
+  patch 0062 applied, then stopped at patch 0072: the early insertion split
+  0072's exact `sweet_touch`/`sweet_rpmh`/`sweet_spmi` context. Moved the
+  probe registration to 0072 after its `sweet_usb.c` addition, preserving the
+  later patch context while still registering the probe before compilation.
+  Repository validation and Python manifest compilation pass after this
+  adjustment. The updated retry is not yet pushed or built.
+- Neither failed run produced a kernel or wrapper. No phone action occurred;
+  the lock-screen baseline remains untouched and `boot_a` remains unwritten.
 
 ## >>> UPDATE 2026-10-25 (launchd main-thread diagnostics and offline job cache audit) <<<
 
