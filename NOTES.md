@@ -3395,9 +3395,12 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   then exits with SIGABRT. This is a userspace display-enumeration/handoff
   failure after XNU and SpringBoard start, not evidence that the kernel never
   booted.
-- No CI/build ID is visible. The exit-summary format is the same as the
-  earlier patch-0128 clips; patch 0128 is also present in 40413116842, so the
-  clip cannot identify which wrapper produced it or prove the AppleKeyStore
-  registration change ran. At 23:55 CET the host still saw no ADB, Fastboot,
-  or phone USB device. Once recovery access returns, read back `boot_b` and
-  collect boot-specific display/AppleKeyStore evidence before another write.
+- The user confirms this is the boot from the last flash, wrapper/CI
+  40413116842. There is no build ID on screen; attribution comes from the
+  user's direct confirmation, not the shared patch-0128 exit-summary format.
+  This clip shows the CADisplay failure rather than the prior AppleKeyStore
+  trap, which suggests SpringBoard progressed past that earlier crash; it
+  does not directly show that AppleKeyStore registered successfully. At
+  23:55 CET the host still saw no ADB, Fastboot, or phone USB device. Once
+  recovery access returns, read back `boot_b` and collect boot-specific
+  display/AppleKeyStore evidence before another write.
