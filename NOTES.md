@@ -3331,8 +3331,12 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   block, so it is absent on VEUX.
 - Added patch 0130 to enable the existing no-passcode software AppleKeyStore
   for `ARM64_BOARD_CONFIG_VEUX`, and added it to the strict patch/build
-  manifest. The patch applies cleanly to the saved XNU tree. Next: commit and
-  build the kernel, verify the resulting wrapper, then test from `boot_b` only.
+  manifest. The first strict CI run (40412381136) found that the KernelConfig
+  hunk did not account for the VEUX compatibility-service records added by
+  patch 0123; patch application stopped before compilation. Updated the hunk
+  against that exact post-0129 source tree and verified it applies cleanly.
+  Next: rerun strict CI, verify the resulting wrapper, then test from
+  `boot_b` only.
   The phone remains in slot-A recovery; current `boot_b` is the scan wrapper;
   `boot_a` remains untouched. A later failure is possible after AppleKeyStore
   becomes visible and must be read from the next log.
