@@ -636,9 +636,9 @@ the earlier reboot loop only.
 
 The 403842 boot arguments omit `veuxlog=1`, so no boot-specific ring was
 written for that test. To identify why the latest run stayed at the Apple logo,
-the next diagnostic boot needs a unique persisted log/build marker. Adding the
-existing logger writes its bounded 4 MiB + 4 KiB ring at the userdata tail; no
-new boot or such write has been performed yet.
+a diagnostic wrapper with the existing logger was prepared. The user has since
+authorized repeated writes to `boot_b` and explicitly prohibited writes to
+`boot_a`.
 
 A temporary 403842 diagnostic wrapper is prepared at
 `shim/out/veux-xnu-40384236283-iomfb-type-normalization-veuxlog/shim-boot-veux-xnu-40384236283-iomfb-type-normalization-veuxlog.img`
@@ -646,9 +646,15 @@ A temporary 403842 diagnostic wrapper is prepared at
 The only binary change from the currently installed image is the added
 `veuxlog=1` payload boot argument; image size and outer kernel/header/DTB are
 unchanged. It retains `rootrw=1 ufsrw=1`, so booting it leaves the HFS root
-writable and writes the bounded logger ring. It has not been booted pending
-confirmation for that UFS write. A temporary `fastboot boot` attempt returned
-`remote: 'unknown command'`; it did not boot or write the image. The device is
-back in Fastboot on slot A. The only available test route is to flash the
-candidate to `boot_b`, activate B and reboot. This requires confirmation
-because it writes a boot partition and runs the RW-root/logger experiment.
+writable and writes the bounded logger ring. A temporary `fastboot boot`
+attempt returned `remote: 'unknown command'`; it did not boot or write the
+image. The user then authorized flashing this candidate to `boot_b`, while
+explicitly prohibiting writes to `boot_a`. Fastboot send/write, slot-B
+activation, and reboot returned OKAY. No other partition was written. After
+reboot, ADB
+and Fastboot did not enumerate at the immediate check or repeated checks over
+30 seconds; `lsusb` also showed no phone USB device. This is only a host-side
+USB observation: display state, boot stage, reset, and power state are unknown.
+The log ring has not yet been pulled. Next, the user must force Fastboot with
+Power + Volume Down; then verify the phone before selecting slot A and rebooting
+to recovery for `tools/veux-log-pull.sh`. Keep `boot_a` untouched.

@@ -3226,3 +3226,20 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   candidate to `boot_b`, activate B, and reboot. This is a partition write and
   also boots the existing RW-root args plus the bounded logger write; obtain
   explicit confirmation before doing it.
+
+### 403842 persistent-log boot result — 2026-10-26
+
+- The user explicitly authorized repeated writes to `boot_b` and prohibited
+  writing `boot_a`. Flashed only the prepared `veuxlog=1` diagnostic wrapper
+  (SHA-256 `a793e3e8c8bf5580c2e4ab8cd99974fb82158acdc94ee4fdea2db4f690e7a742`)
+  to `boot_b`; Fastboot send/write, `set_active b`, and reboot returned OKAY.
+  No other partition was written.
+- After reboot, neither ADB nor Fastboot enumerated at the immediate check or
+  repeated checks spanning 30 seconds. `lsusb` also showed no phone USB device.
+  This records a lack of host-side USB enumeration only; the screen outcome,
+  boot stage, and whether the device reset or powered off are unknown. No fresh
+  XNU ring has been pulled, so the diagnostic boot is not yet explained.
+- Next: have the user force the handset into Fastboot with its hardware buttons
+  (Power + Volume Down), then verify serial/product/current slot before doing
+  anything. If Fastboot returns, select slot A and reboot to recovery, then
+  use `tools/veux-log-pull.sh` to inspect the ring. Keep `boot_a` untouched.
