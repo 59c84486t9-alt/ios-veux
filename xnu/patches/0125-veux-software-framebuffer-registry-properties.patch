@@ -11,7 +11,7 @@
 +		static char kVEUXDisplaySubsystem[] = "display-subsystem";
 +		/* Force the OSData overload; char * selects the OSString overload. */
 +		provider->setProperty("device_type",
-+		    static_cast<const void *>(kVEUXDisplaySubsystem),
++		    static_cast<void *>(kVEUXDisplaySubsystem),
 +		    sizeof(kVEUXDisplaySubsystem));
 +		/* IOMobileFramebuffer getEDTProperty reads these values as CFData. */
 +		provider->setProperty("canvas-width", &fLogicalW, sizeof(fLogicalW));
