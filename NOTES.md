@@ -2641,3 +2641,49 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Exact saved-root cache resolves SpringBoard PC to FBSDisplayMonitor `_initWithBookendObserver:transformer:+1160`, the same pre-display trap documented on SWEET. Backboardd resolves through pthread_kill/abort/_objc_terminate/std::terminate; exact exception text still unknown. Full evidence and limitations: `docs/VEUX-GUI-BRINGUP.md`. REA Ghidra import failed on CoreFoundation dependency; successful symbolication/disassembly is from local ipsw, not REA decompilation.
 - Added 0123 software display-service port: VEUX-only startup gate `veux_gui=1`, existing software IOSurface/AppleCLCD/watchdog compatibility, only disp0 nub publishing, exact validated ADT framebuffer geometry. No HID/SEP/panel-controller MMIO port. `veux_gui_noconsole=1` optionally hands pixels to first valid copied BGRA layer; normal console/bitdump pauses, last25 capture continues, panic reclaims pixels and stops GUI refresh.
 - Local checks: all7 modified TUs syntax compile, final2 affected TUs recompiled after review fixes, zero-fuzz patch applicability, repository integrity and Python syntax checks pass. Workflow/manifest now require patch0123, GUI boot args, binary strings and source constraints. Next: commit/push and strict CI; no phone write or reboot was performed for this experiment yet.
+
+### VEUX GUI clipping audit, strict CI and wrapper — 2026-10-25
+
+- Checked the requested `display_audit` follow-up. No live agent with that name
+  appeared in the collaboration inventory, and the tracked working tree had no
+  uncommitted follow-up. The framebuffer rectangle clipping correction was
+  completed in commit `d2933ae`; `0f66997` aligns the patch hunk with the exact
+  XNU 8796 `present()` source after patches 0046/0056/0061. Layer coordinates
+  and crop math now use 64-bit intermediates, clamp to display/surface bounds,
+  validate source byte-extent arithmetic before copying, and iterate rows with
+  a 64-bit counter. The host console test harness supplies the new GUI mute and
+  panic-state symbols.
+- CI run `40249653049` failed in the synthetic console host compile because
+  that harness lacked `veux_gui_console_muted` and `panic_active`. Run
+  `40251140627` then failed strict patch application because the new clipping
+  hunk targeted the wrong source position. The hunk was reconstructed and
+  checked against XNU 8796.141.3, and the host console test passed against the
+  patched source. Run `40251701960` applied patches and built the kernel; its
+  manifest failed only on a source-policy predicate spelling mismatch. The
+  manifest then passed locally against that run's exact kernel and build-tree
+  source. Commit `c68caf2` corrected the predicate.
+- Final CI run `40252779285` is green on commit
+  `c68caf286b7f2da68b5734fcbc80a0f660236424`. Strict zero-fuzz patch
+  application, XNU compile, synthetic host bounds checks, kernel feature
+  manifest, packaging, and artifact upload all passed. Kernel SHA-256:
+  `96c2d29e2a459bc6954cf835857eb8fd8cd76ca1432225fdc8562fe6b2f1ed4e`.
+- Assembled and independently verified
+  `shim/out/veux-xnu-40252779285-rw-gui/shim-boot-veux-xnu-40252779285-rw-gui.img`
+  from the CI kernel, the ADT embedded in the verified boot-v2 template, and
+  phone DTB `dtb/vendor_boot_b_unpacked/dtb_1.dtb`. Wrapper SHA-256:
+  `046a61d1db7d5602233df7cdd55a55063fced16b2cc93cdf77b632eeb284570f`;
+  payload SHA-256:
+  `ab6fe647afa5024ae1426d1248d1621588912573e12092cbe45755fee8bf843e`;
+  DTB SHA-256:
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+  The adjacent wrapper manifest confirms that the payload reconstructs from
+  the CI kernel and embedded ADT and that wrapper payload, DTB and boot args
+  match the supplied inputs. Boot args include `veux_gui=1
+  veux_gui_noconsole=1` with the established RW pair.
+- No GUI-build image was flashed and no phone reboot was performed. The
+  entitlement-repaired root at SHA-256
+  `d7777c229e7dc012a3e86a5d9f54ab4fc4bf74e443526fe2f11562f0d2b2d691`
+  remains the current root; do not restore the older stripped-entitlement
+  image. On-device GUI behavior remains unvalidated. Build and wrapper
+  verification are not device validation; obtain user confirmation before any
+  destructive phone write.
