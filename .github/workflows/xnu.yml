@@ -225,8 +225,12 @@ jobs:
             grep -Fq '0121-veux-launchd-main-stack-exec-trace.patch' ../patch-status.txt
             grep -Fq '0122-veux-xpcproxy-driver-spawn-gate.patch' ../patch-status.txt
             grep -Fq '0123-veux-software-display-services.patch' ../patch-status.txt
+            grep -Fq '0124-veux-display-enumeration-trace.patch' ../patch-status.txt
             grep -Fq 'VEUX GUI: validated firmware framebuffer; software scanout only' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'VEUX GUI: first valid software display present' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
+            grep -Fq 'VEUX GUI: /arm-io found; disp0=%u' xnu/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+            grep -Fq 'VEUX GUI: AppleCLCD start provider=%s' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
+            grep -Fq 'VEUX GUI: IOMFB user client provider=%s framebuffer=%u' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'VEUX SPAWN DEV ALLOW: rule=pid1-xpcproxy-driver-bootarg hook=exec_validate_spawnattr_policy/IOCurrentTaskHasEntitlement' xnu/bsd/kern/kern_exec.c
             grep -Fq 'error = 0; /* Bypass only this entitlement gate; image and MAC checks still run. */' xnu/bsd/kern/kern_exec.c
             grep -Fq 'followup=normal-image-signature-vnode-exec-and-launch-constraints' xnu/bsd/kern/kern_exec.c

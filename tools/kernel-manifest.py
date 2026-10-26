@@ -36,6 +36,7 @@ for patch in (
     "0121-veux-launchd-main-stack-exec-trace.patch",
     "0122-veux-xpcproxy-driver-spawn-gate.patch",
     "0123-veux-software-display-services.patch",
+    "0124-veux-display-enumeration-trace.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -46,6 +47,11 @@ needles = {
     "software_gui_validated_scanout": b"VEUX GUI: validated firmware framebuffer; software scanout only",
     "software_gui_invalid_scanout_rejected": b"VEUX GUI: refusing unvalidated firmware framebuffer",
     "software_gui_first_present": b"VEUX GUI: first valid software display present",
+    "software_gui_disp0_enumeration_trace": b"VEUX GUI: /arm-io found; disp0=%u",
+    "software_gui_driver_start_trace": b"VEUX GUI: AppleCLCD start provider=%s",
+    "software_gui_driver_state_trace": b"VEUX GUI: surface=%u id=%u mapping=%u workloop=%u lock=%u clients=%u",
+    "software_gui_userclient_start_trace": b"VEUX GUI: IOMFB user client provider=%s framebuffer=%u",
+    "software_gui_swap_trace": b"VEUX GUI: framebuffer swap %u mask=0x%x",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
     "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",
@@ -181,6 +187,16 @@ source_checks["veux_gui_scanout_requires_exact_firmware_geometry"] = all(
         'reg[1] != 0x00c00000ULL', '*width != 1080', '*height != 2400',
         '*stride != 4320', 'memcmp(format, "a8r8g8b8", sizeof("a8r8g8b8"))',
         's->pixelFormat != SWEET_FB_FORMAT_BGRA',
+    )
+)
+source_checks["veux_gui_trace_covers_nub_driver_and_userclient"] = all(
+    token in text for text, token in (
+        (platform, "VEUX GUI: /arm-io found; disp0=%u"),
+        (platform, "VEUX GUI: /arm-io missing; no display nub published"),
+        (fb, "VEUX GUI: AppleCLCD start provider=%s"),
+        (fb, "VEUX GUI: AppleCLCD registered size=%ux%u surface=%u"),
+        (fb, "VEUX GUI: IOMFB user client provider=%s framebuffer=%u"),
+        (fb, "VEUX GUI: framebuffer swap %u mask=0x%x"),
     )
 )
 clip = fb.split("/* Clip in 64-bit coordinates:", 1)[1].split("uint64_t last = 0;", 1)[0]

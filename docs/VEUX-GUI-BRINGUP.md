@@ -90,3 +90,23 @@ based on the immediately preceding verified slot-B flash/reboot sequence,
 not an on-screen build marker. This is a successful build and partition-write
 sequence but an unsuccessful GUI runtime test. Do not flash again until the
 new runtime evidence is investigated and a corrected, verified wrapper exists.
+
+## Runtime root cause and trace follow-up
+
+The repaired 20H392 root was expanded to a temporary raw image and mounted
+read-only. Its iOS 16.7 dyld cache symbolicates the new video's SpringBoard PC
+`0x1de83cca8` with slide `0x42ed4000` to `0x19b968ca8`, the same
+`-[FBSDisplayMonitor _initWithBookendObserver:transformer:]+1160` trap as the
+earlier video. Disassembly places the trap at the nil result of
+`CADisplay.displays.firstObject`; the `FrontBoardServices` error string is
+`failed to find the main CADisplay`. The direct failure is therefore display
+enumeration, before an IOSurface layer can be copied and handed off.
+
+The shim ADT describes `/arm-io/disp0` as `device_type=display-subsystem` and
+`compatible=sweet,display`, which matches the iOS 16 IOMobileFramebuffer
+enumerator's device-tree scan. This proves the expected metadata is present in
+the generated ADT, not that IOKit created the nub, matched `AppleCLCD`, or
+registered a usable IOMobileFramebuffer service at runtime. Patch 0124 adds
+bounded logs for those steps and for the first framebuffer user-client opens
+and swaps. A green CI build and another video are required to tell which link
+is missing; the phone has not been written with this follow-up.

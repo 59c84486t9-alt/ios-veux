@@ -2711,3 +2711,28 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   Investigate the new runtime addresses against the correct cache/build before
   making another wrapper or phone write. Keep the entitlement-repaired root;
   never restore the old stripped-entitlement image.
+
+### GUI crash root cause and enumeration trace follow-up — 2026-10-25
+
+- Re-expanded the entitlement-repaired 20H392 sparse root to a temporary raw
+  image and mounted its HFSX volume read-only. The dyld cache reports iOS 16.7;
+  the video slide `0x42ed4000` maps SpringBoard PC `0x1de83cca8` to unslid
+  `0x19b968ca8`, exactly
+  `-[FBSDisplayMonitor _initWithBookendObserver:transformer:]+1160`.
+- Disassembly shows this trap is the `CADisplay.displays.firstObject == nil`
+  branch. `FrontBoardServices` contains the associated error string
+  `failed to find the main CADisplay`. Therefore userland is not enumerating a
+  main display; no first valid layer can reach the framebuffer handoff. The
+  exact missing kernel-side link is still unknown. The shim ADT does contain
+  `/arm-io/disp0` with `device_type=display-subsystem` and
+  `compatible=sweet,display`, so static ADT intent is present but does not
+  establish that the IOKit nub and service start on-device.
+- Added patch `0124-veux-display-enumeration-trace.patch` to emit bounded
+  markers for the `/arm-io/disp0` nub, AppleCLCD start/setup/registration,
+  IOMobileFramebuffer user-client start, and first swaps. Workflow and kernel
+  manifest require these markers. Local patch-format, Python syntax,
+  `git diff --check`, and repository integrity checks pass. The follow-up has
+  not yet been compiled by XNU CI or run on-device. No phone write occurred.
+- Next: commit and push the trace patch, run strict XNU CI, assemble/verify its
+  wrapper, then obtain confirmation before writing the new wrapper to `boot_b`.
+  Keep the entitlement-repaired root and do not restore the older image.

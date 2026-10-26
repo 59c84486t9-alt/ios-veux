@@ -1,0 +1,92 @@
+diff --git a/iokit/Kernel/arm/VeuxPlatformExpert.cpp b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+--- a/iokit/Kernel/arm/VeuxPlatformExpert.cpp
++++ b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+@@ -66,7 +66,14 @@
+ 		IORegistryEntry *armio = root->childFromPath("arm-io", gIODTPlane);
+ 		if (armio != NULL) {
++			IORegistryEntry *disp0 = armio->childFromPath("disp0", gIODTPlane);
++			IOLog("VEUX GUI: /arm-io found; disp0=%u\n", (unsigned int)(disp0 != NULL));
++			if (disp0 != NULL) {
++				disp0->release();
++			}
+ 			createNubs(this, IODTFindMatchingEntries(armio, 0, "('disp0')"));
+ 			armio->release();
++		} else {
++			IOLog("VEUX GUI: /arm-io missing; no display nub published\n");
+ 		}
+ 	}
+ }
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -168,8 +168,15 @@
+ 		return false;
+ 	}
+ #endif
+ 
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	IOLog("VEUX GUI: AppleCLCD start provider=%s\n",
++	    provider != NULL ? provider->getName() : "(null)");
++#endif
+ 	if (!IOService::start(provider)) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		IOLog("VEUX GUI: AppleCLCD base start failed\n");
++#endif
+ 		return false;
+ 	}
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+@@ -199,5 +206,11 @@
+ 	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, SWEET_FB_FORMAT_BGRA);
+ 	fPixels = fSurface != NULL ? fSurface->kernelAddress() : 0;
+ 	fWorkLoop = IOWorkLoop::workLoop();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	IOLog("VEUX GUI: surface=%u id=%u mapping=%u workloop=%u lock=%u clients=%u\n",
++	    (unsigned int)(fSurface != NULL), fSurface != NULL ? fSurface->id : 0,
++	    (unsigned int)(fPixels != 0), (unsigned int)(fWorkLoop != NULL),
++	    (unsigned int)(fLock != NULL), (unsigned int)(fClients != NULL));
++#endif
+ 	if (fLock == NULL || fClients == NULL || fPixels == 0 || fWorkLoop == NULL) {
+ 		IOLog("SWEET FB: setup failed\n");
+@@ -223,5 +238,8 @@
+ 	setProperty("external", false);
+ 	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
+ 	registerService();
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	IOLog("VEUX GUI: AppleCLCD registered size=%ux%u surface=%u\n", fWidth, fHeight, fSurface->id);
++#endif
+ 	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u\n",
+ 	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id);
+@@ -1218,6 +1236,12 @@
+ AppleCLCD::swap(const uint8_t *rec)
+ {
+ 	uint32_t mask = get32(rec, 0x104);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	static uint32_t veux_gui_swap_logs;
++	if (veux_gui_swap_logs < 8) {
++		IOLog("VEUX GUI: framebuffer swap %u mask=0x%x\n", ++veux_gui_swap_logs, mask);
++	}
++#endif
+ 
+ 	if (!fConsolePaused) {
+ 		int quiet = 0;
+@@ -1306,9 +1329,19 @@
+ IOMobileFramebufferUserClient::start(IOService *provider)
+ {
+ 	fFB = OSDynamicCast(AppleCLCD, provider);
+-	if (fFB == NULL || !IOUserClient::start(provider)) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	IOLog("VEUX GUI: IOMFB user client provider=%s framebuffer=%u\n",
++	    provider != NULL ? provider->getName() : "(null)", (unsigned int)(fFB != NULL));
++#endif
++	if (fFB == NULL) {
+ 		return false;
+ 	}
++	if (!IOUserClient::start(provider)) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		IOLog("VEUX GUI: IOMFB user client base start failed\n");
++#endif
++		return false;
++	}
+ 	fFB->addClient(this);
+ 	return true;
+ }
