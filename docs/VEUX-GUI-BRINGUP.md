@@ -408,3 +408,41 @@ list matching path and its main-display selection. The summary narrows the
 failure to enumeration/connection before any selector or present; changing
 framebuffer rectangle handling or surface copy code cannot address this
 failure point.
+
+## Recovery Unified Log findings and sandbox policy candidate
+
+The user authorized recovery ADB, which connected as root. A read-only copy of
+the previous boot's HFSX root contains no saved SpringBoard `.ips` or `.crash`
+report. It does contain about 92 MiB of persisted tracev3 logs. The UUID text
+directory is empty, so parsing recovers launchd lifecycle records but not
+framework format strings. These files span eight boot UUIDs; their totals are
+not evidence for any single build.
+
+Across those boots, launchd records repeated `error = 159: Sandbox restriction`
+lookups from SpringBoard, including `com.apple.backboard.system-app-server`,
+`com.apple.CARenderServer`, and `com.apple.chronoservices`. Backboardd lookup
+denials include `com.apple.iohideventsystem`, `com.apple.mobilegestalt.xpc`,
+and `com.apple.containermanagerd`. The same persisted boots show SpringBoard
+SIGTRAPs and backboardd SIGABRTs. This reproduces a known gap in the boot
+configuration: patch 0099's VEUX Sandbox compatibility policy is opt-in via
+`veuxsandbox=1`, but the flashed wrapper omitted that argument. The kernel
+build's patch-status file confirms 0099 is applied. The missing policy is the
+strongest current explanation for backboardd failing before display discovery;
+it is not yet proven to resolve `CADisplay` enumeration.
+
+The next wrapper reuses green CI 40329697379's exact kernel and phone DTB and
+adds `veuxsandbox=1` plus `veuxiolog=backboardd,SpringBoard`. The exact kernel
+SHA-256 remains
+`29337e2eb8323317f0275597b49335d1540cd5c613b802fb662d6e898a5ce984`, and the
+locally reverified wrapper SHA-256 is
+`6f4ff70eb38990a9cc454b21d917d23655d92e56188056ebf1109ccd563b6786`.
+No XNU source changed, so this reuses the successful CI result. It is ready to
+flash only to `boot_b` after Fastboot reconnects. Fastboot later reported
+serial `4078cac030c8`, product `veux`, unlocked state, current slot B, and
+`boot_b` size `0x8000000`. Only `boot_b` was written; selecting B and rebooting
+returned OKAY. No userdata write occurred. ADB and Fastboot did not enumerate
+at the 10-second check, so the sandbox-enabled runtime effect is still
+unobserved. The next evidence should show `VEUX Sandbox: permissive policy
+registered`, whether backboardd reaches IOMobileFramebuffer matching/open, and
+whether SpringBoard gets a main `CADisplay`. CI/build success and flash success
+do not establish GUI success.
