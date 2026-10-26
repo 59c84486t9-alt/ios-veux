@@ -377,3 +377,34 @@ enumerated on the host at the 10-second check. This confirms the flash/reboot
 sequence, not that the kernel reached the GUI. The next evidence needed is a
 screen capture showing build ID `40329697379` and the exit summary, especially
 IOMFB client/selector/present counts and SpringBoard/backboardd exit status.
+
+## IMG_0763 boot evidence — patch 0128 diagnostics
+
+Both clips show the new exit-summary code, confirming the patch-0128 boot.
+The initial frame repeats AppleCLCD registration at 1080x2400 and successful
+property setter calls (`FDR policy provider=1 service=1`; `dfr`, `AppleTV`,
+and `external` each report setter success). These are write-success flags, not
+the stored values.
+
+The summary reads `registered=1 fdr=0x3 list=0x7 init=1/0:IOMFB_FDR_Loader
+ready=1:IOMFB_FDR_Loader last=4294967295/none selectors=0x0 swaps=0 present=0`.
+So the AppleCLCD service registered, and the only user-client init/ready
+recorded before SpringBoard's exit belongs to `IOMFB_FDR_Loader` (type 0).
+No selector reached the kernel framebuffer client, and no swap or software
+present occurred. The evidence places the gap before a window-server display
+client reaches the service; it does not show whether IOMobileFramebuffer's
+matching callback rejected the service or whether SpringBoard failed earlier
+while obtaining a display list.
+
+The SpringBoard report shows PC `0x1dbcf4ca8`, slide `0x4038c000`, yielding
+unslid PC `0x19b968ca8`. The local 20H392 shared cache resolves this exactly to
+`-[FBSDisplayMonitor _initWithBookendObserver:transformer:]+1160`, the same
+nil-main-CADisplay trap as earlier boots. SpringBoard exits with signal 5;
+backboardd later exits with signal 6, and lockdownd reaches the “Too many
+corpses being created” limit. The clips do not show a successful GUI handoff.
+
+The next code investigation should focus on the IOMobileFramebuffer display
+list matching path and its main-display selection. The summary narrows the
+failure to enumeration/connection before any selector or present; changing
+framebuffer rectangle handling or surface copy code cannot address this
+failure point.
