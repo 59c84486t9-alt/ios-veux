@@ -142,3 +142,27 @@ was preserved. After reboot neither ADB nor Fastboot enumerated. This confirms
 the wrapper write/reboot sequence only; it does not confirm the new build ID,
 display-service trace output or GUI handoff on-screen. Obtain a new screen/video
 capture before claiming on-device GUI validation.
+
+## Follow-up screen evidence — IMG_0735.mov and IMG_0736.mov
+
+Both clips remain on the kernel diagnostic framebuffer with no GUI handoff.
+IMG_0735.mov (6.0 s) shows SpringBoard SIGTRAP and no visible build ID or
+`VEUX GUI` marker. IMG_0736.mov (8.1 s) shows the new trace line
+`VEUX GUI: IOMFB user client provider=AppleCLCD framebuffer=1`. This reaches
+the IOMobileFramebuffer user-client start hook and confirms the provider casts
+to `AppleCLCD`; the line is emitted before `IOUserClient::start` returns, so it
+does not by itself prove client initialization completed.
+
+IMG_0736 still shows SpringBoard SIGTRAP at PC `0x1b0814ca8` with slide
+`0x146ac000`. The unslid PC is `0x19b968ca8`, the same
+`-[FBSDisplayMonitor _initWithBookendObserver:transformer:]+1160` nil-main-
+`CADisplay` trap established above. No first-valid-present marker or GUI
+handoff is visible. The screen does not show the CI build ID, so the trace line
+is evidence that patch 0124 code ran, but the exact run attribution is not
+visibly confirmed. The next investigation should follow how the started
+IOMobileFramebuffer client becomes a `CADisplay` entry and inspect the adjacent
+`IOMFB_FDR_Loader` exit (status 1) visible in the same clip. Its root launchd
+plist runs it for the `com.apple.fdr.load` matching event when a service has
+`IOMFBLaunchFDR=true`; the nonzero exit is worth investigating but does not by
+itself explain the missing `CADisplay`. No new phone write was made for these
+clips.

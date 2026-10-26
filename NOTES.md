@@ -2782,3 +2782,26 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - After reboot both ADB and Fastboot enumeration were empty. No fresh screen
   capture or visible build ID is available, so the runtime result and GUI
   handoff remain unverified despite the green CI and successful flash.
+
+### IMG_0735 and IMG_0736 display trace evidence — 2026-10-26
+
+- Reviewed both new clips with frame sampling and OCR. IMG_0735 (6.0 s) and
+  IMG_0736 (8.1 s) stay on the diagnostic framebuffer; neither demonstrates a
+  GUI handoff or visibly prints a build ID.
+- IMG_0736 visibly prints
+  `VEUX GUI: IOMFB user client provider=AppleCLCD framebuffer=1`. This proves
+  the IOMobileFramebuffer user-client start hook is reached and its provider
+  successfully casts to AppleCLCD. The message occurs before the call to
+  `IOUserClient::start`, so it does not alone prove the base start completed.
+  No first-valid-present marker is visible.
+- The same clip records SpringBoard SIGTRAP at PC `0x1b0814ca8`, slide
+  `0x146ac000`, unslid `0x19b968ca8`, resolving to the known
+  `FBSDisplayMonitor+1160` nil-main-CADisplay trap. It also shows
+  `IOMFB_FDR_Loader` exiting with status 1. Its root launchd plist runs it on
+  the `com.apple.fdr.load` matching event for services with
+  `IOMFBLaunchFDR=true`; this exit is not yet tied to missing `CADisplay`.
+  The trace marker supports that 0124 code ran, but the build ID is not visible;
+  exact CI-run attribution remains unconfirmed.
+- Next: inspect the IOMobileFramebuffer-to-CADisplay registration path and the
+  `IOMFB_FDR_Loader` failure. No phone write was made for these clips; do not
+  claim GUI bring-up succeeded.
