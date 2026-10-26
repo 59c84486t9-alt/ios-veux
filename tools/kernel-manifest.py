@@ -185,8 +185,8 @@ source_checks["veux_gui_scanout_requires_exact_firmware_geometry"] = all(
 )
 clip = fb.split("/* Clip in 64-bit coordinates:", 1)[1].split("uint64_t last = 0;", 1)[0]
 source_checks["veux_gui_rectangle_clipping_uses_checked_wide_arithmetic"] = (
-    "int64_t csx" in clip and "int64_t cdx" in clip
-    and "INT32_MAX" in clip and "csx = (int32_t)csx" in clip
+    "int64_t csx" in clip and "cdx = (int64_t)dx - fOffX" in clip
+    and "INT32_MAX" in clip and "sx = (int32_t)csx" in clip
     and "dx -= fOffX" not in clip and "w += dx" not in clip
     and "(int32_t)s->width - sx" not in clip
 )
