@@ -3043,12 +3043,33 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `OSData`, the type expected by IOMFB. The patch applies with zero fuzz after
   0123 and 0124. `tools/xnu-cc.py` compiled the changed
   `SweetFramebuffer.cpp` against CI 40329697379's build tree with 0/1 failures.
-- Next: validate the repository patch stack, commit and push, require green CI,
-  assemble and verify a wrapper from that exact artifact, then flash only
-  `boot_b` under the user's existing authorization. Do not write userdata or
-  replace the entitlement-repaired root. On-device success still needs a boot
-  showing IOMFB client readiness, selector/present activity, and GUI handoff.
 - CI 40355196690 stopped before compile because downstream patch 0126 still
-  matched the pre-fix numeric canvas setters. Updated its context to the new
-  byte-data property block; the follow-up CI must confirm the complete ordered
-  patch stack and kernel build.
+  matched the pre-fix numeric canvas setters. Commit `a1d2cbc` updates its
+  context, and follow-up CI 40356435384 confirmed the full patch stack/build.
+
+### Framebuffer CFData fix — green CI and boot_b flash — 2026-10-26
+
+- Commit `fb2cda0` changes patch 0125 to publish `canvas-width` and
+  `canvas-height` as OSData bytes. Commit `a1d2cbc` updates patch 0126's
+  downstream context so the ordered patch stack applies.
+- Strict CI run [40356435384](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40356435384)
+  succeeded. Repository preflight, XNU build, synthetic host bounds checks,
+  feature manifest, build-tree packaging and artifact uploads passed. Patches
+  0123–0128 are all marked APPLIED. Kernel SHA-256:
+  `f929f22561d6bb618456eaaa3b4785cf8e6459a8226d511adc38e589c124e419`.
+- Built wrapper
+  `shim/out/veux-xnu-40356435384-sandbox-iokit-trace/shim-boot-veux-xnu-40356435384-sandbox-iokit-trace.img`
+  from that exact CI kernel and patch-status artifact, using the verified
+  phone DTB and embedded ADT plus `veuxsandbox=1` and
+  `veuxiolog=backboardd,SpringBoard`. `verify-veux-wrapper.py` passed payload
+  reconstruction, build/run ID, boot-argument and DTB checks. Wrapper
+  SHA-256: `392420bf8340a7033b2f090ca192bb44fe4b8a5fb376a8f4a8f7cfc6b0e7cd0125`.
+- Fastboot confirmed serial `4078cac030c8`, product `veux`, unlocked state,
+  slot A active, and a 128 MiB `boot_b`. Only `boot_b` was flashed; send/write
+  both returned OKAY. Selected B and rebooted. No userdata or root image was
+  changed; the entitlement-repaired root remains preserved.
+- After reboot, neither ADB nor Fastboot enumerated at the immediate check.
+  This confirms the flash/reboot command sequence, not runtime GUI success.
+  Next: capture the display/serial boot and verify build ID 40356435384,
+  `canvas-width`/`canvas-height` setup, IOMFB client ready/selector/present
+  markers, and SpringBoard/backboardd outcome.

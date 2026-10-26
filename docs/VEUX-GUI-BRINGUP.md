@@ -510,11 +510,17 @@ stores the 32-bit framebuffer geometry as `OSData`. The changed patch applies
 with zero fuzz after patches 0123 and 0124. `tools/xnu-cc.py` compiled the
 changed `SweetFramebuffer.cpp` against successful CI 40329697379's build tree
 with 0/1 failures. This is a source-supported root-cause fix for the observed
-display-list crash. It still needs a new green CI build, an independently
-verified wrapper from that artifact, and on-device evidence of IOMFB client
-selectors/presents and GUI handoff.
+display-list crash. CI 40356435384 subsequently passed, and its wrapper was
+independently verified and flashed to `boot_b` as documented below. On-device
+IOMFB client selectors/presents and GUI handoff are still unconfirmed.
 
 The first CI attempt for this fix (40355196690) stopped during patching:
 0126 still expected the previous numeric canvas setters. Its context now
-follows 0125's byte-data properties; a rerun is required to validate the full
-ordered patch stack before creating or flashing a wrapper.
+follows 0125's byte-data properties; the next CI run confirmed the full ordered
+patch stack and kernel build.
+
+CI 40356435384 completed green with patches 0123–0128 applied. The verified
+wrapper built from its kernel and patch-status artifact was flashed only to
+`boot_b`; Fastboot confirmed the write, slot B selection and reboot. The
+immediate post-reboot USB check found neither ADB nor Fastboot. This confirms
+the flash sequence only; GUI success still requires on-device boot evidence.
