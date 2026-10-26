@@ -3373,3 +3373,12 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   reason, ten-minute wait, or visible asterisk. The earlier SpringBoard
   `.ips` stack and AppleKeyStore lookup provide the prior crash diagnosis;
   this clip cannot tell whether the newer AppleKeyStore build fixed it.
+
+- After the 40413116842 wrapper was flashed to `boot_b` and slot B selected,
+  the user reported that this attempt no longer reaches the Apple logo. At
+  23:52 CET, the host had no ADB, Fastboot, or USB enumeration. Exact screen,
+  whether the device is resetting or powered off, and the failure stage remain
+  unknown. Do not infer a kernel panic from the missing logo alone. Next:
+  identify the screen and restore Fastboot/recovery access, then collect
+  read-only boot evidence before changing another partition. `boot_a` remains
+  untouched.
