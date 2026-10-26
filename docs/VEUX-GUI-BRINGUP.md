@@ -88,8 +88,9 @@ is `0x1de83cca8`; the visible mediaserverd PC is `0x1c9d320cc`. The video does
 not visibly include the CI build ID, so attribution to wrapper 40252779285 is
 based on the immediately preceding verified slot-B flash/reboot sequence,
 not an on-screen build marker. This is a successful build and partition-write
-sequence but an unsuccessful GUI runtime test. Do not flash again until the
-new runtime evidence is investigated and a corrected, verified wrapper exists.
+sequence but an unsuccessful GUI runtime test. This result prompted the
+symbolication and trace-patch work recorded below; it is not a test of the
+later 40258406080 wrapper.
 
 ## Runtime root cause and trace follow-up
 
@@ -109,4 +110,35 @@ the generated ADT, not that IOKit created the nub, matched `AppleCLCD`, or
 registered a usable IOMobileFramebuffer service at runtime. Patch 0124 adds
 bounded logs for those steps and for the first framebuffer user-client opens
 and swaps. A green CI build and another video are required to tell which link
-is missing; the phone has not been written with this follow-up.
+is missing. The trace follow-up was later built and flashed as documented
+below; its on-device GUI result remains unverified because no post-reboot
+screen capture or device enumeration is available.
+
+## Trace build and reboot — 2026-10-26
+
+CI run `40257589855` exposed that the original `0124` framebuffer hunks were
+based on the pre-`0123` source layout. Commit `cddfa2a` rebuilt those hunks
+against the exact post-`0123` source from green run `40252779285`. Strict CI
+run `40258406080` then passed patch application, XNU compilation, the host
+bounds checks, the feature manifest and artifact packaging. Patch status
+records `0124-veux-display-enumeration-trace.patch APPLIED`.
+
+The CI kernel SHA-256 is
+`d9df6c247e6da4f7b39840c273a1a4edd19b277d86e1d62729e42ea4c88b739a`.
+The wrapper at
+`shim/out/veux-xnu-40258406080-rw-gui/shim-boot-veux-xnu-40258406080-rw-gui.img`
+was reconstructed from the previously verified boot-v2 shim/header, the CI
+kernel and the shim ADT, with the known phone `dtb_1.dtb`. The independent
+wrapper verifier passed; wrapper SHA-256 is
+`bc3e23941a64cf27ea2aefd6820730503b692a1eb2fa5c462b5bbcf55d6bf25f` and the
+DTB SHA-256 remains
+`08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+
+The user requested flashing this wrapper. Fastboot identified serial
+`4078cac030c8`, product `veux`, unlocked state, active slot B and `boot_b`
+size `0x8000000`. It wrote only `boot_b` successfully and accepted reboot;
+no userdata or other partition was written, and the entitlement-repaired root
+was preserved. After reboot neither ADB nor Fastboot enumerated. This confirms
+the wrapper write/reboot sequence only; it does not confirm the new build ID,
+display-service trace output or GUI handoff on-screen. Obtain a new screen/video
+capture before claiming on-device GUI validation.

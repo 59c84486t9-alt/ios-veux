@@ -2752,3 +2752,33 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Next: commit and push the correction, run strict XNU CI, then package and
   independently verify the new wrapper. Keep the entitlement-repaired root;
   phone writes remain limited to the confirmed `boot_b` wrapper operation.
+
+### VEUX display trace build 40258406080 and slot-B flash — 2026-10-26
+
+- CI run `40257589855` failed before compilation because trace patch `0124`
+  used pre-`0123` `SweetFramebuffer.cpp` hunk context. Commit `cddfa2a`
+  regenerated the framebuffer hunks from the exact packaged post-`0123`
+  source tree. Local repository/Python validation passed and the corrected
+  patch applies to that source snapshot.
+- CI run `40258406080` completed successfully: strict patch application,
+  XNU compilation, synthetic host bounds checks, kernel feature manifest,
+  build-tree packaging and artifact upload passed. Patch status confirms
+  `0124-veux-display-enumeration-trace.patch APPLIED`. Kernel SHA-256:
+  `d9df6c247e6da4f7b39840c273a1a4edd19b277d86e1d62729e42ea4c88b739a`.
+- Assembled and independently verified
+  `shim/out/veux-xnu-40258406080-rw-gui/shim-boot-veux-xnu-40258406080-rw-gui.img`
+  using the exact CI kernel, the ADT embedded in the prior verified wrapper,
+  and phone `dtb_1.dtb`. Wrapper SHA-256:
+  `bc3e23941a64cf27ea2aefd6820730503b692a1eb2fa5c462b5bbcf55d6bf25f`;
+  DTB SHA-256:
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+  The verifier confirms exact payload reconstruction, boot args, build/run ID,
+  and DTB.
+- User explicitly requested flashing. Fastboot identified serial `4078cac030c8`,
+  product `veux`, unlocked, active slot B, and `boot_b` size `0x8000000`. Only
+  `boot_b` was written (`Sending`/`Writing` OKAY); `fastboot reboot` returned
+  OKAY. No userdata or other partition was written. The entitlement-repaired
+  root remains in place; do not restore the older image.
+- After reboot both ADB and Fastboot enumeration were empty. No fresh screen
+  capture or visible build ID is available, so the runtime result and GUI
+  handoff remain unverified despite the green CI and successful flash.
