@@ -3340,3 +3340,36 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   The phone remains in slot-A recovery; current `boot_b` is the scan wrapper;
   `boot_a` remains untouched. A later failure is possible after AppleKeyStore
   becomes visible and must be read from the next log.
+
+### VEUX AppleKeyStore build and `boot_b` trial — 2026-10-26
+
+- Corrected patch 0130 against the exact post-0129 source after CI run
+  40412381136 caught the missing display-service context. The follow-up strict
+  run [40413116842](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40413116842)
+  passed patch application, XNU build, synthetic host checks, and the kernel
+  feature manifest. Kernel SHA-256:
+  `c762eb704fe1eaf686daf64f5c741441456efbf670065f30c8af0e94b1da5fba`.
+- Built and verified wrapper
+  `shim/out/veux-xnu-40413116842-applekeystore/shim-boot-veux-xnu-40413116842-applekeystore.img`.
+  Its payload reconstructs byte-for-byte from the CI kernel and embedded ADT;
+  its phone DTB hash is `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+  Wrapper SHA-256:
+  `defd18bcf1cc7889740944c559e38a116c676e9ed92832031213c047b69baa59`.
+  Boot args remain the established `rootrw=1 ufsrw=1` GUI configuration, with
+  `veuxlog=1` disabled.
+- Recovery ADB rebooted to Fastboot. Verified serial `4078cac030c8`, product
+  `veux`, unlocked, slot A active, and 128 MiB `boot_b`. Flashed only this
+  wrapper to `boot_b`, selected slot B, confirmed it active, and rebooted.
+  No write to `boot_a` or direct userdata flash occurred.
+- At roughly two minutes after reboot, neither ADB nor Fastboot enumerated on
+  the host. There is no screen capture yet, so do not conclude that SpringBoard
+  now starts or that the AppleKeyStore lookup succeeded. The next diagnostic
+  needs the current screen/photo; if it falls back to Fastboot, read the new
+  boot state from recovery before changing another component.
+- The linked Drive file `VID_20261026_220608.mp4` (90.69 seconds) is useful:
+  it shows the XNU diagnostic screen, repeated backboardd IOKit matching
+  queries for `IOAcceleratorES` returning `0 found`, and the Apple logo at
+  about 80 seconds. It stops at the logo, with no GUI handoff, panic/reset
+  reason, ten-minute wait, or visible asterisk. The earlier SpringBoard
+  `.ips` stack and AppleKeyStore lookup provide the prior crash diagnosis;
+  this clip cannot tell whether the newer AppleKeyStore build fixed it.
