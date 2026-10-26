@@ -42,6 +42,7 @@ for patch in (
     "0127-veux-iomfb-display-list-properties.patch",
     "0128-veux-gui-exit-summary.patch",
     "0129-veux-normalize-iomfb-device-types.patch",
+    "0130-veux-register-software-applekeystore.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -64,6 +65,7 @@ needles = {
     "software_gui_iomfb_device_type_normalization": b"VEUX GUI: disp0 device_type canonicalized=%u previous=%s",
     "software_gui_userclient_base_fallback": b"VEUX GUI: IOMFB base start rejected; continuing software client",
     "software_gui_swap_trace": b"VEUX GUI: framebuffer swap %u mask=0x%x",
+    "software_apple_keystore_service": b"SWEET AKS: AppleKeyStore registered (no passcode, unlocked)",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
     "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",

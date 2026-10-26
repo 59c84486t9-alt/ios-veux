@@ -695,9 +695,7 @@ listener strings and `Version 16.7.16 (Build 20H392)`, not the assertion reason.
 The trap PC/LR is `0x1b76968c0`, slide `0x9290000`, unslid `0x1ae4068c0`, FAR
 `0x1e6ea4f40`. Several unrelated daemons trap at the same PC, so the address
 alone does not prove an FBSDisplayMode failure. The embedded ADT already has
-`/chosen/display-scale=3`. Next, symbolicate this PC and its frames against the
-exact 20H392 dyld cache; if unavailable, add focused logging of IOMFB mode
-refresh rate, scale, rotation and gamut before changing display values.
+`/chosen/display-scale=3`.
 
 The logger changed its bounded final 4 MiB + 4 KiB userdata region. After
 preserving the decoded scan log, restored that exact 1,025-block range from
@@ -705,3 +703,33 @@ preserving the decoded scan log, restored that exact 1,025-block range from
 pre-logger SHA-256 `06955cde7f98b9503653b906e9634732d59a17a6dc2cb1a0e453fbdd4adaab86`.
 No other userdata range or `boot_a` was written. The phone remains in slot-A
 recovery; `boot_b` retains the scan wrapper.
+
+### SpringBoard crash report identifies missing AppleKeyStore — 2026-10-26
+
+The read-only HFS+ image of the 16 GiB iOS root volume contains four
+SpringBoard `.ips` reports for build `20H392`. The latest report,
+`SpringBoard-1969-12-31-173201.00016.ips`, records uptime 5,500 seconds and
+111 consecutive SpringBoard crashes. Its main-thread stack is
+`MKBEventsRegister.cold.2` → `MKBEventsRegister` → `-[SBFMobileKeyBag init]` →
+`SBUIBiometricResource` → `SBBiometricsService` →
+`SpringBoard initializeSystemServicesBeforeApplicationDidFinishLaunching`.
+The `MKBEventsRegister.cold.2` string is “failed to find %s service”, with the
+argument `AppleKeyStore`; the breakpoint is the intentional `brk #1` in that
+fatal error helper. This is the immediate SpringBoard failure after the first
+display present, and explains why waiting longer cannot complete this boot.
+
+The 403842 kernel ring independently logs
+`IOService:/IOResources/AppleKeyStore -> none` and a matching query for
+`AppleKeyStore` returning `none`; `init_data_protection` also reports “No SEP
+present on this device.” The existing software AppleKeyStore implementation is
+guarded by `#if defined(SWEET)`, and its match record is inside the SWEET board
+configuration block, so neither is enabled for the VEUX build. The specific
+next fix is to register that existing no-passcode software service for
+`ARM64_BOARD_CONFIG_VEUX`. Patch 0130 adds the service to the VEUX match table
+and compiles its existing implementation for VEUX. This may expose a later
+missing-keybag or event-notification incompatibility, which should be diagnosed
+from the next boot log rather than guessed at now.
+
+The exact shared cache confirms `MKBEventsRegister.cold.2` at unslid address
+`0x1ae406894`, with its `brk #1` at `0x1ae4068c0`. The report's matching
+`MobileKeyBag` image UUID is `18e44f74-0a9a-3b74-b9e3-0c48f331cc03`.

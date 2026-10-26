@@ -3308,9 +3308,31 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   region. After preserving the decoded ring, restored exactly those 1,025
   blocks from the backup and read them back; the restored hash matches the
   backup. No other userdata range was written.
-- Next: use the exact 20H392 dyld shared cache to symbolicate the new unslid PC
-  and frames. If that is unavailable, add focused IOMFB mode/property logging
-  for refresh rate, scale, rotation and gamut before changing display values.
-  The literal visual mark is not decoded by the kernel ring. Phone is left in
+- The literal visual mark is not decoded by the kernel ring. Phone is left in
   slot-A recovery; `boot_b` still contains the scan wrapper; `boot_a` is
   untouched.
+
+### SpringBoard crash reports find missing AppleKeyStore — 2026-10-26
+
+- Read the 16 GiB HFS+ root volume as a read-only host-side image and mounted
+  it read-only. The latest of four `SpringBoard*.ips` reports is
+  `SpringBoard-1969-12-31-173201.00016.ips` (build 20H392, uptime 5,500 s,
+  consecutive crash count 111). Its main-thread stack enters
+  `MKBEventsRegister.cold.2` through `SBFMobileKeyBag`, biometrics, and
+  SpringBoard service initialization. Exact cache disassembly shows the cold
+  helper logs “failed to find %s service” with argument `AppleKeyStore`, then
+  executes `brk #1`; unslid fault address is `0x1ae4068c0`. This is the reason
+  for the repeatable SpringBoard SIGTRAP after the software display's first
+  present. More wait time cannot fix this boot.
+- The 403842 ring independently records `AppleKeyStore -> none` for both a
+  service-path lookup and matching query, and `init_data_protection: No SEP
+  present on this device`. The current existing software AppleKeyStore is
+  gated by `#if defined(SWEET)` and its service match is within the SWEET board
+  block, so it is absent on VEUX.
+- Added patch 0130 to enable the existing no-passcode software AppleKeyStore
+  for `ARM64_BOARD_CONFIG_VEUX`, and added it to the strict patch/build
+  manifest. The patch applies cleanly to the saved XNU tree. Next: commit and
+  build the kernel, verify the resulting wrapper, then test from `boot_b` only.
+  The phone remains in slot-A recovery; current `boot_b` is the scan wrapper;
+  `boot_a` remains untouched. A later failure is possible after AppleKeyStore
+  becomes visible and must be read from the next log.
