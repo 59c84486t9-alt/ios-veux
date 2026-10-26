@@ -79,6 +79,38 @@ or input port. Touch/navigation is not implemented, and backboardd may expose
 further service dependencies. Watchdog is a check-in compatibility service;
 it never arms a hardware timer.
 
+## Touch bring-up target — 2026-10-27
+
+The phone-specific DTB carried by the successful wrapper identifies the touch
+device as `goodix,gt9896` at I2C address `0x5d`, on GENI SE8 at physical
+`0x04c88000` (window `0x4000`). Its reset/IRQ/AVDD/DVDD GPIOs are 21/22/51/44;
+IRQ is falling-edge. The DT advertises sensor coordinates 8640x19200 and does
+not set `goodix,swap-axis`, `goodix,x2x`, or `goodix,y2y`. The display canvas
+used by the VEUX GUI is 1080x2400.
+
+The existing tested SWEET path supplies reusable GT9896 event parsing and HID
+event generation, but it assumes SWEET's GENI SE7 address and GPIO/rail
+configuration. Its HID adapter clamps coordinates to 1080x2400 before
+normalizing them, so VEUX sensor coordinates need an explicit 8:1 conversion
+before calling it. That scale follows the VEUX DT maxima and display dimensions;
+confirm observed touch reports at corners before treating the mapping as
+validated.
+
+The local pinned Linux reference (`../research/kernel_xiaomi_sm6375`, commit
+`f4b8a13a43a130a9ab83cc985ce4d4421291ae6`) describes the same VEUX GT9896 node
+and powers AVDD then DVDD through those GPIOs before reset. It is reference
+behavior, not proof of ABL handoff or of the exact recovery kernel. In
+particular, XNU still needs SE8 clock integration and evidence that GENI I2C
+firmware is loaded. Do not enable the SWEET driver on VEUX or issue guessed
+clock/PMIC/register writes.
+
+Next implementation should be a separate VEUX-only touch path, gated by an
+explicit boot argument. First stage should log read-only SE8, pin and GPIO
+state; then validate a bounded Goodix identity read; only then add the reviewed
+GPIO power/reset sequence and event polling/HID delivery. Keep the default
+image unchanged and test only from `boot_b`, preserving the lock-screen boot
+and `boot_a`.
+
 ## Validation and pending hardware test
 
 Local syntax checks: all seven changed translation units passed; after the

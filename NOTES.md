@@ -3449,3 +3449,30 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   flag's causal role is strongly suggested but not isolated experimentally.
   Preserve the successful state; do not reboot or flash until the user wants
   another test.
+
+### VEUX touch port reconnaissance — 2026-10-27
+
+- The lock screen is working but the VEUX image has no active input driver.
+  Read the selected phone DTB bundled in the successful wrapper: its Goodix
+  GT9896 is at I2C `0x5d` on GENI SE8, base `0x04c88000`, window `0x4000`;
+  reset/IRQ/AVDD/DVDD are GPIOs 21/22/51/44, IRQ falling-edge. Sensor maxima
+  are 8640x19200. No swap or axis inversion properties are set.
+- The existing SWEET driver and HID service are valuable protocol/HID
+  references, but the driver is SWEET-only and hard-codes SE7/GPIO/clock setup.
+  The HID adapter clamps input to 1080x2400, so a VEUX port must map sensor
+  coordinates to the 1080x2400 canvas (nominally divide each axis by 8) before
+  dispatch. This mapping is inferred from DT maxima and display dimensions;
+  corner reports on-device will be required to validate it.
+- Cross-checked `../research/kernel_xiaomi_sm6375` at pinned commit
+  `f4b8a13a43a130a9ab83cc985ce4d4421291ae6`: matching VEUX GT9896 node and
+  Linux power sequence are present, but this is not the exact recovery-kernel
+  source and does not prove ABL left SE8 firmware/clock state usable by XNU.
+- Added the exact target and constraints to `docs/VEUX-GUI-BRINGUP.md`. No
+  source driver, clock, GPIO, or power writes were added; no build, reboot, or
+  flash was performed. The phone remains on the successful lock screen; boot_b
+  remains the sandbox/iolog wrapper and boot_a remains untouched.
+- Next: add a separate VEUX-only, explicit-boot-arg path. Begin with read-only
+  SE8/GPIO state and bounded GT9896 identity diagnostics. Only after controller
+  handoff and clock requirements are understood should a reviewed power/reset
+  sequence and HID event polling be enabled. Keep the successful default path
+  unchanged and use boot_b for tests.
