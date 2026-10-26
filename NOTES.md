@@ -3014,3 +3014,37 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   returned OKAY, but neither ADB nor Fastboot enumerated afterward. No new
   recovery log read or partition write occurred in this turn. Preserve the
   entitlement-repaired root and the already-flashed sandbox wrapper.
+
+### Recovery crash reports identify the framebuffer property type bug — 2026-10-26
+
+- After the user clarified recovery ADB is available only from slot A, selected
+  A and rebooted to recovery. ADB authorization was approved; recovery ADB is
+  root. `/sys/fs/pstore` and `/proc/last_kmsg` are empty. The userdata
+  partition was captured read-only to the host; all HFS repair work below was
+  on an APFS copy-on-write clone, never on the phone.
+- The captured HFSX root contains `IOMFB_FDR_Loader` crash reports at 60 and
+  82 seconds uptime and repeated `backboardd` reports. There is no
+  `SpringBoard*.ips` in the captured CrashReporter directories. The latest
+  backboardd report is at 640 seconds uptime, crash count 50.
+- `IOMFB_FDR_Loader` throws an Objective-C exception in
+  `getEDTProperty+104`, called by `IOMobileFramebufferOpen+160` while opening
+  the display. Disassembly shows `getEDTProperty` looks up `canvas-width` and
+  `canvas-height`, then calls `CFDataGetLength` on the returned property.
+  `SweetFramebuffer.cpp` published those values with the numeric
+  `setProperty(key, uint64, 32)` overload, which creates `OSNumber`, not
+  `OSData`/`CFData`. This type mismatch explains the `doesNotRecognizeSelector`
+  exception. The backboardd report independently shows the resulting abort in
+  `IOMobileFramebufferCreateDisplayList+252`, under
+  `CA::WindowServer::display_count_of_type` and
+  `-[CAWindowServer _detectDisplays]`. This is the direct display-enumeration
+  failure; the sandbox-omission theory is superseded for this crash.
+- Corrected patch 0125 to publish each 32-bit geometry value through
+  `IORegistryEntry::setProperty(key, bytes, length)`, which wraps it as
+  `OSData`, the type expected by IOMFB. The patch applies with zero fuzz after
+  0123 and 0124. `tools/xnu-cc.py` compiled the changed
+  `SweetFramebuffer.cpp` against CI 40329697379's build tree with 0/1 failures.
+- Next: validate the repository patch stack, commit and push, require green CI,
+  assemble and verify a wrapper from that exact artifact, then flash only
+  `boot_b` under the user's existing authorization. Do not write userdata or
+  replace the entitlement-repaired root. On-device success still needs a boot
+  showing IOMFB client readiness, selector/present activity, and GUI handoff.

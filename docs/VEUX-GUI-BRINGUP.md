@@ -476,3 +476,40 @@ The host detected the phone in Fastboot on slot B. `fastboot reboot recovery`
 returned OKAY, but neither ADB nor Fastboot enumerated afterward. No new
 recovery log read or partition write occurred during this check. The
 entitlement-repaired root remains preserved.
+
+## Recovery crash reports: `canvas-width` and `canvas-height` must be CFData
+
+After selecting slot A and rebooting to recovery, the user approved ADB; the
+host connected as root. Recovery pstore and `/proc/last_kmsg` are empty. A
+read-only capture of the first 16 GiB HFSX volume was made on the host. The
+volume was repaired and mounted only through an APFS copy-on-write clone; the
+phone's userdata was never modified.
+
+The captured CrashReporter directory contains two
+`IOMFB_FDR_Loader` `.ips` files at 60 and 82 seconds uptime, plus repeated
+backboardd reports through 640 seconds uptime (50 consecutive backboardd
+crashes). It has no `SpringBoard*.ips` report. The IOMFB loader's main-thread
+exception backtrace is:
+
+`-[NSObject doesNotRecognizeSelector:]` → `getEDTProperty+104` →
+`IOMobileFramebufferOpen+160` → `iomfb_get_display`.
+
+The iOS 16.7.16 `IOMobileFramebuffer` implementation disassembly shows
+`getEDTProperty` looks up `canvas-width` and `canvas-height`, then calls
+`CFDataGetLength` on the property value. VEUX's patch 0125 had published those
+values with `setProperty(key, uint64, 32)`, which constructs an `OSNumber`.
+That object is not the `OSData`/`CFData` expected by this framework path, so
+the unchecked call throws `doesNotRecognizeSelector`. The latest backboardd
+report confirms the same failure reaches display discovery:
+`IOMobileFramebufferCreateDisplayList+252` →
+`CA::WindowServer::display_count_of_type` →
+`-[CAWindowServer _detectDisplays]`.
+
+Patch 0125 now uses `IORegistryEntry::setProperty(key, bytes, length)`, which
+stores the 32-bit framebuffer geometry as `OSData`. The changed patch applies
+with zero fuzz after patches 0123 and 0124. `tools/xnu-cc.py` compiled the
+changed `SweetFramebuffer.cpp` against successful CI 40329697379's build tree
+with 0/1 failures. This is a source-supported root-cause fix for the observed
+display-list crash. It still needs a new green CI build, an independently
+verified wrapper from that artifact, and on-device evidence of IOMFB client
+selectors/presents and GUI handoff.

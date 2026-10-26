@@ -1,6 +1,6 @@
 --- a/iokit/Kernel/arm/SweetFramebuffer.cpp
 +++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
-@@ -252,6 +252,16 @@
+@@ -252,6 +252,17 @@
  	setProperty(kIOUserClientClassKey, "IOMobileFramebufferUserClient");
  	setProperty("external", false);
  	setProperty("DisplayPipePlaneBaseAlignment", 64ULL, 32);
@@ -8,8 +8,9 @@
 +	/* Keep the nub properties IOMFB reads explicit in the service's provider. */
 +	if (provider != NULL) {
 +		provider->setProperty("device_type", "display-subsystem");
-+		provider->setProperty("canvas-width", (unsigned long long)fLogicalW, 32);
-+		provider->setProperty("canvas-height", (unsigned long long)fLogicalH, 32);
++		/* IOMobileFramebuffer getEDTProperty reads these values as CFData. */
++		provider->setProperty("canvas-width", &fLogicalW, sizeof(fLogicalW));
++		provider->setProperty("canvas-height", &fLogicalH, sizeof(fLogicalH));
 +	}
 +	/* This software provider has no panel FDR or physical display controller. */
 +	setProperty("IOMFBLaunchFDR", false);
