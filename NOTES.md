@@ -2875,3 +2875,28 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   the main display path. Continue only after obtaining boot evidence past the
   usermanagerd task or another observable run; preserve the repaired root and
   limit any future phone write to the already authorized `boot_b` partition.
+
+### IMG_0747 and IOMFB display-list property experiment — 2026-10-26
+
+- The user identifies IMG_0747 as later footage from the same boot as
+  IMG_0742–IMG_0744. The screen shows backboardd aborting and SpringBoard's
+  repeated SIGTRAP. SpringBoard PC `0x1c9e84ca8` minus slide `0x2e51c000` is
+  unslid `0x19b968ca8`, the known FBSDisplayMonitor+1160 nil-main-CADisplay
+  trap. No client-ready/first-present marker or build ID is visible in this
+  clip. The main display still does not enumerate.
+- The iOS 16 IOMobileFramebuffer discovery path reads `dfr`, `AppleTV`, and
+  `external` from each matching service. Existing AppleCLCD code sets only
+  `external=false` explicitly. Added patch `0127` to set all three service
+  flags false and log whether the registry property writes were accepted. This
+  is a targeted hypothesis; no causal success is claimed yet.
+- Patch 0127 applies with zero fuzz to the exact XNU source tree packaged by
+  successful CI 40265617103. `tools/xnu-cc.py` compiles the changed
+  `SweetFramebuffer.cpp` against that build's arm64 configuration with 0 of 1
+  files failed. `tools/validate-repo.py`, Python syntax compilation, and
+  `git diff --check` pass. Workflow and kernel manifest now require patch 0127,
+  its binary marker, and source assertions for all three properties.
+- Next: commit and push this candidate, dispatch strict macOS 13.5 DEVELOPMENT
+  VEUX CI, assemble and independently verify a wrapper from the green artifact,
+  then flash only `boot_b` under the existing authorization. Preserve the
+  entitlement-repaired root and distinguish build/flash success from a GUI
+  runtime pass.

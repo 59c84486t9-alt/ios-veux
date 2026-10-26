@@ -235,3 +235,22 @@ verified `boot_b` flash remain successful build/write milestones, not GUI
 validation.
 
 CI [40265617103](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40265617103) passed the strict build and all feature checks. Kernel SHA-256: `9402dc7e1033db8e72d5be67e03e93644f0609a37af9f141e8dd5f68b70af7b1`. Verified wrapper SHA-256: `7c33d9018630e6d0cc3c56136c58fd1136f05052b10272a68bbea6b1ab0a5b3a`. The wrapper was flashed only to slot-B `boot_b`; transfer, write, and reboot returned OKAY. No userdata was written. ADB and Fastboot are absent immediately after reboot, so this build's on-device runtime outcome remains unverified.
+
+## Same-boot failure evidence — IMG_0747.mov
+
+The user identifies IMG_0747 as later footage from the same boot sequence as
+IMG_0742–IMG_0744. It shows backboardd aborting and SpringBoard repeatedly
+trapping. The SpringBoard PC is `0x1c9e84ca8` with slide `0x2e51c000`, giving
+unslid `0x19b968ca8`, the known
+`-[FBSDisplayMonitor _initWithBookendObserver:transformer:]+1160` nil-main-
+`CADisplay` branch. No IOMFB client-ready or first-present line is visible in
+this clip, and there is no build ID. This confirms that the observed boot did
+not reach the GUI, but it does not identify which display-list step failed.
+
+The iOS 16 IOMobileFramebuffer discovery path reads `dfr`, `AppleTV`, and
+`external` from each matching framebuffer service. AppleCLCD already publishes
+`external=false`; patch 0127 explicitly sets the three flags to false on the
+software framebuffer service and logs setter results. This is a targeted
+metadata hypothesis. Strict CI and a verified slot-B wrapper are required
+before the experiment is flashed; on-device success still requires a later
+client-ready/first-present marker and no SpringBoard trap.

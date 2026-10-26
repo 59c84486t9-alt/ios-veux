@@ -39,6 +39,7 @@ for patch in (
     "0124-veux-display-enumeration-trace.patch",
     "0125-veux-software-framebuffer-registry-properties.patch",
     "0126-veux-iomfb-client-start-fallback.patch",
+    "0127-veux-iomfb-display-list-properties.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -56,6 +57,7 @@ needles = {
     "software_gui_userclient_init_trace": b"VEUX GUI: IOMFB client initialized process=%s type=%u",
     "software_gui_userclient_ready_trace": b"VEUX GUI: IOMFB client ready process=%s",
     "software_gui_fdr_provider_policy": b"VEUX GUI: FDR policy provider=%u service=%u",
+    "software_gui_iomfb_list_properties": b"VEUX GUI: IOMFB list properties dfr=%u AppleTV=%u external=%u",
     "software_gui_userclient_base_fallback": b"VEUX GUI: IOMFB base start rejected; continuing software client",
     "software_gui_swap_trace": b"VEUX GUI: framebuffer swap %u mask=0x%x",
     "surface_service": b"IOCoreSurfaceRoot",
@@ -203,6 +205,14 @@ source_checks["veux_gui_trace_covers_nub_driver_and_userclient"] = all(
         (fb, "VEUX GUI: AppleCLCD registered size=%ux%u surface=%u"),
         (fb, "VEUX GUI: IOMFB user client provider=%s framebuffer=%u"),
         (fb, "VEUX GUI: framebuffer swap %u mask=0x%x"),
+    )
+)
+source_checks["veux_gui_display_list_flags_are_explicit"] = all(
+    token in fb for token in (
+        'setProperty("dfr", false)',
+        'setProperty("AppleTV", false)',
+        'setProperty("external", false)',
+        'VEUX GUI: IOMFB list properties dfr=%u AppleTV=%u external=%u',
     )
 )
 clip = fb.split("/* Clip in 64-bit coordinates:", 1)[1].split("uint64_t last = 0;", 1)[0]

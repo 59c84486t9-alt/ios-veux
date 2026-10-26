@@ -1,0 +1,16 @@
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -266,5 +266,12 @@
+ 	IOLog("VEUX GUI: FDR policy provider=%u service=%u\n",
+ 	    (unsigned int)providerFDRDisabled, (unsigned int)serviceFDRDisabled);
++	/* The iOS 16 display-list callback reads these flags from each service. */
++	bool dfrPropertySet = setProperty("dfr", false);
++	bool appleTVPropertySet = setProperty("AppleTV", false);
++	bool externalPropertySet = setProperty("external", false);
++	IOLog("VEUX GUI: IOMFB list properties dfr=%u AppleTV=%u external=%u\n",
++	    (unsigned int)dfrPropertySet, (unsigned int)appleTVPropertySet,
++	    (unsigned int)externalPropertySet);
+ #endif
+ 	registerService();
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
