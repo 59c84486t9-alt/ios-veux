@@ -612,3 +612,30 @@ selected slot A and rebooted to recovery. ADB now sees the phone as
 been read. The next step is to accept the USB debugging prompt on the phone,
 then read pstore/last-kmsg and the current boot logs before changing the
 kernel again. No partition or userdata was written in this handoff.
+
+### Recovery follow-up: 403842 readback and the persisted ring
+
+The user enabled ADB; recovery ADB is root on serial `4078cac030c8`, slot
+`_a`. `/sys/fs/pstore` is empty and `/proc/last_kmsg` is absent. A read-only
+readback of the first 17,203,200 bytes of `boot_b` matches the verified 403842
+wrapper exactly (SHA-256
+`7024eba36ca05c9c17cee70bb342b1890b40d64eeffc5751da64e3445e711d76`). This
+confirms the currently installed B image; the clip itself has no readable
+build ID, so it cannot independently identify the image used while filming.
+
+The bounded ring pull returned 16,990 bytes, flush sequence 16,990, SHA-256
+`3267a899aa0978bd583a7d4e3de0a8714c72c5ccff6c9de8f724936d9eb89dbd`. Its
+boot-args record has `veuxlog=1` but lacks 403842's `rootrw=1 ufsrw=1`,
+`veuxsandbox=1`, `veux_gui=1`, and `veuxiolog=backboardd,SpringBoard`, so it is
+from an older boot and cannot explain the latest 0129 result. That earlier
+read-only boot failed launchd `mount-phase-1`: `mount_hfs` received
+`Read-only file system`, then BindFS could not find
+`/private/preboot/<boot-manifest-hash>/usr/standalone/firmware` (`ENOENT`).
+Launchd requested a panic and reboot. The sequence is a useful explanation for
+the earlier reboot loop only.
+
+The 403842 boot arguments omit `veuxlog=1`, so no boot-specific ring was
+written for that test. To identify why the latest run stayed at the Apple logo,
+the next diagnostic boot needs a unique persisted log/build marker. Adding the
+existing logger writes its bounded 4 MiB + 4 KiB ring at the userdata tail; no
+new boot or such write has been performed yet.

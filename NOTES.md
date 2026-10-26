@@ -3184,3 +3184,28 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   read yet. Next: the user must accept the USB debugging authorization on the
   phone; then inspect pstore/last-kmsg and the latest boot's logs read-only
   before choosing another kernel or display change.
+
+### Recovery ADB follow-up — exact 403842 boot image and older ring — 2026-10-26
+
+- The user enabled ADB. Recovery ADB is now root on serial `4078cac030c8`,
+  slot `_a`. `/sys/fs/pstore` is empty and `/proc/last_kmsg` is absent.
+- Read-only readback of the first 17,203,200 bytes of `boot_b` matched the
+  403842 wrapper byte-for-byte (SHA-256
+  `7024eba36ca05c9c17cee70bb342b1890b40d64eeffc5751da64e3445e711d76`). The
+  current B image is therefore confirmed as the verified 0129 wrapper.
+- `tools/veux-log-pull.sh` returned a 16,990-byte ring (flush sequence 16,990,
+  SHA-256 `3267a899aa0978bd583a7d4e3de0a8714c72c5ccff6c9de8f724936d9eb89dbd`).
+  It is from an older boot: its launchd boot-args line has `veuxlog=1` but lacks
+  403842's `rootrw=1 ufsrw=1`, `veuxsandbox=1`, `veux_gui=1`, and
+  `veuxiolog=backboardd,SpringBoard`. Do not attribute this ring to the latest
+  clip or 0129 image.
+- That older ring records a read-only root, then `mount-phase-1` failure:
+  `mount_hfs` got `Read-only file system`; `BindFS` could not find
+  `/private/preboot/<boot-manifest-hash>/usr/standalone/firmware` (`ENOENT`).
+  Launchd reports `Boot task failed: mount-phase-1`, says it will panic in 3
+  seconds, and requests reboot. This explains a prior logo/reboot loop, not the
+  latest RW 403842 test.
+- The 403842 boot args do not include `veuxlog=1`, so this read did not capture
+  that boot. Next useful evidence is a fresh boot-specific log with a unique
+  build ID. Enabling the existing logger would write its bounded 4 MiB + 4 KiB
+  tail ring in userdata; no such write or new boot was performed here.
