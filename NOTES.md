@@ -3216,4 +3216,13 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   payload byte except adding `veuxlog=1` in the payload boot arguments. Its
   adjacent manifest records the exact args and effects. It has not been booted;
   `rootrw=1 ufsrw=1` makes the HFS root writable, and `veuxlog=1` writes the
-  bounded userdata-tail ring. Await confirmation before starting this test.
+  bounded userdata-tail ring.
+- ADB recovery rebooted to Fastboot on slot A. `fastboot boot <candidate>` was
+  attempted and rejected by the bootloader with `remote: 'unknown command'`;
+  no image was booted and no partition was written. Fastboot still reports
+  product `veux`, slot A, and a 128 MiB `boot_b`. The saved readback
+  `/tmp/boot_b-prefix.raw` still hashes exactly to the original 403842 wrapper.
+- To run the logger test, the remaining route is to flash the prepared
+  candidate to `boot_b`, activate B, and reboot. This is a partition write and
+  also boots the existing RW-root args plus the bounded logger write; obtain
+  explicit confirmation before doing it.

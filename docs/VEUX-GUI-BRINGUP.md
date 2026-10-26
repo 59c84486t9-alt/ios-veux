@@ -647,4 +647,8 @@ The only binary change from the currently installed image is the added
 `veuxlog=1` payload boot argument; image size and outer kernel/header/DTB are
 unchanged. It retains `rootrw=1 ufsrw=1`, so booting it leaves the HFS root
 writable and writes the bounded logger ring. It has not been booted pending
-confirmation for that UFS write.
+confirmation for that UFS write. A temporary `fastboot boot` attempt returned
+`remote: 'unknown command'`; it did not boot or write the image. The device is
+back in Fastboot on slot A. The only available test route is to flash the
+candidate to `boot_b`, activate B and reboot. This requires confirmation
+because it writes a boot partition and runs the RW-root/logger experiment.
