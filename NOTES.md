@@ -2846,3 +2846,32 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Strict CI run [40265617103](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40265617103) passed repository preflight, zero-fuzz patch application (0126 APPLIED), XNU compile, synthetic bounds checks, feature manifest, build-tree packaging, and artifact upload. Kernel SHA-256: `9402dc7e1033db8e72d5be67e03e93644f0609a37af9f141e8dd5f68b70af7b1`.
 - Assembled wrapper `shim/out/veux-xnu-40265617103-rw-gui/shim-boot-veux-xnu-40265617103-rw-gui.img` from that exact CI kernel, the exact ADT embedded in the prior verified wrapper, the phone DTB, and the previously verified shim kernel/header. Independent verification passed. Wrapper SHA-256: `7c33d9018630e6d0cc3c56136c58fd1136f05052b10272a68bbea6b1ab0a5b3a`; DTB SHA-256: `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
 - Fastboot identified serial `4078cac030c8`, product `veux`, current slot B, `boot_b` size `0x8000000`. Flashed only `boot_b`; Sending/Writing and reboot returned OKAY. No userdata write occurred; preserve the entitlement-repaired root and do not restore the stripped-entitlement image. Immediately after reboot, neither ADB nor Fastboot enumerated the phone. Wait for post-flash evidence showing build ID `40265617103`, the FDR policy/client-ready markers, and the SpringBoard CADisplay outcome before claiming the GUI issue is fixed.
+
+### IMG_0742–IMG_0744 early-boot review — 2026-10-26
+
+- All three clips show `VEUX GUI: FDR policy provider=1 service=1`; AppleCLCD
+  validates the framebuffer and registers 1080x2400. This confirms the 0126
+  property writes were accepted and that the software service started. The
+  clips end before `IOMFB client initialized/ready`, SpringBoard, or the
+  FBSDisplayMonitor result. There is no visible CI run ID, so do not treat this
+  footage as GUI validation or unique attribution to run 40265617103.
+- IMG_0744 shows FIPS POST passing. The keybag task's `/usr/bin/true` attempt
+  returns `errno=2` while `path_errno=0`; launchd then says the optional boot
+  task is absent and starts usermanagerd. A separate exit trace is for PID 11,
+  process name `launchd`, signal 1/SIGHUP; it is not PID 1 and does not show
+  that the main launchd exited. These lines do not currently explain the
+  missing main `CADisplay`.
+- The `display_audit` agent is not present in the live agent inventory. The
+  tracked tree had no outstanding implementation diff: the 64-bit clipping
+  correction is already in commit `d2933ae`, with exact XNU hunk alignment in
+  `0f66997`; subsequent green GUI CI runs include it.
+- Confirmed CI run 40265617103 completed successfully on
+  `7ba9087e3c3714894864ff350dd931e9dd6d4898`. Device Fastboot variables before
+  reboot were product `veux`, unlocked, current slot B, `boot_b` size
+  `0x8000000`. A read-only `fastboot reboot` returned OKAY; after 20 seconds
+  neither Fastboot nor ADB enumerated. No partition or root image was written.
+- The 0126 candidate remains the latest successful CI and `boot_b` flash; the
+  new footage is too short to decide whether its client-start fallback reaches
+  the main display path. Continue only after obtaining boot evidence past the
+  usermanagerd task or another observable run; preserve the repaired root and
+  limit any future phone write to the already authorized `boot_b` partition.

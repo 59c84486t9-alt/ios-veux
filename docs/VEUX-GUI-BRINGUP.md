@@ -209,4 +209,29 @@ The three clips show SpringBoard launching, then `IOMFB_FDR_Loader` initializing
 
 Patch 0126 sets the FDR suppression property on both the framebuffer nub and AppleCLCD service, initializes user-client state explicitly, and allows the VEUX software client to finish registration if its superclass start rejects it. This tests the observed client/FDR path; the clips do not prove FDR is causal.
 
+## Early boot evidence — IMG_0742.mov through IMG_0744.mov
+
+All three clips show the 0126 FDR marker with `provider=1 service=1`, and
+AppleCLCD reaches its validated 1080x2400 framebuffer registration. The clips
+end before any `IOMFB client initialized/ready`, SpringBoard launch, or
+CADisplay result, so they do not establish whether the client fallback fixes
+the earlier display failure. No CI run ID is visible; the FDR marker confirms
+that the corresponding patch code is present but does not uniquely identify
+the flashed build.
+
+IMG_0744 shows `FIPSPOST_USER` passing, then the keybag boot task attempts
+`/usr/bin/true` and gets `errno=2` with `path_errno=0`; launchd immediately
+reports the optional boot task is not present and starts the usermanagerd boot
+task. A separate diagnostic line reports PID 11 named `launchd` exiting with
+SIGHUP. This is not PID 1 and the clip contains no evidence that the main
+launchd exits. These records do not explain the absent `CADisplay`.
+
+After reviewing the clips, a read-only reboot of the already-flashed slot-B
+wrapper returned OKAY; after 20 seconds neither ADB nor Fastboot enumerated.
+No partition was written during this check. The next useful runtime evidence
+must extend beyond the early usermanagerd boot task and show the client-ready
+marker or the subsequent SpringBoard/backboardd result. The 0126 CI and
+verified `boot_b` flash remain successful build/write milestones, not GUI
+validation.
+
 CI [40265617103](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40265617103) passed the strict build and all feature checks. Kernel SHA-256: `9402dc7e1033db8e72d5be67e03e93644f0609a37af9f141e8dd5f68b70af7b1`. Verified wrapper SHA-256: `7c33d9018630e6d0cc3c56136c58fd1136f05052b10272a68bbea6b1ab0a5b3a`. The wrapper was flashed only to slot-B `boot_b`; transfer, write, and reboot returned OKAY. No userdata was written. ADB and Fastboot are absent immediately after reboot, so this build's on-device runtime outcome remains unverified.
