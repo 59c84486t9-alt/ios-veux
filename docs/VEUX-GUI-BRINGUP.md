@@ -524,3 +524,29 @@ wrapper built from its kernel and patch-status artifact was flashed only to
 `boot_b`; Fastboot confirmed the write, slot B selection and reboot. The
 immediate post-reboot USB check found neither ADB nor Fastboot. This confirms
 the flash sequence only; GUI success still requires on-device boot evidence.
+
+## Follow-up: display-list `device_type` type mismatch
+
+The recovery-captured backboardd report at 640 seconds provides a second,
+independent property-type failure. Its terminating exception is thrown from
+`__IOMobileFramebufferCreateDisplayList_block_invoke+316`; the caller is
+`IOMobileFramebufferCreateDisplayList+252`, then
+`CA::WindowServer::display_count_of_type` and
+`-[CAWindowServer _detectDisplays]`. Disassembly of the exact iOS 16.7.16
+shared-cache image shows this display-list block enumerates children of
+`IODeviceTree:/arm-io`, reads each child's `device_type`, and calls
+`CFDataGetLength`/`CFDataGetBytes` before comparing it with
+`display-subsystem` and `ext-display-subsystem`.
+
+Patch 0125 had republished `device_type` on AppleCLCD's provider using the
+`const char *` `setProperty` overload, which produces an OSString. The
+framework treats the property as CFData, causing the Objective-C
+`doesNotRecognizeSelector` exception in display-list enumeration. Patch 0125
+now publishes a NUL-terminated byte array with the `(key, bytes, length)`
+overload, matching the existing DeviceTree `device_type` representation; the
+dependent 0126 patch offsets were advanced to follow the expanded 0125 hunk.
+This and the earlier canvas-width/height OSData correction address both
+CFData-reading paths seen in the captured crash reports. A new CI build and
+boot test must still confirm patch application, kernel compilation, successful
+display-list creation, IOMFB client selectors, first present, and SpringBoard
+handoff separately.

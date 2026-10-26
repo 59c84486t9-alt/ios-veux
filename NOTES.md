@@ -3073,3 +3073,29 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   Next: capture the display/serial boot and verify build ID 40356435384,
   `canvas-width`/`canvas-height` setup, IOMFB client ready/selector/present
   markers, and SpringBoard/backboardd outcome.
+
+### Backboardd display-list `device_type` correction — 2026-10-26
+
+- The user's 17:53 clip is an earlier segment of the same boot as the 17:51
+  clip: it shows launchd, SpringBoard, and xpcproxy activity before the later
+  display setup/failure. In the later frame, AppleCLCD is registered and
+  MobileGestaltHelper is the only visible ready client; swaps/presents remain
+  zero. Treat these as one continuous boot trace, not separate runs.
+- Recovery's latest backboardd crash report (uptime 640, crash count 50)
+  terminates with an Objective-C exception in
+  `__IOMobileFramebufferCreateDisplayList_block_invoke+316`. The caller chain
+  is `IOMobileFramebufferCreateDisplayList+252` ->
+  `CA::WindowServer::display_count_of_type` ->
+  `-[CAWindowServer _detectDisplays]`. Disassembly reads each `/arm-io` child's
+  `device_type` using `CFDataGetLength`/`CFDataGetBytes`. Patch 0125 still
+  published this property with the string overload (OSString), causing the
+  same type mismatch previously fixed for canvas dimensions.
+- Patch 0125 now publishes NUL-terminated `display-subsystem` bytes as OSData.
+  Updated 0126's downstream hunk offsets to account for the enlarged 0125
+  block. The changed `SweetFramebuffer.cpp` compiles against the previous CI
+  build tree with 0/1 failures; repository validation and `git diff --check`
+  pass. The framebuffer rectangle clipping in 0123 already uses 64-bit
+  intermediates and checks source byte extents before copying; no further
+  signed-overflow defect was apparent in this audit. Pending: ordered
+  patch/CI, wrapper verification, and a `boot_b` test. No new
+  device write has occurred. Preserve the entitlement-repaired root.
