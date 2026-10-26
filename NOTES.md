@@ -2945,3 +2945,24 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   confirms the flash/reboot command sequence, not on-device GUI success. Await
   longer runtime evidence for patch 0127's list-property marker, IOMFB client
   ready/first present, and SpringBoard's main-display result.
+
+### IMG_0757 follow-up — 2026-10-26
+
+- The photo shows patch-0127-specific `IOMFB list properties dfr=1 AppleTV=1 external=1` after AppleCLCD registered its validated 1080x2400 software framebuffer. These are setter-success booleans; patch 0127 stores false for each property. The image does not show a client initialized/ready marker or first software present.
+- Both 8.05-second clips show the same SpringBoard signal-5 report followed by backboardd abort. The SpringBoard PC OCR is `0x1cd158cab`, slide `0x24af0000`; the repaired iOS 16.7 shared cache maps the unslid address near `0x1a8628cab` to `GameCenterUI.AchievementHighlightLayout.init(...)` around +0x47. The stack includes `FBDisplayManager.sharedInstance` and `FBSystemShellInitialize`. This differs from the earlier FBSDisplayMonitor+1160 PC, but OCR transcribes an unaligned arm64 address, so verify with a sharper crash frame/report before asserting an exact symbol.
+- The frame also reports FAR `0x2068e5b28`; at the nearest aligned instruction (`stp q0, q1, [x21, #0xa0]`) this is consistent with a fault while writing the GameCenterUI layout result. It does not yet reveal why the destination is invalid. The display-manager singleton remains on the stack, so keep the display bring-up path under investigation.
+- The evidence confirms framebuffer setup and accepted property writes, not that IOMFB produced a `CADisplay`, that a client opened, or that GUI handoff happened. The clips lack a build ID; the photo's 0127 marker does confirm the current experiment's code ran.
+- Fastboot/ADB are absent on this host now. No new partition write was made. Keep the repaired root; any next test remains limited to the already authorized `boot_b` write after a new candidate passes CI and wrapper verification.
+
+### Recovery check for SpringBoard crash report — 2026-10-26
+
+- At the user's request, verified Fastboot serial `4078cac030c8`, product `veux`, unlocked, current slot B, then selected slot A and rebooted to recovery; both commands returned OKAY. Recovery ADB connected as root after restarting the host ADB server with `ADB_LIBUSB=1` (the default macOS USB backend exited with `e00002be`).
+- Read-only ADB showed `/dev/block/sda22` is the 109,156,577,280-byte userdata partition. Recovery does not mount it and has no HFS+ filesystem support. Its first blocks contain an HFSX `iOSRoot` volume with 4,194,304 × 4096-byte blocks (16 GiB). Copied only that volume to a temporary host file, made a copy-on-write clone for analysis, repaired that clone locally with `fsck_hfs -fy`, and mounted the clone read-only. Neither the phone nor the original capture was repaired or written.
+- No `.ips`, `.crash`, `.panic`, or `.hang` report was found. `/private/var/mobile/Library/Logs/CrashReporter` contained only `Assistant` and an empty `DiagnosticLogs`; `/private/var/logs/CrashReporter` and `Panics` were empty. The temporary raw copies were deleted after the search. The result is that no saved SpringBoard report is present in those locations in this snapshot; it cannot rule out an unflushed report lost on reboot.
+- The phone is left in recovery with root ADB available. No additional Fastboot or ADB write command was issued.
+
+### Next GUI diagnostics — patch 0128 candidate — 2026-10-26
+
+- Recovery ADB is root on slot A recovery; `/sys/fs/pstore` and `/proc/last_kmsg` are empty. The previous boot's iOS HFSX root contains no saved SpringBoard report in the standard CrashReporter or Panics directories. No phone partition writes were made.
+- Added candidate patch `0128-veux-gui-exit-summary.patch`: on SpringBoard/backboardd exit, print a compact state snapshot for AppleCLCD registration, FDR/list property setter results, IOMFB client init/ready counts and processes, selector mask/last caller, swap count, and first valid present. It adds no display behavior and is intended to preserve the trace after console scrolling.
+- Patch 0128 applies with zero fuzz to the exact source extracted from successful CI 40268776775. `tools/xnu-cc.py` compiled both changed translation units with 0/2 failures; repository validation, Python syntax compilation, and `git diff --check` passed. CI, wrapper verification, and a `boot_b` test remain pending; keep the entitlement-repaired root and do not write userdata.

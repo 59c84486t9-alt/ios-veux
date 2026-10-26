@@ -40,6 +40,7 @@ for patch in (
     "0125-veux-software-framebuffer-registry-properties.patch",
     "0126-veux-iomfb-client-start-fallback.patch",
     "0127-veux-iomfb-display-list-properties.patch",
+    "0128-veux-gui-exit-summary.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -58,6 +59,7 @@ needles = {
     "software_gui_userclient_ready_trace": b"VEUX GUI: IOMFB client ready process=%s",
     "software_gui_fdr_provider_policy": b"VEUX GUI: FDR policy provider=%u service=%u",
     "software_gui_iomfb_list_properties": b"VEUX GUI: IOMFB list properties dfr=%u AppleTV=%u external=%u",
+    "software_gui_exit_summary": b"VEUX GUI SUMMARY: registered=%u fdr=0x%x list=0x%x",
     "software_gui_userclient_base_fallback": b"VEUX GUI: IOMFB base start rejected; continuing software client",
     "software_gui_swap_trace": b"VEUX GUI: framebuffer swap %u mask=0x%x",
     "surface_service": b"IOCoreSurfaceRoot",
@@ -118,6 +120,7 @@ source_checks["direct_framebuffer_build_id_print"] = (
 )
 live_sampler = (a.source_root / "bsd/dev/veux_liveness.c").read_text()
 exception = (a.source_root / "osfmk/kern/exception.c").read_text()
+exit_source = (a.source_root / "bsd/kern/kern_exit.c").read_text()
 source_checks["liveness_does_not_emit_unchanged_cpu_counters"] = (
     "old->user_us != e->user_us" not in live_sampler
     and "old->system_us != e->system_us" not in live_sampler
@@ -128,6 +131,11 @@ source_checks["launchd_waits_are_classified_by_waitq_type"] = (
     and "thread->waitq.wq_q != NULL" in exception
     and "thread_tid(thread)" in exception
     and "VEUX WAIT: tid=" in exception
+)
+source_checks["gui_exit_summary_only_on_springboard_or_backboard_exit"] = (
+    'strcmp(p->p_comm, "SpringBoard") == 0' in exit_source
+    and 'strcmp(p->p_comm, "backboardd") == 0' in exit_source
+    and "veux_gui_process_exit_summary();" in exit_source
 )
 source_checks["launchd_main_stack_is_attempted_each_sample_with_explicit_skip_reason"] = (
     "struct veux_wait_record waits[8];" in exception

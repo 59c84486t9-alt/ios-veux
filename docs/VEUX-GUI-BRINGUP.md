@@ -280,3 +280,73 @@ or other partition was written; the entitlement-repaired root remains in
 place. ADB and Fastboot were absent 15 seconds after reboot. The GUI result
 still requires later on-device evidence for client-ready/first-present and
 SpringBoard outcome.
+
+## IMG_0757 follow-up — patch 0127 boot evidence
+
+The attached photo shows the VEUX boot log through AppleCLCD registration:
+validated 1080x2400 software framebuffer, surface/mapping/workloop/lock setup,
+and `IOMFB list properties dfr=1 AppleTV=1 external=1`. These are the
+`setProperty` success results, not the stored boolean values; patch 0127 sets
+each property to false. The photo does not show an IOMFB client initialized or
+ready marker, a first-present marker, or the GUI handoff. Its patch-specific
+property log confirms patch 0127 code ran, but the crash clips do not display a
+build ID.
+
+Both attached 8.05-second clips show the same crash-report screen. SpringBoard
+exits with signal 5 / `EXC_BREAKPOINT`; backboardd later aborts, and watchdogd
+reports its software service check-in as OK. The OCR-transcribed SpringBoard
+PC is `0x1cd158cab` with slide `0x24af0000`, giving an unslid address near
+`0x1a8628cab`. The repaired iOS 16.7 shared cache maps that address to
+`GameCenterUI.AchievementHighlightLayout.init(metrics:decorationView:titleText:subtitleText:orientation:)`
+around offset +0x47. The stack includes `FBDisplayManager.sharedInstance`
+and `FBSystemShellInitialize`, so this is during early SpringBoard display
+setup, but it is a different reported PC from the previously symbolicated
+FBSDisplayMonitor+1160 trap. The OCR PC ends unaligned for arm64; treat the
+nearest-symbol result as a lead until a sharper crash frame or a captured crash
+report verifies the exact register value.
+
+The same frame reports FAR `0x2068e5b28`. The nearest aligned instruction in
+the recovered cache is the `stp q0, q1, [x21, #0xa0]` inside that Swift
+initializer. This is consistent with the fault occurring while the layout
+initializer writes its result, rather than at the earlier explicit
+FBSDisplayMonitor breakpoint. It does not identify why the destination is
+invalid, and the phone-provided register transcription still needs confirmation.
+
+The new evidence verifies AppleCLCD setup and successful property writes, but
+does not establish that IOMFB created a `CADisplay` or completed a client open.
+Patch 0127 therefore has not demonstrated a GUI fix. Preserve that distinction
+when selecting the next display-enumeration experiment.
+
+## Recovery-side crash-report search — 2026-10-26
+
+At the user's request, selected slot A and rebooted into recovery. Fastboot
+reported serial `4078cac030c8`, product `veux`, unlocked, current slot B before
+selection; `fastboot set_active a` and `fastboot reboot recovery` both returned
+OKAY. Recovery ADB connected as root using the host's libusb backend. No phone
+partition was written.
+
+Recovery does not mount the iOS `userdata` HFSX volume and its kernel has no
+HFS+ driver. Read-only inspection of `/dev/block/sda22` showed a 16-GiB HFSX
+volume. A temporary local copy of exactly that 16-GiB volume was mounted
+read-only after running `fsck_hfs -fy` on a copy-on-write clone only; the
+original capture and phone partition were not repaired or modified.
+
+No SpringBoard `.ips`/`.crash` files were found in the standard CrashReporter
+locations (`/private/var/mobile/Library/Logs/CrashReporter` and
+`/private/var/logs/CrashReporter`); the CrashReporter directory contained only
+`Assistant` and an empty `DiagnosticLogs` directory, and the Panics directory
+was empty. The captured raw images were deleted after the search. This means no
+saved SpringBoard report is available from this recovery snapshot; it does not
+prove that no report was ever created before the crash/reboot.
+
+## Next diagnostic candidate — patch 0128
+
+Since the app-level report was not persisted and recovery pstore is empty, the
+next run needs to report the display path at the moment SpringBoard or
+backboardd exits. Patch 0128 adds a compact kernel snapshot of AppleCLCD
+registration, FDR/display-list property setter results, IOMFB client init/ready
+counts and callers, selectors seen, last selector caller, swap calls, and the
+first successful software present. It emits only on SpringBoard/backboardd
+exit and does not alter display behavior. The candidate compiles against the
+402687 build tree; strict CI and a verified boot wrapper are the next gates.
+This is intended to make the next failure actionable, not to claim a GUI fix.

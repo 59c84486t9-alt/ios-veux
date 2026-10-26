@@ -229,10 +229,13 @@ jobs:
             grep -Fq '0125-veux-software-framebuffer-registry-properties.patch' ../patch-status.txt
             grep -Fq '0126-veux-iomfb-client-start-fallback.patch' ../patch-status.txt
             grep -Fq '0127-veux-iomfb-display-list-properties.patch' ../patch-status.txt
+            grep -Fq '0128-veux-gui-exit-summary.patch' ../patch-status.txt
             grep -Fq 'setProperty("IOMFBLaunchFDR", false)' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'setProperty("dfr", false)' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'setProperty("AppleTV", false)' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'VEUX GUI: IOMFB list properties dfr=%u AppleTV=%u external=%u' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
+            grep -Fq 'VEUX GUI SUMMARY: registered=%u fdr=0x%x list=0x%x' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
+            grep -Fq 'veux_gui_process_exit_summary();' xnu/bsd/kern/kern_exit.c
             grep -Fq 'VEUX GUI: FDR policy provider=%u service=%u' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'VEUX GUI: IOMFB base start rejected; continuing software client' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp
             grep -Fq 'VEUX GUI: IOMFB client ready process=%s' xnu/iokit/Kernel/arm/SweetFramebuffer.cpp

@@ -1,0 +1,143 @@
+From: ios-veux
+Subject: [PATCH] Summarize VEUX framebuffer state on SpringBoard crashes
+
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -2119,11 +2119,15 @@
+ proc_exit(proc_t p)
+ {
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
++	extern void veux_gui_process_exit_summary(void);
+ 	int veux_status = (int)p->p_xstat;
+ 	int veux_exit_status = WIFEXITED(veux_status) ? WEXITSTATUS(veux_status) : -1;
+ 	int veux_signal = WIFSIGNALED(veux_status) ? WTERMSIG(veux_status) : 0;
+ 	printf("VEUX EXIT: pid=%d name=%s status=0x%x exit_status=%d signal=%d\n",
+ 	    proc_getpid(p), p->p_comm, (unsigned int)veux_status, veux_exit_status, veux_signal);
++	if (strcmp(p->p_comm, "SpringBoard") == 0 || strcmp(p->p_comm, "backboardd") == 0) {
++		veux_gui_process_exit_summary();
++	}
+ #endif
+ 	proc_t q;
+ 	proc_t pp;
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -68,6 +68,51 @@
+ 	kSweetFBGetDotPitch             = 28,
+ 	kSweetFBNotifications           = 72,
+ };
++
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++/* A compact post-mortem snapshot: console scrolling hides the earlier trace. */
++static volatile uint32_t veux_gui_registered;
++static volatile uint32_t veux_gui_fdr_policy;
++static volatile uint32_t veux_gui_list_properties;
++static volatile uint32_t veux_gui_client_init_count;
++static volatile uint32_t veux_gui_client_ready_count;
++static volatile uint32_t veux_gui_client_type;
++static volatile uint32_t veux_gui_last_selector = UINT32_MAX;
++static volatile uint32_t veux_gui_swap_count;
++static volatile uint32_t veux_gui_first_present;
++static volatile uint64_t veux_gui_selector_mask;
++static char veux_gui_init_process[32] = "none";
++static char veux_gui_ready_process[32] = "none";
++static char veux_gui_selector_process[32] = "none";
++
++static void
++veux_gui_save_process_name(char dst[32])
++{
++	char name[32] = { 0 };
++	proc_selfname(name, sizeof(name));
++	for (unsigned int i = 0; i < sizeof(name); ++i) {
++		dst[i] = name[i];
++		if (name[i] == '\0') {
++			break;
++		}
++	}
++	dst[31] = '\0';
++}
++
++extern "C" void
++veux_gui_process_exit_summary(void)
++{
++	IOLog("VEUX GUI SUMMARY: registered=%u fdr=0x%x list=0x%x init=%u/%u:%s ready=%u:%s last=%u/%s selectors=0x%llx swaps=%u present=%u\n",
++	    (unsigned int)veux_gui_registered, (unsigned int)veux_gui_fdr_policy,
++	    (unsigned int)veux_gui_list_properties,
++	    (unsigned int)veux_gui_client_init_count, (unsigned int)veux_gui_client_type,
++	    veux_gui_init_process, (unsigned int)veux_gui_client_ready_count,
++	    veux_gui_ready_process,
++	    (unsigned int)veux_gui_last_selector, veux_gui_selector_process,
++	    (unsigned long long)veux_gui_selector_mask,
++	    (unsigned int)veux_gui_swap_count, (unsigned int)veux_gui_first_present);
++}
++#endif
+ 
+ #define SWEET_FB_SWAP_REC_SIZE          0x46c
+ #define SWEET_FB_LAYERS                 4
+@@ -265,18 +310,23 @@
+ 		providerFDRDisabled = provider->setProperty("IOMFBLaunchFDR", false);
+ 	}
+ 	bool serviceFDRDisabled = setProperty("IOMFBLaunchFDR", false);
++	veux_gui_fdr_policy = (providerFDRDisabled ? 1u : 0u) |
++	    (serviceFDRDisabled ? 2u : 0u);
+ 	IOLog("VEUX GUI: FDR policy provider=%u service=%u\n",
+ 	    (unsigned int)providerFDRDisabled, (unsigned int)serviceFDRDisabled);
+ 	/* The iOS 16 display-list callback reads these flags from each service. */
+ 	bool dfrPropertySet = setProperty("dfr", false);
+ 	bool appleTVPropertySet = setProperty("AppleTV", false);
+ 	bool externalPropertySet = setProperty("external", false);
++	veux_gui_list_properties = (dfrPropertySet ? 1u : 0u) |
++	    (appleTVPropertySet ? 2u : 0u) | (externalPropertySet ? 4u : 0u);
+ 	IOLog("VEUX GUI: IOMFB list properties dfr=%u AppleTV=%u external=%u\n",
+ 	    (unsigned int)dfrPropertySet, (unsigned int)appleTVPropertySet,
+ 	    (unsigned int)externalPropertySet);
+ #endif
+ 	registerService();
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_gui_registered = 1;
+ 	IOLog("VEUX GUI: AppleCLCD registered size=%ux%u surface=%u\n", fWidth, fHeight, fSurface->id);
+ #endif
+ 	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u, presented as %ux%u\n",
+@@ -503,6 +553,7 @@
+ 			__asm__ volatile("dsb sy" ::: "memory");
+ 			if (!fConsolePaused) {
+ 				fConsolePaused = true;
++				veux_gui_first_present = 1;
+ 				IOLog("VEUX GUI: first valid software display present\n");
+ 				uint32_t quiet = 0;
+ 				if (PE_parse_boot_argn("veux_gui_noconsole", &quiet, sizeof(quiet)) && quiet == 1) {
+@@ -529,6 +580,9 @@
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	char name[32];
+ 	proc_selfname(name, sizeof(name));
++	veux_gui_client_init_count++;
++	veux_gui_client_type = type;
++	veux_gui_save_process_name(veux_gui_init_process);
+ 	IOLog("VEUX GUI: IOMFB client initialized process=%s type=%u\n", name, type);
+ #endif
+ 	return true;
+@@ -561,6 +615,8 @@
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	char name[32];
+ 	proc_selfname(name, sizeof(name));
++	veux_gui_client_ready_count++;
++	veux_gui_save_process_name(veux_gui_ready_process);
+ 	IOLog("VEUX GUI: IOMFB client ready process=%s\n", name);
+ #endif
+ 	return true;
+@@ -693,6 +749,16 @@
+ 	default:
+ 		break;
+ 	}
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (selector < 64) {
++		veux_gui_selector_mask |= 1ULL << selector;
++	}
++	veux_gui_last_selector = selector;
++	veux_gui_save_process_name(veux_gui_selector_process);
++	if (selector == kSweetFBSwapEnd) {
++		veux_gui_swap_count++;
++	}
++#endif
+ 
+ 	for (uint32_t i = 0; i < args->scalarOutputCount; i++) {
+ 		args->scalarOutput[i] = i < outCount ? out[i] : 0;
