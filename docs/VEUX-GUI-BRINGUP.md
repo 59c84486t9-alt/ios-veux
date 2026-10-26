@@ -658,3 +658,30 @@ USB observation: display state, boot stage, reset, and power state are unknown.
 The log ring has not yet been pulled. Next, the user must force Fastboot with
 Power + Volume Down; then verify the phone before selecting slot A and rebooting
 to recovery for `tools/veux-log-pull.sh`. Keep `boot_a` untouched.
+
+### The 403842 ring identifies the current blocker
+
+After the user returned the phone to Fastboot and enabled ADB, Fastboot
+confirmed serial `4078cac030c8`, product `veux`, slot B. Selected slot A and
+rebooted to recovery; no write to `boot_a` occurred. Recovery ADB connected as
+root. The recovered ring is 1,010,909 bytes (flush sequence 1056; SHA-256
+`684a7a74845e02f187c5fd89a405b9a534f81a327835f4affa45e0b1965e72dc`) and
+identifies build `40384236283` with `rootrw=1 ufsrw=1 veuxlog=1`.
+
+The HFS `iOSRoot` mount and journal replay succeed, launchd continues, and
+backboardd opens AppleCLCD. IOMFB client initialization/readiness succeeds; the
+GUI summary records the display service and list, two surface swaps, and a
+first valid software present. SpringBoard then repeatedly exits via SIGTRAP
+(signal 5, code `0x600000001`) at PC/LR `0x1badc28c0`, with a stable backtrace.
+The “Too many corpses” records are downstream of that restart loop. This shows
+the Apple logo is no longer a slow root mount or absent framebuffer; SpringBoard
+is failing after a valid display present. The reason string was not captured.
+
+To capture it, a wrapper from the same verified build adds only
+`veuxscan=SpringBoard` while retaining the bounded logger. The kernel, DTB, and
+all other payload bytes match the prior verified wrapper; image size remains
+17,203,200 bytes. The user authorized repeated writes to `boot_b` and forbade
+`boot_a`; only `boot_b` was flashed, slot B selected, and reboot returned
+OKAY. Once this scan boot has run briefly, return with Fastboot to slot-A
+recovery and pull the ring. Read the `STR` output before changing any GUI
+properties.

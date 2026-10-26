@@ -3243,3 +3243,41 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   (Power + Volume Down), then verify serial/product/current slot before doing
   anything. If Fastboot returns, select slot A and reboot to recovery, then
   use `tools/veux-log-pull.sh` to inspect the ring. Keep `boot_a` untouched.
+
+### 403842 logger ring diagnosis and SpringBoard scan boot — 2026-10-26
+
+- The user returned the phone in Fastboot and enabled recovery ADB. Verified
+  serial `4078cac030c8`, product `veux`, current slot B. Selected slot A and
+  rebooted to recovery; those commands only changed slot selection/rebooted and
+  did not write `boot_a`. Recovery ADB connected as root.
+- Pulled the logger ring read-only to `/tmp/veux-403842-veuxlog-recovery.txt`:
+  1,010,909 bytes, flush sequence 1056, SHA-256
+  `684a7a74845e02f187c5fd89a405b9a534f81a327835f4affa45e0b1965e72dc`.
+  It identifies build `40384236283` and confirms boot args include
+  `rootrw=1 ufsrw=1 veuxlog=1`.
+- Root mount succeeded: journal replay completed, HFS mounted `iOSRoot`, and
+  `VEUX ROOT mode=rw`/`mount result errno=0`. Launchd proceeds through boot.
+  Backboardd opens AppleCLCD; its IOMFB user client initializes and is ready.
+  It reports `registered=1`, `fdr=0x3`, `list=0x7`, first valid software
+  display present, and two surface swaps. The evidence rules out the earlier
+  “never reached GUI/display” explanation for this run.
+- SpringBoard then repeatedly exits with SIGTRAP (signal 5; code
+  `0x600000001`) at PC/LR `0x1badc28c0`, with the same backtrace and FAR
+  `0x1ea5d0f40`. “Too many corpses being created” follows the repeated exits;
+  it is the restart-loop consequence. The first GUI summary has
+  `init=3/0:backboardd`, `ready=3:backboardd`, `swaps=2`, `present=1`.
+  This ring has no `STR` heap scan, so the assertion text remains unknown.
+- Prepared a same-build diagnostic wrapper that adds only
+  `veuxscan=SpringBoard` to the existing `veuxlog=1` wrapper args:
+  `shim/out/veux-xnu-40384236283-iomfb-type-normalization-veuxlog-scan/shim-boot-veux-xnu-40384236283-veuxlog-scan.img`, SHA-256
+  `8d7d5ff15752f489b94084f51d2d216352acbe39dcaf20f7f624360b9eb26b70`.
+  Verified Android boot-v2 size is unchanged and kernel, DTB, and all payload
+  bytes outside the 608-byte args field are identical to the verified source.
+  The existing patch 0102 implements this heap scan. The user authorized
+  repeated `boot_b` flashes and forbade touching `boot_a`; flashed only
+  `boot_b`, activated slot B, and rebooted. All Fastboot operations returned
+  OKAY. ADB/Fastboot were absent through the initial 30-second host check.
+- Next: wait briefly for the scan boot to log the first SpringBoard trap, then
+  return via Fastboot to slot-A recovery and pull the ring. Use the `STR` text
+  to distinguish an FBSDisplayMode/assertion problem from another framework
+  failure before changing display properties. Never flash `boot_a`.
