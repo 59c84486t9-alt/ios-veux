@@ -2686,8 +2686,28 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   (`Sending` and `Writing` both OKAY), then issued `fastboot reboot` (OKAY).
   No userdata or other partition was written; the entitlement-repaired root
   was left in place. Do not restore the older stripped-entitlement image.
-- After reboot, both ADB and Fastboot enumeration were empty. No screen photo
-  or video has confirmed build ID `40252779285` or GUI behavior, so this is a
-  successful flash/reboot command but not on-device GUI validation. Await
-  screen evidence before claiming the display handoff works; further
-  destructive phone writes require confirmation.
+- After reboot, both ADB and Fastboot enumeration were empty. The subsequent
+  user video is documented below; it does not visibly identify build ID
+  `40252779285`, so attribution follows the verified flash/reboot sequence.
+  The display handoff has not succeeded in the observed footage. No userdata
+  or other partition was written; do not restore the older stripped-entitlement
+  image.
+
+### IMG_0729 video evidence — 2026-10-25
+
+- Reviewed the 8.2-second attached `IMG_0729.mov` using extracted frames and
+  OCR. The phone remains on the diagnostic framebuffer with its colored bottom
+  strip throughout; there is no visible SpringBoard GUI handoff. The screen
+  says `sweet milestone: 4: xnu loader`, but does not show the CI run/build ID.
+- The footage shows SpringBoard SIGTRAP (signal 5, namespace 2/code 5; visible
+  PC `0x1de83cca8`), mediaserverd SIGSEGV (signal 11; visible PC
+  `0x1c9d320cc`), identityservices aborting, and backboardd SIGABRT (signal 6,
+  namespace 2/code 6), followed by repeated crash/corpse-limit output. This
+  establishes userland launch and a failed GUI runtime outcome, not successful
+  display-service behavior. Exact build attribution is not legible on-screen.
+- CI run `40252779285` remains green, and the verified wrapper was flashed to
+  `boot_b` with Fastboot send/write and reboot returning OKAY. Those are build
+  and partition-write results only; they do not mean GUI bring-up passed.
+  Investigate the new runtime addresses against the correct cache/build before
+  making another wrapper or phone write. Keep the entitlement-repaired root;
+  never restore the old stripped-entitlement image.

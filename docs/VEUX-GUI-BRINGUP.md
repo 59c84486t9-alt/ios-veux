@@ -75,3 +75,18 @@ The boot recipe keeps the verified RW pair, cpus=1, framebuffer console and
 spawn diagnostics, adding `veux_gui=1 veux_gui_noconsole=1`. The persistent
 userdata-tail logger stays disabled. Use the entitlement-repaired root for a
 fresh RW test; never restore the older stripped-entitlement image.
+
+## First on-device result — IMG_0729.mov
+
+The 8.2-second user video remains on the kernel diagnostic framebuffer; the
+colored bottom strip and diagnostic text remain visible, so the requested
+`veux_gui_noconsole=1` handoff is not demonstrated. It shows SpringBoard
+SIGTRAP (signal 5, namespace 2/code 5), mediaserverd SIGSEGV (signal 11),
+identityservices aborting, and backboardd SIGABRT (signal 6, namespace 2/code
+6), followed by repeated crash/corpse-limit output. The visible SpringBoard PC
+is `0x1de83cca8`; the visible mediaserverd PC is `0x1c9d320cc`. The video does
+not visibly include the CI build ID, so attribution to wrapper 40252779285 is
+based on the immediately preceding verified slot-B flash/reboot sequence,
+not an on-screen build marker. This is a successful build and partition-write
+sequence but an unsuccessful GUI runtime test. Do not flash again until the
+new runtime evidence is investigated and a corrected, verified wrapper exists.
