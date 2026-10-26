@@ -2622,3 +2622,8 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Ran SDK Fastboot 37.0.1 with `-S 512M flash userdata /Users/vivien/Downloads/ios16-root-20H392-keybag-noop-entitlements.simg`. All 24/24 sparse chunks and writes returned OKAY; final Finished reported 297.030 seconds. No boot partition write occurred; boot_b remains the previously flashed CI 40231594906 wrapper.
 - Fastboot briefly listed the device immediately after the flash, but the subsequent product query hung and both Fastboot/ADB enumeration became empty. Terminated the waiting query and its parent shell before subsequent slot/reboot commands could run. No reboot was issued and the repaired root has NOT yet booted.
 - Next: user returns the phone to Fastboot/reconnects it; verify product/slot and reboot existing slot B. Reboot authorization is already granted. Do not reflash userdata: the repaired pristine RW image was just successfully restored. Await screen evidence for build ID, xpcproxy spawn success or exact next failure; entitlement repair is not yet runtime-validated.
+
+### Repaired root boot issued — 2026-10-25
+
+- User reported Fastboot available. Host verified product veux, current slot B, then issued `fastboot reboot`; Rebooting returned OKAY, Finished 0.001 s. No partitions were flashed in this follow-up.
+- This boots the existing 40231594906 boot_b wrapper against the just-restored entitlement-repaired root (`d7777c229e7dc012a3e86a5d9f54ab4fc4bf74e443526fe2f11562f0d2b2d691`). Await screen photos to confirm build identity and whether xpcproxy setup EPERM is resolved or another gate is reached. Reboot success is not proof of successful XNU/userland startup.
