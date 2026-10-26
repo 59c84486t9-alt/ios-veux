@@ -3404,3 +3404,27 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   23:55 CET the host still saw no ADB, Fastboot, or phone USB device. Once
   recovery access returns, read back `boot_b` and collect boot-specific
   display/AppleKeyStore evidence before another write.
+
+### Sandbox-enabled 404131 display diagnostic — 2026-10-27
+
+- Compared the exact wrapper manifests. 40413116842 omitted `veuxsandbox=1`,
+  while the earlier 403842 wrapper that recorded a backboardd framebuffer
+  client, selectors, swaps, and first present included it (and IOKit tracing).
+  Patch 0099 makes this compatibility policy opt-in. This is a strong
+  configuration difference to test against IMG_0791's `selectors=0`,
+  `swaps=0`, `present=0` and nil-main-CADisplay crash.
+- Reused the verified 40413116842 CI kernel and its exact embedded ADT,
+  wrapper shim/header, and phone DTB. Prepared and verified
+  `shim/out/veux-xnu-40413116842-sandbox-iolog/shim-boot-veux-xnu-40413116842-sandbox-iolog.img`
+  with only `veuxsandbox=1 veuxiolog=backboardd,SpringBoard` added to the
+  existing boot arguments. Kernel SHA-256 remains
+  `c762eb704fe1eaf686daf64f5c741441456efbf670065f30c8af0e94b1da5fba`;
+  wrapper SHA-256 is
+  `d921cb95cb72c76daff5b6e5c75f74a66a3a66f8d40318aa3c05bb2c8f2c0f42`.
+  `veuxlog=1` is off; no source or userdata logger change was made.
+- From slot-A recovery, rebooted to Fastboot, flashed only `boot_b`, selected
+  slot B, confirmed it active, and rebooted. Fastboot send/write, slot
+  selection, and reboot all returned OKAY. `boot_a` was not written. At 97
+  seconds, the host saw no ADB, Fastboot, or phone USB device; the physical
+  display result is pending. Recovery evidence before this test had empty
+  pstore, no `/proc/last_kmsg`, and no current `VEUXLOG1` ring.
