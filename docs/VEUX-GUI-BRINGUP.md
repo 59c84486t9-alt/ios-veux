@@ -254,3 +254,27 @@ software framebuffer service and logs setter results. This is a targeted
 metadata hypothesis. Strict CI and a verified slot-B wrapper are required
 before the experiment is flashed; on-device success still requires a later
 client-ready/first-present marker and no SpringBoard trap.
+
+### Patch 0127 build and wrapper — CI 40268776775
+
+Patch 0127 applied with zero fuzz and the strict CI run passed XNU compilation,
+synthetic framebuffer bounds checks, source/binary feature-manifest checks,
+build-tree packaging, and artifact upload. Kernel SHA-256 is
+`e5e5715c365cc0390b59bc0fa6510e2fae94d862e2a4b4e0c982a53a86b7c062`.
+
+The boot-v2 wrapper was assembled from that exact CI kernel, the previously
+verified shim kernel, the same embedded ADT as the prior wrapper, and phone
+DTB SHA-256 `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+The independent verifier passed CI-kernel reconstruction, payload, DTB,
+build/run ID, boot-args, and patch-status checks. Wrapper SHA-256 is
+`21d6bb6a2bf80d84d6ef11a7bcd76924664e5083d46f7f0f8851faa47e32b7e7`.
+The image is ready at
+`shim/out/veux-xnu-40268776775-rw-gui/shim-boot-veux-xnu-40268776775-rw-gui.img`.
+
+No flash occurred: Fastboot and ADB showed no connected device, and USB
+enumeration found no phone. The only authorized target remains `boot_b`; do
+not write userdata or alter the entitlement-repaired root. After the phone
+returns in Fastboot, verify product `veux`, unlocked state, slot B and
+`boot_b` capacity before writing this wrapper. A successful write/reboot still
+requires a later video showing IOMFB client readiness/first present and the
+SpringBoard result to validate the hypothesis.

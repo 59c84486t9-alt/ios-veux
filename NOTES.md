@@ -2900,3 +2900,33 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   then flash only `boot_b` under the existing authorization. Preserve the
   entitlement-repaired root and distinguish build/flash success from a GUI
   runtime pass.
+
+### IOMFB display-list metadata experiment 0127 — CI and verified wrapper
+
+- User's IMG_0747 confirms same-boot backboardd/SpringBoard crashes; SpringBoard
+  PC `0x1c9e84ca8` minus slide `0x2e51c000` resolves to the known
+  FBSDisplayMonitor+1160 nil-main-CADisplay trap. It shows no IOMFB client
+  ready/first-present marker or build ID.
+- Patch 0127 explicitly sets the three display-list flags (`dfr`, `AppleTV`,
+  `external`) false on AppleCLCD and logs setter results. Local zero-fuzz
+  application against packaged XNU 402656 source, single-file ARM64 compile,
+  repository validation, and Python syntax checks passed. Commit
+  `30ed37b93539c62a0b0137b212dd8b1ec0e4c149` was pushed to `veux-xnu-build`.
+- Strict CI run [40268776775](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40268776775)
+  succeeded: repository/patch preflight, XNU compile, host bounds checks,
+  feature manifest (0127 APPLIED and marker/source assertions), packaging, and
+  artifact upload all passed. Kernel SHA-256:
+  `e5e5715c365cc0390b59bc0fa6510e2fae94d862e2a4b4e0c982a53a86b7c062`.
+- Built and independently verified wrapper
+  `shim/out/veux-xnu-40268776775-rw-gui/shim-boot-veux-xnu-40268776775-rw-gui.img`
+  from the CI kernel, the verified prior shim/header, embedded ADT, and phone
+  DTB. Wrapper SHA-256:
+  `21d6bb6a2bf80d84d6ef11a7bcd76924664e5083d46f7f0f8851faa47e32b7e7`;
+  DTB SHA-256:
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+- Flash is pending because repeated Fastboot/ADB and IOUSB checks found no
+  connected phone. No partition/root write occurred this turn. Once it returns
+  in Fastboot, verify product/unlock/slot/partition capacity and write only
+  `boot_b`, as previously authorized. Preserve the entitlement-repaired root.
+  Build and wrapper verification do not prove GUI success; get later on-device
+  evidence for client-ready/first-present and SpringBoard outcome.
