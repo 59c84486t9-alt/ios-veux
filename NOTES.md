@@ -3209,3 +3209,11 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   that boot. Next useful evidence is a fresh boot-specific log with a unique
   build ID. Enabling the existing logger would write its bounded 4 MiB + 4 KiB
   tail ring in userdata; no such write or new boot was performed here.
+- Prepared a temporary diagnostic wrapper at
+  `shim/out/veux-xnu-40384236283-iomfb-type-normalization-veuxlog/shim-boot-veux-xnu-40384236283-iomfb-type-normalization-veuxlog.img`
+  (SHA-256 `a793e3e8c8bf5580c2e4ab8cd99974fb82158acdc94ee4fdea2db4f690e7a742`).
+  It preserves the current 403842 image size, outer shim/header/DTB and every
+  payload byte except adding `veuxlog=1` in the payload boot arguments. Its
+  adjacent manifest records the exact args and effects. It has not been booted;
+  `rootrw=1 ufsrw=1` makes the HFS root writable, and `veuxlog=1` writes the
+  bounded userdata-tail ring. Await confirmation before starting this test.

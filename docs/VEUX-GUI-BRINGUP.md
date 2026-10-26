@@ -639,3 +639,12 @@ written for that test. To identify why the latest run stayed at the Apple logo,
 the next diagnostic boot needs a unique persisted log/build marker. Adding the
 existing logger writes its bounded 4 MiB + 4 KiB ring at the userdata tail; no
 new boot or such write has been performed yet.
+
+A temporary 403842 diagnostic wrapper is prepared at
+`shim/out/veux-xnu-40384236283-iomfb-type-normalization-veuxlog/shim-boot-veux-xnu-40384236283-iomfb-type-normalization-veuxlog.img`
+(SHA-256 `a793e3e8c8bf5580c2e4ab8cd99974fb82158acdc94ee4fdea2db4f690e7a742`).
+The only binary change from the currently installed image is the added
+`veuxlog=1` payload boot argument; image size and outer kernel/header/DTB are
+unchanged. It retains `rootrw=1 ufsrw=1`, so booting it leaves the HFS root
+writable and writes the bounded logger ring. It has not been booted pending
+confirmation for that UFS write.
