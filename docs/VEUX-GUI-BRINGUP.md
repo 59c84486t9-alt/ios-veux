@@ -192,3 +192,13 @@ SpringBoard's nil display. The next CI build and boot test must check which
 process opens the client, whether selectors are called, and whether a first
 valid software present occurs. No GUI fix or successful hardware result is
 claimed from these clips.
+
+### Registry-property experiment 40262764380
+
+The earlier IMG_0731–IMG_0733 clips show AppleCLCD starts from `/arm-io/disp0`, validates and registers the 1080x2400 framebuffer, and finds the display nub. The later IMG_0736 clip reaches the IOMobileFramebuffer user-client hook with AppleCLCD as provider, then SpringBoard traps at the known nil-main-CADisplay branch. This narrows the remaining gap to display enumeration/registration after service startup but does not identify its exact cause.
+
+Patch 0125 explicitly republishes display-subsystem type and canvas geometry on the live AppleCLCD provider, suppresses panel FDR launch for the software-only framebuffer, and emits user-client init/ready process markers. Disabling FDR is an experiment; the observed loader exit was not proven causal.
+
+CI [40262764380](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40262764380) passed strict patch application, XNU compilation, bounds checks, manifest, packaging, and artifact upload. Kernel SHA-256 is `2149765497827cc6ed2cd516a0e369d85062037dd5b0aada76382a9cfab60167`. Wrapper SHA-256 is `d1589c81376e77dc9640b0c5d53c499d5915b6f08feea0c18fc5cc8bf844b2a5`; its adjacent manifest records exact payload/ADT/DTB/boot-argument checks. The wrapper reused the exact shim kernel and header from the previously verified 40258406080 wrapper because local `shim/out/Image` did not match those embedded shim bytes; host console test passed.
+
+The verified wrapper was flashed only to `boot_b` on serial `4078cac030c8` (product `veux`, slot B; partition size 128 MiB); transfer and write returned OKAY, as did reboot. No userdata was written. Immediately after reboot ADB and Fastboot were both absent. There is no visible 40262764380 build ID or GUI handoff evidence yet, so the experiment is flashed but its runtime outcome is unresolved.
