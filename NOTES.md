@@ -3277,7 +3277,40 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   repeated `boot_b` flashes and forbade touching `boot_a`; flashed only
   `boot_b`, activated slot B, and rebooted. All Fastboot operations returned
   OKAY. ADB/Fastboot were absent through the initial 30-second host check.
-- Next: wait briefly for the scan boot to log the first SpringBoard trap, then
-  return via Fastboot to slot-A recovery and pull the ring. Use the `STR` text
-  to distinguish an FBSDisplayMode/assertion problem from another framework
-  failure before changing display properties. Never flash `boot_a`.
+- Follow-up and scan result are recorded below. Never flash `boot_a`.
+
+### 403842 crash-string scan and userdata-tail restore — 2026-10-26
+
+- The user reported the small mark under the Apple logo appeared almost
+  immediately and returned the phone to Fastboot. Confirmed serial
+  `4078cac030c8`, product `veux`, unlocked, current slot B, `boot_b` size
+  `0x8000000`; selected slot A and rebooted to recovery. No `boot_a` write.
+- Recovery ADB connected as root. Pulled scan ring to
+  `/tmp/veux-403842-veuxscan-recovery.txt`: 224,297 decoded bytes (raw ring
+  224,537 bytes, flush sequence 157), decoded SHA-256
+  `6233238d5f4ed895ba36d21fdbb8a6198d3eb1b4ff6107679ca024b9c1522905`.
+  The boot args confirm `veuxlog=1 veuxscan=SpringBoard` on build
+  `40384236283`.
+- The scan runs at SpringBoard's first SIGTRAP but finds only FrontBoard
+  listener strings and `Version 16.7.16 (Build 20H392)` (three or four strings
+  per scan); it does not capture the assertion reason. The crash is at PC/LR
+  `0x1b76968c0` (slide `0x9290000`, unslid `0x1ae4068c0`), with FAR
+  `0x1e6ea4f40`. The same trap PC appears for SpringBoard and several other
+  daemons (including contextstored, liveactivitiesd, triald and
+  donotdisturbd), so do not infer an FBSDisplayMode failure from the PC alone.
+  The log still confirms an IOMFB-ready backboardd and first valid software
+  present before SpringBoard's restart loop. The embedded ADT has
+  `/chosen/display-scale=3`.
+- The saved pre-logger userdata tail
+  `backup/veux-device/userdata-tail-pre-veuxlog.bin` is 4,198,400 bytes with
+  SHA-256 `06955cde7f98b9503653b906e9634732d59a17a6dc2cb1a0e453fbdd4adaab86`.
+  The post-scan tail differed, confirming the bounded logger overwrote that
+  region. After preserving the decoded ring, restored exactly those 1,025
+  blocks from the backup and read them back; the restored hash matches the
+  backup. No other userdata range was written.
+- Next: use the exact 20H392 dyld shared cache to symbolicate the new unslid PC
+  and frames. If that is unavailable, add focused IOMFB mode/property logging
+  for refresh rate, scale, rotation and gamut before changing display values.
+  The literal visual mark is not decoded by the kernel ring. Phone is left in
+  slot-A recovery; `boot_b` still contains the scan wrapper; `boot_a` is
+  untouched.

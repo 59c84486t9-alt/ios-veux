@@ -673,15 +673,35 @@ backboardd opens AppleCLCD. IOMFB client initialization/readiness succeeds; the
 GUI summary records the display service and list, two surface swaps, and a
 first valid software present. SpringBoard then repeatedly exits via SIGTRAP
 (signal 5, code `0x600000001`) at PC/LR `0x1badc28c0`, with a stable backtrace.
-The “Too many corpses” records are downstream of that restart loop. This shows
-the Apple logo is no longer a slow root mount or absent framebuffer; SpringBoard
-is failing after a valid display present. The reason string was not captured.
+The “Too many corpses” records are downstream of that restart loop. The boot is
+therefore past root mounting and first display presentation; the log does not
+capture the reason for SpringBoard's failure.
 
-To capture it, a wrapper from the same verified build adds only
+To capture it, a wrapper from the same verified build added only
 `veuxscan=SpringBoard` while retaining the bounded logger. The kernel, DTB, and
 all other payload bytes match the prior verified wrapper; image size remains
 17,203,200 bytes. The user authorized repeated writes to `boot_b` and forbade
 `boot_a`; only `boot_b` was flashed, slot B selected, and reboot returned
-OKAY. Once this scan boot has run briefly, return with Fastboot to slot-A
-recovery and pull the ring. Read the `STR` output before changing any GUI
-properties.
+OKAY. The user reported the small mark under the Apple logo appeared almost
+immediately, then returned the phone to Fastboot. Recovery ADB on slot A
+returned a scan ring of 224,297 decoded bytes (raw ring 224,537 bytes, flush
+sequence 157; decoded SHA-256
+`6233238d5f4ed895ba36d21fdbb8a6198d3eb1b4ff6107679ca024b9c1522905`). The
+confirmed boot args include `veuxlog=1 veuxscan=SpringBoard` for build
+`40384236283`.
+
+The heap scan ran on the first SpringBoard SIGTRAP but captured only FrontBoard
+listener strings and `Version 16.7.16 (Build 20H392)`, not the assertion reason.
+The trap PC/LR is `0x1b76968c0`, slide `0x9290000`, unslid `0x1ae4068c0`, FAR
+`0x1e6ea4f40`. Several unrelated daemons trap at the same PC, so the address
+alone does not prove an FBSDisplayMode failure. The embedded ADT already has
+`/chosen/display-scale=3`. Next, symbolicate this PC and its frames against the
+exact 20H392 dyld cache; if unavailable, add focused logging of IOMFB mode
+refresh rate, scale, rotation and gamut before changing display values.
+
+The logger changed its bounded final 4 MiB + 4 KiB userdata region. After
+preserving the decoded scan log, restored that exact 1,025-block range from
+`backup/veux-device/userdata-tail-pre-veuxlog.bin`; readback matches its
+pre-logger SHA-256 `06955cde7f98b9503653b906e9634732d59a17a6dc2cb1a0e453fbdd4adaab86`.
+No other userdata range or `boot_a` was written. The phone remains in slot-A
+recovery; `boot_b` retains the scan wrapper.
