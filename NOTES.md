@@ -3155,3 +3155,32 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Phone remains connected to root recovery ADB with slot `_a`; no partition was
   written. The large host-only raw/COW captures were detached and deleted. The
   entitlement-fixed userdata image remains untouched.
+
+### 0129 runtime capture and recovery handoff — 2026-10-26
+
+- The latest strict CI is **40384236283** on commit `adfb75d`; it passed the
+  XNU build, synthetic framebuffer bounds check, feature manifest and artifact
+  packaging. Patch 0129 is applied. The locally assembled, verified wrapper is
+  `shim/out/veux-xnu-40384236283-iomfb-type-normalization/shim-boot-veux-xnu-40384236283-iomfb-type-normalization.img`
+  (SHA-256 `7024eba36ca05c9c17cee70bb342b1890b40d64eeffc5751da64e3445e711d76`).
+  Its manifest proves payload reconstruction from the CI kernel, phone-DTB
+  match and boot arguments. Those arguments include `rootrw=1 ufsrw=1` for the
+  already-authorized writable-root experiment; no userdata write was made in
+  this handoff.
+- Reviewed the user's 90.69-second Drive clip and `IMG_0787 (1).HEIC`. The
+  clip shows the XNU diagnostic display, repeated backboardd IOKit matching
+  queries for `IOAcceleratorES` returning `0 found`, then the Apple logo by
+  about 80 seconds. Those zero-result queries concern the accelerator class;
+  they do not prove that IOMFB display-list enumeration failed. The clip does
+  not show a GUI handoff, a panic/reset reason, or a ten-minute wait. The still
+  shows the Apple logo only; no separate asterisk is visible in it.
+- Read-only Fastboot checks found product `veux`, unlocked `yes`, slot B active,
+  and a 128 MiB `boot_b`. ADB was absent. `fastboot fetch boot_b` is unsupported,
+  so the currently installed boot image cannot be matched to the 403842 wrapper
+  from this host. Following the previously authorized recovery path, selected
+  slot A and rebooted to recovery; no partition or userdata was written.
+- Recovery ADB enumerates serial `4078cac030c8` as `unauthorized`, even with
+  the existing host key explicitly loaded. No recovery files/logs have been
+  read yet. Next: the user must accept the USB debugging authorization on the
+  phone; then inspect pstore/last-kmsg and the latest boot's logs read-only
+  before choosing another kernel or display change.

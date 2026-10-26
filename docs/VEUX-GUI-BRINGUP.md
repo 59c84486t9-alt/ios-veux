@@ -563,10 +563,9 @@ that is the captured failure remains a hypothesis until the next crash report
 or successful display enumeration confirms it.
 
 The first CI run for the redundant cast, 40380782893, was canceled after
-correcting the overload analysis. Patch 0129 compiles locally against the
-40369369423 packaged build tree (0/1 failures), and its patch applies exactly
-to that tree. Strict CI, wrapper build/verification, flash, and on-device
-display/SpringBoard validation are still pending.
+correcting the overload analysis. Patch 0129 compiled locally against the
+40369369423 packaged build tree (0/1 failures), and its patch applied exactly
+to that tree.
 
 CI **40369369423** then passed on commit `1f46527d7c86d956da5c2ee27fc379f8ee099e72`:
 the ordered patches, XNU build, synthetic framebuffer bounds checks, feature
@@ -587,3 +586,29 @@ reboot. This is a green build and successful flash, but the display-list fix
 and SpringBoard GUI are not yet confirmed on-device. The next runtime capture
 should show build ID 40369369423, no backboardd display-list exception, and an
 IOMFB client/selector/first-present followed by SpringBoard handoff.
+
+### CI 40384236283 and the latest runtime clip
+
+CI [40384236283](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40384236283)
+passed with patch 0129 applied. The independently verified wrapper is
+`shim/out/veux-xnu-40384236283-iomfb-type-normalization/shim-boot-veux-xnu-40384236283-iomfb-type-normalization.img`,
+SHA-256 `7024eba36ca05c9c17cee70bb342b1890b40d64eeffc5751da64e3445e711d76`.
+Its manifest checks the CI kernel payload, embedded ADT, phone DTB and boot
+arguments. This verification is separate from proof that the wrapper is
+currently installed; Fastboot's `fetch` command is unsupported on this device.
+
+The user's latest 90.69-second clip shows the kernel diagnostic display, then
+repeated backboardd IOKit matching requests for `IOAcceleratorES` returning
+`0 found`, then the Apple logo at approximately 80 seconds. These are zero
+accelerator matches, not evidence that IOMFB matching itself returned zero.
+The clip ends without showing a GUI, panic reason, or ten-minute wait. The
+attached still shows the Apple logo only. Neither confirms a SpringBoard
+handoff or explains the later report of an asterisk.
+
+Current host-side Fastboot checks found `veux`, unlocked, slot B active, and a
+128 MiB `boot_b`; ADB was absent. The user-authorized read-only recovery route
+selected slot A and rebooted to recovery. ADB now sees the phone as
+`unauthorized`, despite loading the existing host key; no recovery data has
+been read. The next step is to accept the USB debugging prompt on the phone,
+then read pstore/last-kmsg and the current boot logs before changing the
+kernel again. No partition or userdata was written in this handoff.
