@@ -1,3 +1,18 @@
+## >>> UPDATE 2026-10-27 (known-good mount flags restored on probe boot) <<<
+
+- User returned the phone to Fastboot. Reflashed the corrected wrapper
+  `shim-boot-veux-touchprobe-rw-40420136793.img` to `boot_b` only, then rebooted
+  slot B. Fastboot product `veux`, active slot `b`, and `boot_b` capacity
+  `0x8000000` were verified; flash/reboot returned OKAY. `boot_a` was not
+  touched. Wrapper SHA-256:
+  `311cfa91c1bc6a0eda3766655456008e5a652593eec5edbe6b16390ffee11395`.
+- This wrapper restores `rootrw=1 ufsrw=1`, the known-good boot settings,
+  while retaining `veuxtouchprobe=1`. Hardware probe code remains read-only.
+  Host checks at 20+ seconds show neither ADB nor Fastboot enumeration. Asked
+  user for the boot screen or a startup clip so the short-lived SE8 probe output
+  can be checked; runtime result is still unknown. No touch events are emitted
+  by this probe.
+
 ## >>> UPDATE 2026-10-27 (read-only mount boot failure; corrected probe wrapper prepared) <<<
 
 - User supplied two photos from the probe boot. They show `mount_hfs` reporting
