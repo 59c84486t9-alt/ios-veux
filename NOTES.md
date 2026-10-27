@@ -3965,5 +3965,7 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   applying patch 0123 because its framebuffer hunk expected the build-ID helper
   to be absent from patch 0120. A context-based retry still failed at the same
   hunk; changed that single insertion to a zero-context hunk at the post-0120
-  insertion line. Local repository validation passes, but the patch sequence
-  still needs CI confirmation. Never write boot_a.
+  insertion line. CI run 40453352908 then confirmed patch 0123 applies and
+  exposed a stale `bsd/conf/files` line number in patch 0131; 0131/0132 now
+  target the post-0117 positions. Local repository validation passes, pending
+  another CI run. Never write boot_a.

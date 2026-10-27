@@ -10,7 +10,7 @@ It never writes touch configuration or firmware and does not start polling.
 diff --git a/bsd/conf/files b/bsd/conf/files
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -110,3 +110,4 @@
+@@ -114,3 +114,4 @@
  bsd/dev/sweet_usb.c			standard
  bsd/dev/veux_touch_probe.c		standard
 +bsd/dev/veux_touch_active.c		standard

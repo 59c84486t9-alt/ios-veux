@@ -27,7 +27,7 @@ index 7adee14..a32f477 100644
 diff --git a/bsd/conf/files b/bsd/conf/files
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -110,2 +110,3 @@
+@@ -114,2 +114,3 @@
  bsd/dev/sweet_usb.c			standard
 +bsd/dev/veux_touch_probe.c		standard
  bsd/dev/mem.c				standard
