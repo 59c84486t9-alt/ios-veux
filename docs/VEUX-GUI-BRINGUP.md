@@ -200,8 +200,17 @@ then flashed only to `boot_b` on serial `4078cac030c8` (product `veux`, active
 slot B, partition capacity 128 MiB); flash, slot selection and reboot returned
 `OKAY`. At the 8-second check neither ADB nor Fastboot enumerated, as expected
 for the pre-root hold. The test remains one identity read only, with no touch
-config, polling, or userdata access. `boot_a` was not changed. The on-screen
-CFG/IO and `id-read` result is pending a photo.
+config, polling, or userdata access. `boot_a` was not changed.
+
+The photo now shows that result: the GPIO config registers for pins 19/20
+remain zero after the probe's bus setup, and all printed CFG/IO pairs for
+pins 19/20/21/44/51 remain zero after rail/reset sequencing. `id-read` still
+times out at `phase=start` with both line inputs zero. This points to a
+TLMM write/readback or mapping issue before the I2C transaction; it does not
+establish a sensor NACK or prove that the physical pins were sampled. The
+next revision must inspect XNU's `ml_io_map` protection/mapping path and
+verify the write/readback in a bounded diagnostic before attempting another
+touch transaction.
 
 ## Validation and pending hardware test
 

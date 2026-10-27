@@ -1,3 +1,20 @@
+## >>> UPDATE 2026-10-27 (GPIO configuration writes do not read back) <<<
+
+- The latest held-probe photo shows `cfg19=0`, `cfg20=0` after the GPIO bus
+  setup, and all printed pin CFG/IO pairs (19, 20, 21, 44, 51) remain zero
+  after the rail/reset calls. The final result is still `error=60`,
+  `phase=start`, both SDA/SCL inputs zero. Thus the probe's attempted TLMM
+  configuration writes do not appear in CFG readback; the timeout is
+  downstream of a register-write/readback problem, before an I2C address.
+  Do not interpret this as evidence that the sensor NACKed or that its lines
+  were electrically sampled correctly.
+- Next: inspect the exact XNU `io_map` / `ml_io_map` mapping protections and
+  add a tightly bounded mapping/write-readback diagnostic before another
+  sensor sequence. The physical base and Blair GPIO register offsets were
+  already corroborated against the phone DTB and upstream pinctrl source.
+  No cleanup/deletion was performed; pre-existing untracked generated
+  artifacts remain untouched. `boot_a` and userdata remain untouched.
+
 ## >>> UPDATE 2026-10-27 (GPIO CFG/IO readback probe flashed to boot_b) <<<
 
 - Strict CI [40444592303](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40444592303)
