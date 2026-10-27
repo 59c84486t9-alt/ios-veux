@@ -1,3 +1,15 @@
+## >>> UPDATE 2026-10-27 (early boot segment IMG_0808.MOV) <<<
+
+- Reviewed the user's 19-second early boot clip. The loader screen reports
+  `VIRT=0xfffffe0006000000` and `ENTRY=0xfffffe0007499488`, matching the
+  405130 payload's kernel virtual base and entry. The clip then shows XNU CPU,
+  GUI, and MAC framework initialization.
+- It ends before the `/sweet-ufs` root-device initialization that invokes
+  `sweet_ufs_init()` and the GPI/SMMU preflight. Thus it does not yet show
+  whether the hook runs or receives the boot flag. The later 0807 clip reaches
+  user services, so the useful missing interval is after MAC initialization
+  and before the launchd service log. No new device command or flash was made.
+
 ## >>> UPDATE 2026-10-27 (40513098723 screen recording) <<<
 
 - Inspected the user's 77-second `IMG_0807.MOV` from Drive. At the clip's first
