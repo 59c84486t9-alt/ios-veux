@@ -173,8 +173,8 @@ is `GENI_IF_DISABLE_RO` bit 0 at SE8 offset `0x64`. Linux defines this as
 interface is unavailable. The DT maps QUP wrapper 1 serial engine 2 to GPI DMA
 channels 0/1 with channel index 2. Patch 0132 now uses open-drain GPIO19/20
 bit-banging for a single bounded ID read in that case, avoiding FIFO register
-access and a full GPI DMA driver. This fallback still needs a green CI build and
-one `boot_b` hardware run; the prior build stopped before touching the rails.
+access and a full GPI DMA driver. CI run 40438943893 passed, and its verified
+wrapper was flashed only to `boot_b`; the held-screen result is pending.
 
 ## Validation and pending hardware test
 

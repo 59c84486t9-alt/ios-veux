@@ -14,9 +14,18 @@
   register-pointer plus 12-byte GT9896 identity read. It never drives either
   bus line high, does not write touch configuration, and is bounded by a 2 ms
   SCL-rise wait per edge. Source manifest checks now require this fallback.
-  This candidate has local patch/repo validation but no CI build yet. Do not
-  flash it until CI and wrapper verification pass; current `boot_b` still has
-  the last green clock-only probe. `boot_a` and userdata remain untouched.
+  CI [40438943893](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40438943893)
+  passed compile, host bounds, source manifest, and packaging. Kernel SHA-256:
+  `ace3ea3496e0238c6db5ea449064c4d50361ed2212039ce1deac2a17a0d956d4`.
+  The held wrapper
+  `/tmp/veux-touch-probe-40438943893/shim-boot-veux-touchprobe-active-hold-40438943893.img`
+  passed exact payload/kernel/DTB/build-ID/boot-argument/patch-status checks;
+  wrapper SHA-256:
+  `879abab4d442228d6ab59837c9dd17c1862670de8324f9c47d9c4516ad32cb8c`.
+  Fastboot verified product `veux`, slot B, and `boot_b` size `0x8000000`;
+  flashed/rebooted only `boot_b` with `OKAY`. `boot_a` and userdata remain
+  untouched. At 12 seconds ADB/Fastboot were absent, consistent with the hold;
+  current GPIO-read result is awaiting the screen photo.
 
 ## >>> UPDATE 2026-10-27 (active probe clock-gating false stop corrected) <<<
 
