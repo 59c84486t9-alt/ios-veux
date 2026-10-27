@@ -12,7 +12,19 @@
   actions are added.
 - Added strict patch-status, kernel-string, and source-manifest checks. The
   synthetic `git apply --check` for 0134 and repository/Python/shell validation
-  pass. CI has not yet run; no commit or phone flash has occurred.
+  pass. Commit `51de2a3` was pushed. Strict CI run
+  [40523792347](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40523792347)
+  passed build, host diagnostics, manifest, and artifact packaging. Kernel SHA-256:
+  `2ac5b868c18ed7469323a43ddae8c2a65a46a7e8e2bfa2552f39d5310c30b61d`.
+- Built and independently verified wrapper
+  `/tmp/veux-gpi-summary-40523792347/veux-gpi-summary-40523792347-fastboot-boot.img`
+  against the CI kernel, phone DTB, inherited shim, build ID, boot args, and
+  patch list. Wrapper SHA-256:
+  `b5bc0db1e60f57fe5ec9a75f8151db07f59abdda1302cb217c332505b3135cfa`.
+  Fastboot confirmed unlocked VEUX, slot B, and 128 MiB `boot_b`; writing
+  `boot_b` and reboot both returned OKAY. `boot_a` was not touched. At 30
+  seconds ADB/Fastboot had not re-enumerated; waiting for the screen capture
+  showing the repeated GPI/SMMU summary lines.
 
 ## >>> UPDATE 2026-10-27 (early boot segment IMG_0808.MOV) <<<
 
