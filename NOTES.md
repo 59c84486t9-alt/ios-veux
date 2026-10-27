@@ -4037,3 +4037,13 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   through this recovery session. No GPIO reads/requests/writes, data mounts,
   or partition writes were performed. Active slot is A for recovery; `boot_b`
   still contains the verified no-hold probe and `boot_a` is unchanged.
+- Decoded the live DT `soc/ranges`: it maps child address `0x0` to parent
+  address `0x0` for `0xffffffff` bytes, so this DT uses identity translation.
+  `/soc/pinctrl@400000` at PA `0x400000` is therefore not missing an ADT or
+  `soc/ranges` translation. XNU's logged byte offsets and VA increments are
+  consistent with `base + pin*0x1000` and 32-bit IO reads, but all-zero cfg
+  values still do not establish that the TLMM mapping is live or writable.
+  Since the diagnostic exits before pin writes/active probe when the primary
+  TLMM dump is all zero, the later black display is not explained by the
+  GT9896 power/reset/I2C sequence. Recovery remains connected over ADB in slot
+  A; no new flash or partition write was made.
