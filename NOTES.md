@@ -4047,3 +4047,18 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   TLMM dump is all zero, the later black display is not explained by the
   GT9896 power/reset/I2C sequence. Recovery remains connected over ADB in slot
   A; no new flash or partition write was made.
+- Compared the exact CI heads and locally preserved wrapper manifests for the
+  user's `40458884123` question. CI run 404588 used head `21ee044`; that commit
+  changed only `tools/kernel-manifest.py`, while its kernel already contained
+  the opt-in touch probe. Its wrapper manifest has both
+  `veuxtouchprobeactive=1` and `veuxtouchprobehold=1` (wrapper SHA-256
+  `014d38e2199d99c0d6632bff6db280f51c932ad64ec71508a5c8f2e5bea90310`). The
+  hold flag intentionally parks XNU in an infinite WFE loop after a successful
+  primary TLMM dump and diagnostics, so that wrapper cannot continue to iOS on
+  that path; this is a likely direct explanation for the black/frozen screen
+  on that run. The later 404909 no-hold wrapper removed only the hold flag but
+  retained active-probe args, and the photo showed zero TLMM so the probe's
+  early-return path skipped touch pin writes/active I2C. Its later black screen
+  remains unexplained by the hold and needs separate display/boot investigation.
+  CI itself does not store wrapper boot args; the local manifests distinguish
+  those wrapper configurations.
