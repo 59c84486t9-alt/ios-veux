@@ -140,6 +140,10 @@ source_checks["veux_touch_tlmm_mapping_dump_and_drive_test_are_bounded"] = (
     and "((uint32_t)(pin) * 0x1000u)" in touch_probe
     and "volatile uint32_t" in touch_probe
     and "pin < 64" in touch_probe
+    and "static const unsigned first_pins[] = {19, 20, 21, 22, 44, 51, 3, 7, 8, 9}" in touch_probe
+    and "VEUX TLMM ORDER: touch pins 19/20/21/22/44/51 first" in touch_probe
+    and "VEUX TLMM CHECK pin=%u cfgPA/VA=%#llx/%p ioPA/VA=%#llx/%p before-read" in touch_probe
+    and "VEUX TLMM READ32 pa=%#llx va=%p off=%#x width=32 value=" in touch_probe
     and "ALT-READONLY" in touch_probe
     and "if (!main_live)" in touch_probe
     and "primary DT window all zero; alternate was read-only" in touch_probe

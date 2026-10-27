@@ -77,37 +77,50 @@ index 0000000..0000000
 +touch_probe_tlmm_rd(vm_offset_t va, vm_offset_t pa, uint32_t offset)
 +{
 +	vm_offset_t addr = va + (vm_offset_t)offset;
++	printf("VEUX TLMM READ32 pa=%#llx va=%p off=%#x width=32 value=",
++	    (unsigned long long)(pa + offset), (void *)addr, offset);
 +	uint32_t value = *(volatile uint32_t *)addr;
 +	__asm__ volatile("dmb oshld" ::: "memory");
-+	printf("VEUX TLMM READ32 pa=%#llx va=%p off=%#x value=%#x\n",
-+	    (unsigned long long)(pa + offset), (void *)addr, offset, value);
++	printf("%#x\n", value);
 +	return value;
 +}
 +
 +static bool
 +touch_probe_tlmm_dump(vm_offset_t va, vm_offset_t pa, const char *tag)
 +{
++	static const unsigned first_pins[] = {19, 20, 21, 22, 44, 51, 3, 7, 8, 9};
++	bool seen[64] = {false};
 +	bool any_nonzero = false;
 +	unsigned control_cfg_nonzero = 0;
 +	printf("VEUX TLMM MAP %s pa=%#llx va=%p size=%#x attr=Device-nGnRnE(VM_WIMG_IO) ADT-translation=none\n",
 +	    tag, (unsigned long long)pa, (void *)va, VEUX_TOUCH_TLMM_SIZE);
 +	printf("VEUX TLMM HEX rows: pin cfg/io; cfg PA/VA=base+pin*0x1000; IO PA/VA=CFG+4; 32-bit\n");
-+	for (unsigned pin = 0; pin < 64; ++pin) {
-+		uint32_t off = TLMM_GPIO_CFG(pin);
-+		vm_offset_t cfg_va = va + (vm_offset_t)off;
-+		vm_offset_t io_va = cfg_va + 4u;
-+		vm_offset_t cfg_pa = pa + (vm_offset_t)off;
-+		vm_offset_t io_pa = cfg_pa + 4u;
-+		uint32_t cfg = touch_probe_rd(va, off);
-+		uint32_t io = touch_probe_rd(va, off + 4u);
-+		any_nonzero |= cfg != 0 || io != 0;
-+		if (pin == 3 || (pin >= 7 && pin <= 9) || pin == 21 || pin == 22 || pin == 44 || pin == 51) {
-+			control_cfg_nonzero += cfg != 0;
-+			printf("VEUX TLMM CTRL pin=%u cfg/io=%08x/%08x\n", pin, cfg, io);
++	printf("VEUX TLMM ORDER: touch pins 19/20/21/22/44/51 first; recovery controls 3/7/8/9 next; remaining pins last\n");
++	for (unsigned pass = 0; pass < 2; ++pass) {
++		unsigned count = pass == 0 ? sizeof(first_pins) / sizeof(first_pins[0]) : 64;
++		for (unsigned i = 0; i < count; ++i) {
++			unsigned pin = pass == 0 ? first_pins[i] : i;
++			if (seen[pin]) continue;
++			seen[pin] = true;
++			uint32_t off = TLMM_GPIO_CFG(pin);
++			vm_offset_t cfg_va = va + (vm_offset_t)off;
++			vm_offset_t io_va = cfg_va + 4u;
++			vm_offset_t cfg_pa = pa + (vm_offset_t)off;
++			vm_offset_t io_pa = cfg_pa + 4u;
++			printf("VEUX TLMM CHECK pin=%u cfgPA/VA=%#llx/%p ioPA/VA=%#llx/%p before-read\n",
++			    pin, (unsigned long long)cfg_pa, (void *)cfg_va,
++			    (unsigned long long)io_pa, (void *)io_va);
++			uint32_t cfg = touch_probe_tlmm_rd(va, pa, off);
++			uint32_t io = touch_probe_tlmm_rd(va, pa, off + 4u);
++			any_nonzero |= cfg != 0 || io != 0;
++			if (pin == 3 || (pin >= 7 && pin <= 9) || pin == 21 || pin == 22 || pin == 44 || pin == 51) {
++				control_cfg_nonzero += cfg != 0;
++				printf("VEUX TLMM CTRL pin=%u cfg/io=%08x/%08x\n", pin, cfg, io);
++			}
++			printf("VEUX TLMM %02u cfg/io=%08x/%08x cfgPA/VA=%#llx/%p ioPA/VA=%#llx/%p\n",
++			    pin, cfg, io, (unsigned long long)cfg_pa, (void *)cfg_va,
++			    (unsigned long long)io_pa, (void *)io_va);
 +		}
-+		printf("VEUX TLMM %02u cfg/io=%08x/%08x cfgPA/VA=%#llx/%p ioPA/VA=%#llx/%p\n",
-+		    pin, cfg, io, (unsigned long long)cfg_pa, (void *)cfg_va,
-+		    (unsigned long long)io_pa, (void *)io_va);
 +	}
 +	printf("VEUX TLMM %s summary nonzero=%u control_cfg_nonzero=%u/8 (gpio3,7,8,9,21,22,44,51)\n",
 +	    tag, (unsigned)any_nonzero, control_cfg_nonzero);
