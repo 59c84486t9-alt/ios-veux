@@ -9,8 +9,21 @@
   idle halt bit as a failed clock. Patch 0132 now logs/read-checks the wrapper
   vote and accepts a hardware-gated wrapper bus, but still requires the SE8
   leaf branch/source to be ready before touching pins or power/reset GPIOs.
-- Pending: validate/build this correction, then use only authorized `boot_b`
-  and capture the next held screen. `boot_a` and userdata remain untouched.
+- CI [40436828751](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40436828751)
+  passed: XNU build, host bounds checks, strict kernel manifest, and artifact
+  packaging. Kernel SHA-256:
+  `2350187a54b6e4ab92e7c8e1fe22476dc6beebff31f6e53025fa711e1c714e13`.
+- Built and verified
+  `/tmp/veux-touch-probe-40436828751/shim-boot-veux-touchprobe-active-hold-40436828751.img`
+  (SHA-256 `71335d12a7020b2a74a96f43c0b3297e3e091ab11723c255f6186b62d114e9a4`).
+  The verified manifest matches the CI kernel, phone DTB, payload, run/build ID,
+  and boot arguments. It keeps the hold before root mount and does not enable
+  filesystem writes.
+- Fastboot confirmed product `veux`, slot B, and `boot_b` size `0x8000000`.
+  Flashed and rebooted only `boot_b`; both operations returned `OKAY`. `boot_a`
+  and userdata remain untouched. At 12 seconds neither ADB nor Fastboot
+  enumerated, consistent with the early diagnostic hold. Waiting for the new
+  screen photo to see whether the probe reached the ID read.
 
 ## >>> UPDATE 2026-10-27 (bounded GT9896 ID probe flashed to boot_b) <<<
 
