@@ -29,7 +29,7 @@ diff --git a/bsd/dev/veux_gpi_preflight.c b/bsd/dev/veux_gpi_preflight.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/veux_gpi_preflight.c
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,119 @@
 +/* Read-only GPI/SMMU state capture for VEUX GT9896 DMA bring-up. */
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +#include <sys/param.h>
@@ -82,7 +82,13 @@ new file mode 100644
 +veux_gpi_preflight(void)
 +{
 +	int enabled = 0;
-+	if (!PE_parse_boot_argn("veuxgpipreflight", &enabled, sizeof(enabled)) || enabled != 1) return;
++	int arg_present = PE_parse_boot_argn("veuxgpipreflight", &enabled, sizeof(enabled));
++	printf("VEUX GPI PREFLIGHT: hook reached arg_present=%d enabled=%d; read-only\n",
++	    arg_present, enabled);
++	if (!arg_present || enabled != 1) {
++		veux_fb_print_build_id();
++		return;
++	}
 +
 +	vm_offset_t gpi = ml_io_map(VEUX_GPI_PA, VEUX_GPI_MAP_SIZE);
 +	vm_offset_t smmu = ml_io_map(VEUX_SMMU_PA, VEUX_SMMU_SIZE);

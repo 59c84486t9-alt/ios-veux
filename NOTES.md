@@ -1,5 +1,20 @@
 ## >>> UPDATE 2026-10-27 (GPI/SMMU preflight image booted from boot_b) <<<
 
+- Inspected the user's new 86-second `IMG_0806.MOV` recording via the Drive
+  connector. The phone reaches the XNU text console and continues into launchd
+  process logs; this recording does not show a black-screen hang. I checked the
+  early boot frames as well as later console frames and did not see any
+  `VEUX GPI PREFLIGHT` / `VEUX SMMU PREFLIGHT` result or the preflight build ID.
+- The saved wrapper manifest does include `veuxgpipreflight=1`, the CI kernel
+  contains the preflight strings, and CI's patch-status file says 0133 applied.
+  That narrows the gap to hook execution, boot-arg parsing, or console output
+  being lost before the recording. Updated 0133 to print a single hook/arg
+  status line before its gate; if the flag is absent it prints the build ID and
+  returns without mapping or reading MMIO. This is still read-only and does not
+  configure DMA or touch power/reset.
+- Next: build that one-line diagnostic and inspect the marker. Do not implement
+  DMA until SMMU/GPI runtime values are visible. Preserve `boot_a`.
+
 - Corrected GPI/SMMU preflight CI run
   [40506302631](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40506302631)
   passed on code commit `7a92f8e` (build/patch application, host checks,
