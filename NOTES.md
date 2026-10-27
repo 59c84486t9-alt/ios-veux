@@ -6,6 +6,11 @@
   line was the closing `#endif`, causing an unterminated conditional directive.
 - Corrected patch 0132's new-file hunk count to 277. No kernel from this failed
   run was packaged or used, and no phone partition was written. Rerun pending.
+- Run [40433514902](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40433514902)
+  compiled the kernel and passed host bounds checks, then failed one manifest
+  source assertion because patch 0132 had updated the baseline status wording.
+  All other reported source checks passed. Updated the expected text to
+  `baseline snapshot complete`; this kernel remains unaccepted and unflashed.
 
 ## >>> UPDATE 2026-10-27 (held SE8 probe captured; next-stage boundary) <<<
 

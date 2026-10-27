@@ -134,7 +134,7 @@ source_checks["veux_touch_baseline_snapshot_is_opt_in_and_read_only"] = (
     and "VEUX_TOUCH_GCC_PA      0x01400000u" in touch_probe
     and "VEUX_TOUCH_GCC_SIZE    0x80000u" in touch_probe
     and "VEUX_TOUCH_TLMM_PA     0x00400000u" in touch_probe
-    and "read-only baseline snapshot complete" in touch_probe
+    and "baseline snapshot complete" in touch_probe
     and "touch_wr(" not in touch_probe
     and "SE_CMD" not in touch_probe
     and "sweet_hid_touch" not in touch_probe
