@@ -191,12 +191,17 @@ bit 0. So this timeout does not support changing the base or stride.
 
 The reference Blair DTS requests pull-up and `drive-strength=<2>` for SE8
 GPIO19/20. Linux encodes 2 mA as drive field zero; the XNU probe had used
-field two (6 mA). The next diagnostic aligns it to 2 mA and logs the GPIO
+field two (6 mA). The new diagnostic aligns it to 2 mA and logs the GPIO
 config and IO registers after bus setup, after rails/reset, and after the
 failed transaction. This distinguishes a config-write/readback issue from
-pins that remain electrically low despite the requested input pull-up. The
-test remains one identity read only, with no touch config, polling, or
-userdata access. Do not change `boot_a`.
+pins that remain electrically low despite the requested input pull-up. Strict
+CI 40444592303 passed in 12m02s. The wrapper was independently verified,
+then flashed only to `boot_b` on serial `4078cac030c8` (product `veux`, active
+slot B, partition capacity 128 MiB); flash, slot selection and reboot returned
+`OKAY`. At the 8-second check neither ADB nor Fastboot enumerated, as expected
+for the pre-root hold. The test remains one identity read only, with no touch
+config, polling, or userdata access. `boot_a` was not changed. The on-screen
+CFG/IO and `id-read` result is pending a photo.
 
 ## Validation and pending hardware test
 

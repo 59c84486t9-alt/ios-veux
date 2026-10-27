@@ -1,4 +1,25 @@
-## >>> UPDATE 2026-10-27 (GPIO START timeout; config readback revision in progress) <<<
+## >>> UPDATE 2026-10-27 (GPIO CFG/IO readback probe flashed to boot_b) <<<
+
+- Strict CI [40444592303](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40444592303)
+  passed in 12m02s on commit `5f796e5`, including XNU compile, host bounds,
+  feature manifest, packaging, and artifact upload. Kernel SHA-256:
+  `5f79d011fef110a4fba68ef9942784585bb7069da0dcfa9ad5c2fa34fd68f724`.
+- Built and independently verified the held wrapper at
+  `/home/nyra/.cache/veux-touch-probe-40444592303/shim-boot-veux-touchprobe-active-hold-40444592303.img`.
+  Wrapper SHA-256:
+  `a0d2a86fbeee786953194548f9aea5c5af33187e5729a446c91bcaa55d599232`.
+  Its payload matches the CI kernel and VEUX ADT; its external DTB matches the
+  board-selected phone DTB. Arguments retain the sandbox/iolog settings and
+  set `veuxtouchprobe=1 veuxtouchprobeactive=1 veuxtouchprobehold=1`; omit
+  `rootrw=1 ufsrw=1`, and the hold occurs before root mount.
+- Fastboot reverified serial `4078cac030c8`, product `veux`, unlocked, slot B,
+  and `boot_b` size `0x8000000`. Flashed this wrapper to `boot_b`, selected B,
+  and rebooted; each operation returned `OKAY`. No other partition was
+  written. At the 8-second check neither ADB nor Fastboot enumerated, matching
+  the expected pre-root hold. Waiting for the screen's CFG/IO readbacks and
+  final `id-read` line. Keep `boot_a` and userdata untouched.
+
+## >>> UPDATE 2026-10-27 (GPIO START timeout; controller address verified) <<<
 
 - Latest photo from the active probe reports `id-read error=60`,
   `transport=gpio`, `phase=start`, and final SDA/SCL IO values both zero. The
@@ -16,9 +37,10 @@
   code 0 (2 mA), matching the Blair DTS `drive-strength=<2>`, and logs CFG/IO
   readbacks at bus setup, after rail/reset sequencing, and at the I2C result.
   This is a diagnostic and electrical-setting alignment; whether the input
-  pull-ups take effect is not yet known. Repository validator passes; strict
-  CI and any device flash for this revision are pending. Preserve the current
-  lock-screen baseline; only `boot_b` remains authorized, never `boot_a`.
+  pull-ups take effect is not yet known. Repository validation and strict CI
+  passed; the revised held wrapper was flashed to `boot_b` only. The new GPIO
+  CFG/IO readback is pending. The known-good lock-screen baseline remains in
+  slot A; never write `boot_a`.
 
 ## >>> UPDATE 2026-10-27 (failure-phase probe flashed to boot_b) <<<
 
