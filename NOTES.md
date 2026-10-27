@@ -1,3 +1,27 @@
+## >>> UPDATE 2026-10-27 (failure-phase probe flashed to boot_b) <<<
+
+- CI [40442466371](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40442466371)
+  succeeded in 12m04s after the prior hunk-count and transient KDK-download
+  failures. Build, synthetic host bounds, source manifest, packaging, and
+  artifact upload all passed. Kernel SHA-256:
+  `4ac59f365b1b59fbe5fd5d3afd32f2d66ebca07c338952a30344cb715ec6c208`.
+- Built and independently verified the held active-probe wrapper
+  `/tmp/veux-touch-probe-40442466371/shim-boot-veux-touchprobe-active-hold-40442466371.img`.
+  Wrapper SHA-256:
+  `7e61b36d07521657d8cda255ab11c861c21b632f9af50c943405856949896ced`;
+  payload SHA-256:
+  `5f0465861a65e9818a1b5a3e4f7c77095734b61952fbb9a9c6addda5b9de3a71`;
+  phone DTB SHA-256 remains
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+  Verified CI kernel, run/build ID, payload, embedded ADT, DTB, boot args, and
+  patch status. The hold occurs after the probe and before filesystem mounting;
+  rootrw/ufsrw flags are absent.
+- Fastboot reconfirmed serial `4078cac030c8`, product `veux`, active slot B,
+  and `boot_b` capacity `0x8000000`. Flashed and rebooted only `boot_b`; both
+  returned `OKAY`. `boot_a` and userdata were not touched. At the 10-second
+  check neither ADB nor Fastboot enumerated, consistent with the probe hold.
+  Waiting for the on-screen `phase=... sda=... scl=...` result photo.
+
 ## >>> UPDATE 2026-10-27 (GPIO I2C failure-phase instrumentation pending CI) <<<
 
 - The latest user photo shows the GPIO fallback ran after GENI FIFO was found
