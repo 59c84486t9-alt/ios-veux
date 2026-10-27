@@ -18,15 +18,18 @@ diff --git a/bsd/conf/files b/bsd/conf/files
 diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c
-@@ -665,1 +665,3 @@ sweet_ufs_init(void)
- #if defined(ARM64_BOARD_CONFIG_VEUX)
+@@ -693,4 +693,6 @@ sweet_ufs_init(void)
+ 	extern void veux_touch_probe_init(void);
+ 	/* Bounded touch diagnostic; disabled unless explicitly requested. */
+ 	veux_touch_probe_init();
 +	extern void veux_gpi_preflight(void);
 +	veux_gpi_preflight();
+ #endif
 diff --git a/bsd/dev/veux_gpi_preflight.c b/bsd/dev/veux_gpi_preflight.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/veux_gpi_preflight.c
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,113 @@
 +/* Read-only GPI/SMMU state capture for VEUX GT9896 DMA bring-up. */
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +#include <sys/param.h>
@@ -38,10 +41,14 @@ new file mode 100644
 +extern void veux_fb_print_build_id(void);
 +
 +#define VEUX_GPI_PA       0x04c00000u
-+#define VEUX_GPI_SIZE     0x00060000u
++#define VEUX_GPI_MAP_SIZE 0x00060000u
++#define VEUX_GPI_EE_OFFSET 0x00010000u
 +#define VEUX_SMMU_PA      0x0c600000u
-+#define VEUX_SMMU_SIZE    0x00080000u
++#define VEUX_SMMU_SIZE    0x00100000u
 +#define GPII_ID           2u
++#define VEUX_GPII_MASK    0x1fu
++#define VEUX_DMA_POOL_IOVA 0x00100000u
++#define VEUX_DMA_POOL_SIZE 0x00100000u
 +#define GPI_CH_CTX(ch)    (0x20000u + 0x4000u * GPII_ID + 0x80u * (ch))
 +#define GPI_EV_CTX(ev)    (0x21000u + 0x4000u * GPII_ID + 0x80u * (ev))
 +#define SMMU_IDR0         0x20u
@@ -77,7 +84,7 @@ new file mode 100644
 +	int enabled = 0;
 +	if (!PE_parse_boot_argn("veuxgpipreflight", &enabled, sizeof(enabled)) || enabled != 1) return;
 +
-+	vm_offset_t gpi = ml_io_map(VEUX_GPI_PA, VEUX_GPI_SIZE);
++	vm_offset_t gpi = ml_io_map(VEUX_GPI_PA, VEUX_GPI_MAP_SIZE);
 +	vm_offset_t smmu = ml_io_map(VEUX_SMMU_PA, VEUX_SMMU_SIZE);
 +	if (!gpi || !smmu) {
 +		printf("VEUX GPI PREFLIGHT: map failed gpi=%u smmu=%u; read-only, no DMA attempted\n",
@@ -91,9 +98,10 @@ new file mode 100644
 +	uint32_t idr2 = gpi_preflight_read(smmu, SMMU_IDR2);
 +	uint32_t scr0 = gpi_preflight_read(smmu, SMMU_SCR0);
 +	uint32_t gbpa = gpi_preflight_read(smmu, SMMU_GBPA);
-+	printf("VEUX GPI PREFLIGHT: read-only GPI PA=%#llx VA=%p size=%#x GPII=%u; Apps-SMMU PA=%#llx VA=%p\n",
-+	    (unsigned long long)VEUX_GPI_PA, (void *)gpi, VEUX_GPI_SIZE, GPII_ID,
-+	    (unsigned long long)VEUX_SMMU_PA, (void *)smmu);
++	printf("VEUX GPI PREFLIGHT: read-only top PA=%#llx VA=%p size=%#x EE offset=%#x GPII=%u mask=%#x pool=%#x+%#x; Apps-SMMU PA=%#llx VA=%p size=%#x\n",
++	    (unsigned long long)VEUX_GPI_PA, (void *)gpi, VEUX_GPI_MAP_SIZE,
++	    VEUX_GPI_EE_OFFSET, GPII_ID, VEUX_GPII_MASK, VEUX_DMA_POOL_IOVA, VEUX_DMA_POOL_SIZE,
++	    (unsigned long long)VEUX_SMMU_PA, (void *)smmu, VEUX_SMMU_SIZE);
 +	printf("VEUX SMMU PREFLIGHT: IDR0=%#x IDR1=%#x IDR2=%#x SCR0=%#x GBPA=%#x SID=%#x\n",
 +	    idr0, idr1, idr2, scr0, gbpa, SMMU_SID);
 +
@@ -119,14 +127,14 @@ new file mode 100644
 +
 +	/* Linux DT maps this SE8 client's TX/RX to GPI channel pair 0/1. */
 +	for (unsigned ch = 0; ch < 2; ++ch) {
-+		uint32_t off = GPI_CH_CTX(ch);
++		uint32_t off = GPI_CH_CTX(ch) - VEUX_GPI_EE_OFFSET;
 +		printf("VEUX GPI PREFLIGHT: ch%u ctx=%#x cfg=%#x len=%#x ring=%#x:%#x rp=%#x:%#x wp=%#x:%#x\n",
 +		    ch, off, gpi_preflight_read(gpi, off), gpi_preflight_read(gpi, off + 4),
 +		    gpi_preflight_read(gpi, off + 8), gpi_preflight_read(gpi, off + 12),
 +		    gpi_preflight_read(gpi, off + 16), gpi_preflight_read(gpi, off + 20),
 +		    gpi_preflight_read(gpi, off + 24), gpi_preflight_read(gpi, off + 28));
 +	}
-+	uint32_t ev_off = GPI_EV_CTX(0);
++	uint32_t ev_off = GPI_EV_CTX(0) - VEUX_GPI_EE_OFFSET;
 +	printf("VEUX GPI PREFLIGHT: ev0 ctx=%#x cfg=%#x len=%#x ring=%#x:%#x rp=%#x:%#x wp=%#x:%#x\n",
 +	    ev_off, gpi_preflight_read(gpi, ev_off), gpi_preflight_read(gpi, ev_off + 4),
 +	    gpi_preflight_read(gpi, ev_off + 8), gpi_preflight_read(gpi, ev_off + 12),

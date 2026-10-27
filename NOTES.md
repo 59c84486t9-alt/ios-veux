@@ -1,3 +1,30 @@
+## >>> UPDATE 2026-10-27 (VEUX GPI transport confirmed; driver still unimplemented) <<<
+
+- The exact stock DTB in `dtb/vendor_boot_b_unpacked/dtb_1.dtb` matches the
+  recovery phone DTB hash. It confirms GPI at PA `0x04c00000`, size
+  `0x60000`, `qcom,gpi-ee-offset=0x10000`, GPII mask `0x1f`, DMA IOVA pool
+  `0x100000..0x1fffff`, and Apps-SMMU SID `0xd6`. The Apps-SMMU node is at
+  `0x0c600000`, size `0x100000`. SE8's channel pair remains TX/RX 0/1 and
+  GPII 2.
+- Upstream Linux source confirms the identity-read transaction: TX channel 0
+  queues an I2C `GO READ` descriptor with register address bytes in the TX
+  DMA buffer; RX channel 1 queues the receive DMA descriptor. The GPI driver
+  also requires a configured event ring and GPI channel allocation/start
+  commands. This is the right transport; ordinary GENI FIFO and GPIO bitbang
+  are not.
+- Corrected patch 0133's GPI MMIO window/EE-offset math and added the DT DMA
+  pool values to its read-only output. It now maps only the actual GPI resource
+  and computes context offsets relative to the resource base, without forming
+  an intermediate pointer outside the mapping. Patch application succeeds
+  against the post-0132 XNU tree.
+- No GPI or SMMU register writes, DMA, phone flash, or boot occurred. A touch
+  driver is not ready to claim yet: XNU still needs a safe, verified SMMU
+  context/table mapping for the `0xd6` stream, and the previous XNU TLMM
+  accesses read all zero, so GPIO rails/reset are not yet proven controllable.
+  The next step is one non-held, read-only runtime capture of SMMU IDs/SMR/S2CR
+  and GPI contexts from a bootable XNU image. Use only a fresh build, never
+  reuse the probe/hold builds that darkened the screen; keep boot_a untouched.
+
 ## >>> UPDATE 2026-10-27 (VEUX GPI-DMA prerequisite) <<<
 
 - User requested the Android/Linux GPI-DMA route for GT9896 on XNU, while
