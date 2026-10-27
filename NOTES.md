@@ -3960,9 +3960,9 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Added strict manifest source checks for the computed PA/VA columns and the
   recovery control annotation. `python3 tools/validate-repo.py` passes all 131
   patches, 27 Python tools, and 8 shell scripts; `git diff --check` is clean.
-- Current code is committed locally on `veux-xnu-build`, but not pushed and no
-  CI build has run yet. A previous push was rejected because the GitHub token
-  lacks workflow-file write scope; the workflow file is unchanged in this
-  revision. Next: verify the final commit diff, push only the explicit source
-  files/commits, dispatch `xnu.yml`, and validate CI + strict manifest before
-  preparing any boot_b wrapper. Never write boot_a.
+- Commit `c35544c` was pushed to `veux-xnu-build`; workflow file was unchanged.
+  CI run 40452408718 passed repository preflight and patch fetch, then failed
+  applying patch 0123 because its framebuffer hunk expected the build-ID helper
+  to be absent from patch 0120. Updated the 0123 hunk to anchor on the existing
+  console-putc declaration and preserve its feature additions. Local repo
+  validation passes; this fix needs a new CI run. Never write boot_a.
