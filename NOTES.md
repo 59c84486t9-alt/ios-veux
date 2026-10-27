@@ -4006,6 +4006,9 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   GUI/sandbox/iolog and active-probe arguments but omits
   `veuxtouchprobehold=1`; wrapper SHA-256 is
   `4da4d542267b9f9406eeedd928adad02efe5ad4c307f0ce53cfa3b9983425321`.
-  Wrapper verification passed. It has not been flashed because the phone is
-  currently black and neither Fastboot nor ADB enumerates; wait until it is
-  returned to Fastboot, then write only `boot_b`.
+  Wrapper verification passed. After the user returned the phone to Fastboot,
+  reverified serial `4078cac030c8`, product `veux`, unlocked, current slot B,
+  and 128 MiB `boot_b`, then flashed only `boot_b` and rebooted slot B. No
+  `boot_a` write occurred. Twenty-five seconds later neither ADB nor Fastboot
+  enumerated; awaiting the screen state to determine whether the active probe
+  returns to GUI or stops earlier.
