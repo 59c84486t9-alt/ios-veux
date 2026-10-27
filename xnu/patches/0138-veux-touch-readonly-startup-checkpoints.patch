@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Add read-only VEUX touch startup checkpoints
+
+Mark each MMIO mapping and register read, then return before changing clocks,
+GPIOs, rails, or the SE8 controller. This isolates the crash seen immediately
+after the touch worker starts while keeping the run non-invasive.
+
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -624,14 +624,41 @@
+ 	st.gcc = ml_io_map(TOUCH_GCC_PA, 0x60000);
+ 	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x5b000);
+ #else
++	printf("VEUX TOUCH DIAG: map GCC pa=%#x\n", TOUCH_GCC_PA);
+ 	st.gcc = ml_io_map(TOUCH_GCC_PA, 0x80000);
++	printf("VEUX TOUCH DIAG: GCC va=%#llx\n", (unsigned long long)st.gcc);
++	printf("VEUX TOUCH DIAG: map TLMM pa=%#x\n", TOUCH_NORTH_PA);
+ 	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x800000);
+-#endif
++	printf("VEUX TOUCH DIAG: TLMM va=%#llx\n", (unsigned long long)st.gpio);
++#endif
++#if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	st.se = ml_io_map(TOUCH_SE_PA, 0x4000);
++#else
++	printf("VEUX TOUCH DIAG: map SE8 pa=%#x\n", TOUCH_SE_PA);
++	st.se = ml_io_map(TOUCH_SE_PA, 0x4000);
++	printf("VEUX TOUCH DIAG: SE8 va=%#llx\n", (unsigned long long)st.se);
++#endif
+ 	if (!st.gcc || !st.gpio || !st.se) {
+ 		printf("SWEET TOUCH: MMIO mapping failed\n");
+ 		goto out;
+ 	}
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	/* One run of read-only map/register diagnostics; do not alter clocks or GPIOs. */
++	printf("VEUX TOUCH DIAG: before GCC vote read pa=%#x\n", TOUCH_GCC_PA + TOUCH_GCC_VOTE);
++	uint32_t vote = touch_rd(st.gcc, TOUCH_GCC_VOTE);
++	printf("VEUX TOUCH DIAG: GCC vote=%#x\n", vote);
++	printf("VEUX TOUCH DIAG: before GCC SE8 RCG read pa=%#x\n", TOUCH_GCC_PA + TOUCH_RCG);
++	uint32_t rcg = touch_rd(st.gcc, TOUCH_RCG);
++	printf("VEUX TOUCH DIAG: GCC SE8 RCG=%#x\n", rcg);
++	printf("VEUX TOUCH DIAG: before TLMM GPIO19 read pa=%#x\n", TOUCH_NORTH_PA + TOUCH_GPIO_CFG(19));
++	uint32_t sda_cfg = touch_rd(st.gpio, TOUCH_GPIO_CFG(19));
++	printf("VEUX TOUCH DIAG: TLMM GPIO19 cfg=%#x\n", sda_cfg);
++	printf("VEUX TOUCH DIAG: before SE8 FW read pa=%#x\n", TOUCH_SE_PA + SE_FW);
++	uint32_t se_fw = touch_rd(st.se, SE_FW);
++	printf("VEUX TOUCH DIAG: SE8 FW=%#x\n", se_fw);
++	printf("VEUX TOUCH DIAG: read-only preflight done; returning to boot\n");
++	goto out;
++#endif
+ 	if (!touch_clocks() || !touch_se_init()) {
+ 		goto out;
+ 	}
