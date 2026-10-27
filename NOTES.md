@@ -4010,5 +4010,10 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   reverified serial `4078cac030c8`, product `veux`, unlocked, current slot B,
   and 128 MiB `boot_b`, then flashed only `boot_b` and rebooted slot B. No
   `boot_a` write occurred. Twenty-five seconds later neither ADB nor Fastboot
-  enumerated; awaiting the screen state to determine whether the active probe
-  returns to GUI or stops earlier.
+  enumerated. Follow-up photos show the no-hold run passed the touch diagnostics
+  and reached AppleKeyStore plus VEUX GUI/MIG initialization, followed later by
+  a black display. Therefore the explicit WFE hold explains the previous
+  diagnostic freeze but not this later black screen. No panic text or
+  SpringBoard-ready marker is visible in the photos. Next step is slot-A
+  recovery and read-only collection of any panic/pmsg/iolog state; do not flash
+  again until that later-stage failure is understood.
