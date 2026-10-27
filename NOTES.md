@@ -12,6 +12,10 @@
   digitizer service receiving contacts. Added patch 0136 to register only the
   existing touch service on VEUX. Patch applies cleanly against the current
   CI source and repository validation passes.
+- CI run [40554836312](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40554836312)
+  on commit `0d1058c` passed the XNU build, synthetic diagnostic checks,
+  manifest, and artifact packaging in 16m48s. This verifies compilation of the
+  HID registration only; it is not a touch-fix image and was not flashed.
 - This is a necessary HID-layer fix, not a physical touch driver. The VEUX
   GT9896 still needs a working SE8 GPI-DMA path and a proven SMMU/DMA mapping;
   old bit-banged/GENI-FIFO probes are not valid substitutes. Do not flash the
