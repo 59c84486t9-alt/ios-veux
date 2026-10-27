@@ -1,3 +1,27 @@
+## >>> UPDATE 2026-10-27 (VEUX SE8 FIFO GT9896 driver CI and boot_b test) <<<
+
+- CI [40563653621](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40563653621)
+  passed on `a741de7465b795c7ddeb3e7c8d97750122df1789`. XNU compile,
+  synthetic diagnostic checks, feature manifest, build-tree packaging, KDK
+  inspection, and artifact uploads all succeeded. Patch status confirms both
+  0136 (VEUX HID touch service registration) and 0137 (GT9896 SE8 FIFO
+  driver) applied. Kernel SHA-256:
+  `71c3b1453577e8de28cf891d87910fffa8c19f0f45708b69d3b408685643e8f2`.
+- Built the wrapper from that kernel and the exact ADT/phone DTB and shim
+  kernel from previously verified bootable wrapper 40535340602. The strict
+  wrapper verifier passed for build ID/run ID `40563653621`; shim and phone
+  DTB were preserved. Wrapper SHA-256:
+  `d6a585c4c5fe895837fa5cb481093b29a1e6eefde895db0316b38067b144e1d9`.
+  Image and manifest are in `/tmp/veux-geni-touch-40563653621/`.
+- Fastboot identified serial `4078cac030c8`, product `veux`, unlocked, current
+  slot B, and `boot_b` size `0x8000000`. Flashed the verified 17,264,640-byte
+  wrapper to `boot_b`; send/write returned `OKAY`, then reboot returned
+  `OKAY`. `boot_a` was not touched. At 12 seconds after reboot neither ADB nor
+  Fastboot had re-enumerated. This confirms the write/reboot, not touch
+  functionality. The VEUX worker waits 45 seconds after UFS init before
+  touching GPIO/SE8; hardware confirmation still requires the build ID at the
+  lock screen and a physical swipe test.
+
 ## >>> UPDATE 2026-10-27 (VEUX lock screen confirmed; HID path audit) <<<
 
 - Added patch 0137, adapting the already-working SWEET GT9896 FIFO/report/HID
