@@ -60,6 +60,7 @@ new file mode 100644
 +#include <sys/param.h>
 +#include <sys/systm.h>
 +#include <sys/errno.h>
++#include <kern/clock.h>
 +#include <machine/machine_routines.h>
 +
 +#define SE_STATUS              0x040u
