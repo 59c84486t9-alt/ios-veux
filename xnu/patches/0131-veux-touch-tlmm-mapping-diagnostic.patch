@@ -29,7 +29,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/bsd/dev/veux_touch_probe.c
-@@ -0,0 +1,212 @@
+@@ -0,0 +1,225 @@
 +/* Bounded VEUX GT9896 TLMM mapping and drive-strength diagnostic. */
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +#include <sys/param.h>
