@@ -1,0 +1,41 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Use no-fault translation for VEUX TLMM diagnostic
+
+The previous diagnostic's normal pmap lookup can fall back to a locked page
+walk when the no-fault VA translation returns zero. Use the no-fault helper
+explicitly so an unmapped MMIO VA is reported as zero rather than entering the
+fallback path. Emit a breadcrumb before each translation.
+
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -22,7 +22,7 @@
+ extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
+ void sweet_touch_init(void);
+-extern ppnum_t pmap_find_phys(pmap_t pmap, addr64_t va);
++extern ppnum_t pmap_find_phys_nofault(pmap_t pmap, addr64_t va);
+ 
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ #define TOUCH_SE_PA      0x00a84000u
+@@ -147,14 +147,16 @@
+ touch_tlmm_map_check(void)
+ {
+ 	static const unsigned pins[] = {3, 19, 20, 21, 22, 44, 51};
+-	printf("VEUX TOUCH MAPCHECK: kernel_pmap=%p TLMM va=%#llx pa=%#x page_shift=%u\n",
++	printf("VEUX TOUCH MAPCHECK: mode=nofault kernel_pmap=%p TLMM va=%#llx pa=%#x page_shift=%u\n",
+ 	    pmap_kernel(), (unsigned long long)st.gpio, TOUCH_NORTH_PA, PAGE_SHIFT);
+ 	for (unsigned i = 0; i < sizeof(pins) / sizeof(pins[0]); ++i) {
+ 		unsigned pin = pins[i];
+ 		vm_offset_t off = TOUCH_GPIO_CFG(pin);
+ 		vm_offset_t va = st.gpio + off;
+ 		uint64_t pa = (uint64_t)TOUCH_NORTH_PA + off;
+-		ppnum_t actual = pmap_find_phys(pmap_kernel(), (addr64_t)va);
++		printf("VEUX TOUCH MAPCHECK: translating pin=%u va=%#llx\n",
++		    pin, (unsigned long long)va);
++		ppnum_t actual = pmap_find_phys_nofault(pmap_kernel(), (addr64_t)va);
+ 		uint64_t expected = pa >> PAGE_SHIFT;
+ 		printf("VEUX TOUCH MAPCHECK: pin=%u cfg pa=%#llx va=%#llx actual_ppn=%#llx expected_ppn=%#llx match=%u cfg=%#x io=%#x\n",
+ 		    pin, (unsigned long long)pa, (unsigned long long)va,
+-- 
+2.39.5

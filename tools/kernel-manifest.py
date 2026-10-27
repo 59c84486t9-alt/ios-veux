@@ -49,6 +49,7 @@ for patch in (
     "0134-veux-repeat-gpi-preflight-summary.patch",
     "0135-veux-start-gpi-summary-from-probe.patch",
     "0140-veux-touch-tlmm-physical-map-check.patch",
+    "0141-veux-touch-nofault-tlmm-translation.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -78,7 +79,7 @@ needles = {
     "veux_touch_probe_alt_readonly": b"ALT-READONLY",
     "veux_touch_probe_hold": b"VEUX TOUCH PROBE: holding after TLMM diagnostic; hard reset to reboot",
     "veux_touch_active_id_probe": b"VEUX TOUCH ACTIVE: id-read error=",
-    "veux_touch_tlmm_pmap_translation": b"VEUX TOUCH MAPCHECK:",
+    "veux_touch_tlmm_nofault_translation": b"VEUX TOUCH MAPCHECK: mode=nofault",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
     "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",
