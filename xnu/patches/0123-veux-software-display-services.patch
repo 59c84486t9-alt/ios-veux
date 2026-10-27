@@ -336,7 +336,8 @@ diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
 diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -1465,0 +1466,7 @@
+@@ -1463,2 +1463,9 @@
+ static bool veux_fb_console_ready;
 +/* Explicit first-present handoff: log capture continues while GUI owns pixels. */
 +int veux_gui_console_muted;
 +void
@@ -344,6 +345,7 @@ diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 +{
 +	veux_gui_console_muted = 1;
 +}
+ extern void veux_fb_console_putc(char c);
 @@ -1519,6 +1526,7 @@
  		return;
  	}
