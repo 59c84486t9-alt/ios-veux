@@ -1,0 +1,138 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Add staged VEUX touch clock and GPIO breadcrumbs
+
+Log immediately before and after the active GCC/SE8 setup and before each VEUX
+rail/reset GPIO change, so any remaining runtime fault is attributable to a
+specific operation. Keep the transport and controller behavior unchanged.
+
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -174,7 +174,16 @@
+ {
+ 	/* Vote on only wrapper1 and SE7, preserving other clock users. */
+ 	uint32_t mask = TOUCH_GCC_VOTE_MASK;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	printf("VEUX TOUCH CLOCK: before GCC vote read/write pa=%#x mask=%#x\n",
++	    TOUCH_GCC_PA + TOUCH_GCC_VOTE, mask);
++#endif
+ 	touch_wr(st.gcc, TOUCH_GCC_VOTE, touch_rd(st.gcc, TOUCH_GCC_VOTE) | mask);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	printf("VEUX TOUCH CLOCK: vote write returned; readback=%#x\n",
++	    touch_rd(st.gcc, TOUCH_GCC_VOTE));
++	printf("VEUX TOUCH CLOCK: reading SE8 RCG pa=%#x\n", TOUCH_GCC_PA + TOUCH_RCG);
++#endif
+ 	uint32_t dfs = touch_rd(st.gcc, TOUCH_RCG + 0x14u);
+ 	uint32_t cfg = touch_rd(st.gcc, TOUCH_RCG + 4u);
+ 	printf("SWEET TOUCH: gcc vote=%#x rcg=%#x cfg=%#x dfs=%#x\n",
+@@ -189,8 +198,18 @@
+ 	} else {
+ 		/* XO parent 0, HID divider 1 => 19.2 MHz. No PLL or voltage change. */
+ 		cfg = (cfg & ~(0x371fu | (1u << 20))) | 1u;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		printf("VEUX TOUCH CLOCK: before RCG cfg write pa=%#x value=%#x\n",
++		    TOUCH_GCC_PA + TOUCH_RCG + 4u, cfg);
++#endif
+ 		touch_wr(st.gcc, TOUCH_RCG + 4u, cfg);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		printf("VEUX TOUCH CLOCK: cfg write returned; before update-bit write\n");
++#endif
+ 		touch_wr(st.gcc, TOUCH_RCG, touch_rd(st.gcc, TOUCH_RCG) | 1u);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		printf("VEUX TOUCH CLOCK: update-bit write returned\n");
++#endif
+ 		if (!touch_wait_clear(st.gcc, TOUCH_RCG, 1u)) {
+ 			printf("SWEET TOUCH: RCG update timeout\n");
+ 			return false;
+@@ -544,6 +563,9 @@
+ static bool
+ touch_se_init(void)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	printf("VEUX TOUCH SE8: reading firmware/status registers\n");
++#endif
+ 	uint32_t fw = touch_rd(st.se, SE_FW);
+ 	uint32_t tx = touch_rd(st.se, SE_HW_TX), rx = touch_rd(st.se, SE_HW_RX);
+ 	printf("SWEET TOUCH: se7 fw=%#x proto=%u status=%#x tx=%#x rx=%#x ios=%#x\n",
+@@ -561,6 +583,9 @@
+ 		printf("SWEET TOUCH: SE7 already busy; probes skipped\n");
+ 		return false;
+ 	}
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	printf("VEUX TOUCH SE8: firmware checks passed; before register programming\n");
++#endif
+ 	touch_wr(st.se, 0xe18, 0); /* no GSI events */
+ 	touch_wr(st.se, 0xe1c, 0); /* mask external IRQ routing; poll local status */
+ 	touch_wr(st.se, 0x644, 0);
+@@ -584,6 +609,9 @@
+ 	touch_wr(st.se, 0x810, 0);
+ 	touch_wr(st.se, 0x814, ((rx >> 16) & 0x3fu) - 1u);
+ 	touch_wr(st.se, SE_IRQ_EN, SE_EVENTS);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	printf("VEUX TOUCH SE8: register programming returned; checking FIFO packing\n");
++#endif
+ 	printf("SWEET TOUCH: packing tx=%#x/%#x rx=%#x/%#x gran=%#x\n",
+ 	    touch_rd(st.se, 0x260), touch_rd(st.se, 0x264),
+ 	    touch_rd(st.se, 0x284), touch_rd(st.se, 0x288), touch_rd(st.se, 0x254));
+@@ -658,9 +686,21 @@
+ 	printf("VEUX TOUCH DIAG: SE8 FW=%#x\n", se_fw);
+ 	printf("VEUX TOUCH DIAG: read-only preflight passed; continuing to clock setup\n");
+ #endif
+-	if (!touch_clocks() || !touch_se_init()) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	printf("VEUX TOUCH: entering GCC clock setup\n");
++#endif
++	if (!touch_clocks()) {
+ 		goto out;
+ 	}
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	printf("VEUX TOUCH: GCC setup returned; entering SE8 setup\n");
++#endif
++	if (!touch_se_init()) {
++		goto out;
++	}
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	printf("VEUX TOUCH: clock and SE8 setup passed; entering GPIO/rail sequence\n");
++#endif
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	printf("SWEET TOUCH: TLMM reset=%#x irq=%#x vdd90=%#x; voting L11C through RPMh\n",
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(8)), touch_rd(st.gpio, TOUCH_GPIO_IO(9)),
+@@ -685,24 +725,36 @@
+ 	printf("VEUX TOUCH: TLMM reset=%#x irq=%#x rails AVDD=%u DVDD=%u\n",
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_RESET)),
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_IRQ)), TOUCH_GPIO_AVDD, TOUCH_GPIO_DVDD);
+-	if (!touch_gpio(TOUCH_GPIO_SDA, 1, 3, 0, false, false) ||
+-	    !touch_gpio(TOUCH_GPIO_SCL, 1, 3, 0, false, false)) goto out;
++	printf("VEUX TOUCH GPIO: configure SDA GPIO19 for SE8\n");
++	if (!touch_gpio(TOUCH_GPIO_SDA, 1, 3, 0, false, false)) goto out;
++	printf("VEUX TOUCH GPIO: configure SCL GPIO20 for SE8\n");
++	if (!touch_gpio(TOUCH_GPIO_SCL, 1, 3, 0, false, false)) goto out;
++	printf("VEUX TOUCH GPIO: configure IRQ GPIO22 input\n");
+ 	if (!touch_gpio(TOUCH_GPIO_IRQ, 0, 3, 0, false, false)) goto out;
++	printf("VEUX TOUCH GPIO: enable AVDD GPIO51\n");
+ 	if (!touch_gpio(TOUCH_GPIO_AVDD, 0, 0, 0, true, true)) goto out;
+ 	touch_wait(650);
++	printf("VEUX TOUCH GPIO: enable DVDD GPIO44\n");
+ 	if (!touch_gpio(TOUCH_GPIO_DVDD, 0, 0, 0, true, true)) goto out;
+ 	touch_wait(650);
++	printf("VEUX TOUCH GPIO: assert reset GPIO21 low\n");
+ 	if (!touch_gpio(TOUCH_GPIO_RESET, 0, 0, 0, true, false)) goto out;
+ 	touch_wait(20);
++	printf("VEUX TOUCH GPIO: drive IRQ GPIO22 low for reset sequence\n");
+ 	if (!touch_gpio(TOUCH_GPIO_IRQ, 0, 0, 0, true, false)) goto out;
+ 	touch_wait(1);
++	printf("VEUX TOUCH GPIO: release reset GPIO21\n");
+ 	if (!touch_gpio(TOUCH_GPIO_RESET, 0, 0, 0, true, true)) goto out;
+ 	touch_wait(8);
++	printf("VEUX TOUCH GPIO: return IRQ GPIO22 to pulled-up input\n");
+ 	if (!touch_gpio(TOUCH_GPIO_IRQ, 0, 1, 0, false, false)) goto out;
+ 	touch_wait(300);
+ #endif
+ 	uint8_t gid[32], legacy[32], fid1 = 0, fid2 = 0;
+ 	st.probing = true;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	printf("VEUX TOUCH: rails/reset settled; starting GT9896 PID read on SE8\n");
++#endif
+ 	int ge = touch_probe_info(GOODIX_PID_REG, gid);
+ 	printf("SWEET TOUCH: probe 0x5d err=%d pid=%02x%02x%02x%02x fw=%02x.%02x.%02x.%02x irq=%#x\n",
+ 	    ge, gid[0], gid[1], gid[2], gid[3], gid[8], gid[9], gid[10], gid[11], st.irq_status);

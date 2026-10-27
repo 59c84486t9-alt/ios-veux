@@ -1,14 +1,14 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-Subject: [PATCH] Add read-only VEUX touch startup checkpoints
+Subject: [PATCH] Add VEUX touch startup mapping and preflight checkpoints
 
-Mark each MMIO mapping and register read, then return before changing clocks,
-GPIOs, rails, or the SE8 controller. This isolates the crash seen immediately
-after the touch worker starts while keeping the run non-invasive.
+Mark each MMIO mapping and register read before continuing into clock, SE8,
+and touch setup. The checks identify map/read progress; the TLMM window is bounded
+to the GPIOs used by VEUX.
 
 diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
 --- a/bsd/dev/sweet_touch.c
 +++ b/bsd/dev/sweet_touch.c
-@@ -624,14 +624,41 @@
+@@ -624,14 +624,40 @@
  	st.gcc = ml_io_map(TOUCH_GCC_PA, 0x60000);
  	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x5b000);
  #else
@@ -46,8 +46,7 @@ diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
 +	printf("VEUX TOUCH DIAG: before SE8 FW read pa=%#x\n", TOUCH_SE_PA + SE_FW);
 +	uint32_t se_fw = touch_rd(st.se, SE_FW);
 +	printf("VEUX TOUCH DIAG: SE8 FW=%#x\n", se_fw);
-+	printf("VEUX TOUCH DIAG: read-only preflight done; returning to boot\n");
-+	goto out;
++	printf("VEUX TOUCH DIAG: read-only preflight passed; continuing to clock setup\n");
 +#endif
  	if (!touch_clocks() || !touch_se_init()) {
  		goto out;
