@@ -151,8 +151,11 @@ The next hardware test is patch 0132, gated separately by
 `veuxtouchprobeactive=1`. It configures the SE8 I2C pin mux and a conservative
 XO/1 clock, performs the reference AVDD/DVDD enable sequence and Goodix reset/address-strap sequence,
 then makes one GT9896 identity read (`0x5d`, register `0x4022`). SE8 must pass
-idle/FIFO checks, and the clock branch and source must report ready before any
-rail or reset GPIO is changed. The probe stops after logging the result; it
+idle/FIFO checks, and the SE8 leaf branch and source must report ready before
+any rail or reset GPIO is changed. SM6375's wrapper S-AHB branch can be
+hardware-gated at idle (`0x53008` bit 1); Linux's GCC driver skips halt polling
+in that mode, so the probe now logs and accepts that wrapper state while still
+checking the SE8 leaf. The probe stops after logging the result; it
 does not write controller configuration/firmware or begin touch polling. The
 user authorized this bounded power/reset and identity-read test on 2026-10-27.
 It is paired with `veuxtouchprobehold=1`, so it stops before root mount and

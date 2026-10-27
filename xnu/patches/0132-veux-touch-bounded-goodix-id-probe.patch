@@ -54,7 +54,7 @@ diff --git a/bsd/dev/veux_touch_active.c b/bsd/dev/veux_touch_active.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/veux_touch_active.c
-@@ -0,0 +1,277 @@
+@@ -0,0 +1,290 @@
 +/* One-shot VEUX GT9896 power/reset and I2C identity diagnostic. */
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +#include <sys/param.h>
@@ -130,6 +130,12 @@ new file mode 100644
 +	/* Vote only the two wrapper buses and the SE8 leaf, preserving other users. */
 +	touch_active_wr(gcc, GCC_BRANCH_VOTE,
 +	    touch_active_rd(gcc, GCC_BRANCH_VOTE) | (1u << 17) | (1u << 18) | (1u << 23));
++	uint32_t required_votes = (1u << 17) | (1u << 18) | (1u << 23);
++	uint32_t vote = touch_active_rd(gcc, GCC_BRANCH_VOTE);
++	if ((vote & required_votes) != required_votes) {
++		printf("VEUX TOUCH ACTIVE: wrapper clock vote readback failed vote=%#x\n", vote);
++		return false;
++	}
 +	uint32_t dfs = touch_active_rd(gcc, GCC_SE8_CMD_RCGR + 0x14u);
 +	uint32_t cfg = touch_active_rd(gcc, GCC_SE8_CMD_RCGR + 4u);
 +	if (dfs & 1u) {
@@ -153,6 +159,13 @@ new file mode 100644
 +
 +	const uint32_t branches[] = {GCC_M_AHB_BRANCH, GCC_S_AHB_BRANCH, GCC_SE8_BRANCH};
 +	for (unsigned i = 0; i < sizeof(branches) / sizeof(branches[0]); ++i) {
++		uint32_t branch = touch_active_rd(gcc, branches[i]);
++		if (i < 2 && (branch & (1u << 1))) {
++			/* SM6375 skips halt polling when this bus is hardware-gated. */
++			printf("VEUX TOUCH ACTIVE: wrapper branch %#x HWCG active status=%#x\n",
++			    branches[i], branch);
++			continue;
++		}
 +		if (!touch_active_wait_clear(gcc, branches[i], 1u << 31, 100000)) {
 +			printf("VEUX TOUCH ACTIVE: clock branch %#x stayed halted (%#x)\n",
 +			    branches[i], touch_active_rd(gcc, branches[i]));

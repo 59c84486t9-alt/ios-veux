@@ -1,3 +1,17 @@
+## >>> UPDATE 2026-10-27 (active probe clock-gating false stop corrected) <<<
+
+- The latest phone photo shows the active probe stopped at wrapper S-AHB
+  register `0x53008 = 0x8000000a`, before configuring GPIOs, enabling the
+  touch rails, resetting GT9896, or issuing I2C. It did not produce a chip ID.
+- The SM6375 GCC source marks wrapper S-AHB `0x53008` as HWCG bit 1 and
+  `GCC_BRANCH_VOTE` bit 18; Linux's Qualcomm clock-branch driver skips halt
+  polling when HWCG is active. The previous XNU check incorrectly treated the
+  idle halt bit as a failed clock. Patch 0132 now logs/read-checks the wrapper
+  vote and accepts a hardware-gated wrapper bus, but still requires the SE8
+  leaf branch/source to be ready before touching pins or power/reset GPIOs.
+- Pending: validate/build this correction, then use only authorized `boot_b`
+  and capture the next held screen. `boot_a` and userdata remain untouched.
+
 ## >>> UPDATE 2026-10-27 (bounded GT9896 ID probe flashed to boot_b) <<<
 
 - Run [40434800946](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40434800946)
