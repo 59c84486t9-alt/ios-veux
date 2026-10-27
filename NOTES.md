@@ -1,3 +1,26 @@
+## >>> UPDATE 2026-10-27 (GPI/SMMU preflight image booted from boot_b) <<<
+
+- Corrected GPI/SMMU preflight CI run
+  [40506302631](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40506302631)
+  passed on code commit `7a92f8e` (build/patch application, host checks,
+  kernel manifest, and artifact upload). The CI kernel SHA-256 is
+  `3ea1e9150a711510014914dbfc3ea21735125cf1b118be9f96b8b7dc54588587`.
+- Built a custom wrapper with only `veuxgpipreflight=1` added to the previously
+  bootable 40413116842 iOS boot-args. Wrapper SHA-256:
+  `b9629d2f0fa3b61d2611b0b6efd8c5ec2de038b21ea00f919b47e01738ff6506`.
+  `tools/verify-veux-wrapper.py` verified the CI kernel, build/run ID, payload,
+  ADT, exact phone DTB (`08284b0f...35b4e2e`), and boot args; manifest is in
+  `/tmp/veux-gpi-preflight-40506302631/`.
+- Bootloader rejected temporary `fastboot boot` as `unknown command`; that
+  attempt wrote nothing. Per user's explicit authorization, flashed the
+  verified wrapper to `boot_b` only (partition size `0x8000000`; image
+  17,231,872 bytes) and rebooted. Both flash and reboot returned `OKAY`.
+  `boot_a` and userdata were not written. No GPI/SMMU writes or DMA occurred.
+- At ~50 seconds after reboot, neither ADB nor Fastboot enumerated. On-screen
+  SMMU/GPI values have not yet been received. Wait for the read-only preflight
+  screen/photo before implementing the SMMU context or attempting DMA; this
+  boot has no probe hold and should continue the existing iOS path.
+
 ## >>> UPDATE 2026-10-27 (VEUX GPI transport confirmed; driver still unimplemented) <<<
 
 - The exact stock DTB in `dtb/vendor_boot_b_unpacked/dtb_1.dtb` matches the
