@@ -1,3 +1,18 @@
+## >>> UPDATE 2026-10-27 (40513098723 screen recording) <<<
+
+- Inspected the user's 77-second `IMG_0807.MOV` from Drive. At the clip's first
+  frame the device is already at the XNU console after `VEUX CPU` init, GUI
+  initialization, and MAC framework initialization; the clip does not capture
+  the earlier UFS-init point where `veux_gpi_preflight()` logs. Later frames
+  show XPC/user services running. The preflight string is not visible in the
+  recording, but this late start cannot establish whether it was printed and
+  scrolled away. At the end, the console is replaced by an Apple logo; the
+  clip ends before showing whether this is a reboot or eventual UI transition.
+- No new phone command or partition write was performed after this recording.
+  The device is currently absent from both ADB and Fastboot enumeration. Await
+  the user's report whether the Apple logo appeared on its own and whether the
+  lock screen eventually appears before choosing the next diagnostic.
+
 ## >>> UPDATE 2026-10-27 (GPI preflight hook visibility build) <<<
 
 - The user's new `IMG_0806.MOV` shows a live XNU console followed by launchd
