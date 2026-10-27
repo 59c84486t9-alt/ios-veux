@@ -4277,3 +4277,15 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   ADB/Fastboot were not enumerating. Runtime boot and screen output are not yet
   confirmed; user should capture the delayed `VEUX GPI SUMMARY THREAD` and
   `VEUX GPI SUMMARY` lines or report what the screen shows.
+
+### Follow-up boot clip review — 2026-10-27
+
+- Reviewed Drive clip `IMG_0813.MOV` (85.8 seconds; uploaded after CI 40535340602
+  and the boot_b flash). Sampled frames show the MI splash at the start, XNU
+  console by about 2 seconds, GUI/MAC initialization through the early console
+  segment, launchd/xpcproxy activity around 42 seconds, and the Apple logo near
+  84 seconds. No panic screen is visible in the sampled frames.
+- The sampled console frames do not visibly show `VEUX GPI SUMMARY THREAD`,
+  `VEUX GPI SUMMARY`, or `VEUX SMMU SUMMARY`; this clip therefore does not
+  confirm the new summary worker's output. It ends at the Apple logo and does
+  not confirm lock-screen arrival or touch response.
