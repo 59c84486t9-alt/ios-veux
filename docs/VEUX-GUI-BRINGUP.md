@@ -206,11 +206,14 @@ The photo now shows that result: the GPIO config registers for pins 19/20
 remain zero after the probe's bus setup, and all printed CFG/IO pairs for
 pins 19/20/21/44/51 remain zero after rail/reset sequencing. `id-read` still
 times out at `phase=start` with both line inputs zero. This points to a
-TLMM write/readback or mapping issue before the I2C transaction; it does not
-establish a sensor NACK or prove that the physical pins were sampled. The
-next revision must inspect XNU's `ml_io_map` protection/mapping path and
-verify the write/readback in a bounded diagnostic before attempting another
-touch transaction.
+TLMM write/readback problem before the I2C transaction; it does not establish
+a sensor NACK or prove that the physical pins were sampled. Source review
+confirmed XNU's `ml_io_map()` uses `VM_PROT_DEFAULT` (read/write) and the
+upstream SM6375 pinctrl driver uses `0x1000 * pin` offsets from the directly
+mapped DT resource. The driver's `REG_BASE 0x100000` macro is unused and is
+not an extra offset. Next, log the TLMM mapped virtual base and expected PA,
+then compare a direct one-shot GPIO CFG read/write/readback with the helper
+path before another touch transaction.
 
 ### SWEET touch reference
 

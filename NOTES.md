@@ -38,6 +38,27 @@
   No cleanup/deletion was performed; pre-existing untracked generated
   artifacts remain untouched. `boot_a` and userdata remain untouched.
 
+## >>> UPDATE 2026-10-27 (TLMM mapping source review) <<<
+
+- Inspected the exact XNU mapping path in the CI source archive. `ml_io_map()`
+  calls `io_map(..., VM_WIMG_IO, VM_PROT_DEFAULT, false)` and
+  `VM_PROT_DEFAULT` is `VM_PROT_READ|VM_PROT_WRITE`; XNU then passes that
+  protection to `pmap_map()`. This rules out an explicitly read-only XNU map,
+  though it does not by itself prove that the physical region is responding.
+- Cross-checked upstream Linux `pinctrl-sm6375.c`: each GPIO group uses
+  `ctl_reg = 0x1000 * pin`, `io_reg = ctl_reg + 4`, with the register block
+  mapped directly from the platform DT resource. The `REG_BASE 0x100000`
+  macro in that file is unused; it must not be added to our offsets. Thus the
+  prior `+0x100000` hypothesis is retracted, and the current GPIO offsets are
+  supported by the reference driver.
+- No source or device change was made from this review. The photo is the same
+  deliberate held-probe result: GPIO CFG/IO writes still read zero and the
+  start phase times out before an I2C address. Next diagnostic should log the
+  TLMM mapped virtual base and expected PA, then compare a direct one-shot
+  read/write/readback of a single GPIO config register against the helper
+  path. Keep the probe held and boot only from `boot_b`; do not alter `boot_a`
+  or userdata.
+
 ## >>> UPDATE 2026-10-27 (GPIO CFG/IO readback probe flashed to boot_b) <<<
 
 - Strict CI [40444592303](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40444592303)
