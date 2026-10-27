@@ -1,3 +1,26 @@
+## >>> UPDATE 2026-10-27 (SWEET touch bring-up comparison) <<<
+
+- Read the working SWEET history and patches `0060`, `0062`, and `0063`.
+  SWEET touch worked on the 0063u boot / image v13: first the SE7 GENI FIFO
+  path, then RPMh L11C power + GPIO90, reset sequencing, and finally the
+  0063 fix to GENI FIFO packing. The register address had gone out byte-swapped;
+  the corrected 8-bit packing made the GT9896 identity/read protocol work.
+  The working path checks GT9896 at I2C `0x5d`, register `0x4022`, then routes
+  reports through `sweet_hid_touch` and SweetHIDTouch to backboardd.
+- This is not a GPIO bit-bang recipe to copy wholesale: SWEET uses SE7 at
+  `0x00a84000`, GPIO6/7 on QUP11, GPIO bank `0x03900000`, and a controller
+  whose GENI FIFO is usable. VEUX uses SE8 at `0x04c88000` and GPIO19/20;
+  its `IF_DISABLE_RO` bit says FIFO mode is unavailable. The current VEUX photo
+  additionally shows its GPIO CFG writes still reading back zero. SWEET's
+  `touch_wr`/`touch_gpio` code is structurally similar, but its successful
+  different-SoC/SE7 setup does not resolve VEUX's TLMM write/readback issue.
+- Reference: `../ios-sweet/NOTES.md` records “TOUCH WORKS” on 2026-10-18;
+  see `../ios-sweet/xnu/patches/0060-sweet-keys-touch-drivers.patch`,
+  `0062-sweet-touch-power-battery.patch`, and
+  `0063-sweet-goodix-geni-packing.patch`. Immediate VEUX next step stays the
+  bounded investigation of why TLMM CFG/IO writes are not reflected, then
+  determine whether a VEUX GPI-DMA-backed SE8 transfer is needed.
+
 ## >>> UPDATE 2026-10-27 (GPIO configuration writes do not read back) <<<
 
 - The latest held-probe photo shows `cfg19=0`, `cfg20=0` after the GPIO bus

@@ -212,6 +212,23 @@ next revision must inspect XNU's `ml_io_map` protection/mapping path and
 verify the write/readback in a bounded diagnostic before attempting another
 touch transaction.
 
+### SWEET touch reference
+
+The adjacent SWEET port's successful sequence is in patches 0060/0062/0063.
+It uses GENI SE7 FIFO I²C, not GPIO bit-banging. Patch 0062 adds RPMh L11C
+power and reset timing; patch 0063 fixes FIFO packing after the GT9896
+register address was found byte-swapped. The working path reads GT9896 at
+`0x5d:0x4022`, then sends reports through `sweet_hid_touch` and the
+SweetHIDTouch service. SWEET's source history records touch working on boot
+0063u / image v13.
+
+VEUX differs at the hardware boundary: SE8 reports FIFO disabled, so the
+current probe tried GPIO19/20 on Blair TLMM, and its photo shows CFG/IO
+readbacks remaining zero. SWEET's similar `ml_io_map` and GPIO helper are
+useful references, but its SE7, pin bank, and live FIFO do not explain VEUX's
+failed TLMM writeback. After the mapping/writeback issue is understood, SE8
+may require GPI-DMA support instead of reusing SWEET's FIFO transaction code.
+
 ## Validation and pending hardware test
 
 Local syntax checks: all seven changed translation units passed; after the
