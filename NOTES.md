@@ -4017,3 +4017,23 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   SpringBoard-ready marker is visible in the photos. Next step is slot-A
   recovery and read-only collection of any panic/pmsg/iolog state; do not flash
   again until that later-stage failure is understood.
+- The user reported Fastboot available. Verified serial `4078cac030c8`, product
+  `veux`, current slot B; no separate recovery partition is advertised and
+  `boot_a` is 128 MiB. Set the active slot to A (slot selection only, no
+  partition write) and issued `fastboot reboot recovery`. ADB root is now
+  connected in recovery with `ro.boot.slot_suffix=_a`.
+- Read-only recovery ground truth: live DT reports `blair-pinctrl` at PA
+  `0x400000` size `0x800000`, GENI I2C at `0x04c88000` size `0x4000`, and
+  Goodix GT9896 at I2C address `0x5d`. `gpioinfo` marks GPIO21 `ts_reset_gpio`
+  output, GPIO22 `ts_irq_gpio` input, GPIO44 `dvdd-gpio` output, GPIO51
+  `avdd-gpio` output; GPIO19/20 are not GPIO-chardev requested lines. Recovery
+  dmesg shows SE8 at 400 kHz, Goodix power-on at 1.988 s, GPIO setup at 1.993 s,
+  successful probe at 2.104 s, PID 9896 / sensor 1 / VID `03 03 00 08`, equal
+  firmware version, config matching flash, and IRQ 223 registered at 2.164 s.
+  This confirms the controller, Linux I2C path and GPIO ownership work in
+  recovery; it does not expose raw TLMM register values or rail voltages.
+- Recovery `/sys/fs/pstore` is empty, `logcat` is unavailable, and `/data` is
+  not mounted, so no logs from the prior XNU black-screen boot are available
+  through this recovery session. No GPIO reads/requests/writes, data mounts,
+  or partition writes were performed. Active slot is A for recovery; `boot_b`
+  still contains the verified no-hold probe and `boot_a` is unchanged.
