@@ -1,3 +1,24 @@
+## >>> UPDATE 2026-10-27 (held read-only SE8 probe flashed to boot_b) <<<
+
+- CI run `40426388161` succeeded on commit `975b208`, including patch 0131,
+  the hold-path source assertion, compile, kernel feature manifest, and
+  packaging. Kernel SHA-256:
+  `50f08f09a902151d09d8560c34afe8e2a63cee2431c00e6511b761be7475fc88`.
+- Built and independently verified
+  `/tmp/veux-touch-probe-40426388161/shim-boot-veux-touchprobe-hold-40426388161.img`
+  (SHA-256 `aa692258f790d531a754c858f36fa5fcd9ed267769b28b6f5a20fd2fe2e9674b`).
+  It uses the verified phone DTB, enables `veuxtouchprobe=1` and
+  `veuxtouchprobehold=1`, omits both filesystem RW flags, and verifies payload
+  reconstruction against the CI kernel/ADT and outer DTB.
+- Fastboot verified product `veux`, slot B, `boot_b` capacity `0x8000000`.
+  Flashed only `boot_b` and rebooted; both returned OKAY. `boot_a` was not
+  touched. The hold occurs after UFS device discovery and probe output, but
+  before `sweet_ufs_init` returns/root mount begins; it performs no hardware
+  writes, and the UFS device remains read-only. It waits in WFE until a manual
+  reset. Neither ADB nor Fastboot enumerated at the first eight-second check,
+  as expected for the held early-boot screen. Waiting on a clear photo of the
+  probe output. No touch events are produced.
+
 ## >>> UPDATE 2026-10-27 (reviewed IMG_0795.MOV; hold for probe readout) <<<
 
 - Inspected the 2:19 Drive clip in the browser. It shows kernel/Backboardd log
