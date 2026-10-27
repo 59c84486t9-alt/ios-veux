@@ -1,3 +1,18 @@
+## >>> UPDATE 2026-10-27 (GPIO I2C failure-phase instrumentation pending CI) <<<
+
+- The latest user photo shows the GPIO fallback ran after GENI FIFO was found
+  disabled, but the one `0x5d:0x4022` read returned errno 16 (`EBUSY`) and a
+  zero ID. This is observed output; it does not yet identify whether the bus
+  was held low at START or SDA stayed low during a transmitted high bit.
+- Patch 0132 now separates SCL-rise timeout (`ETIMEDOUT`) from SDA-low-at-idle
+  (`EBUSY`), records the I2C transaction phase, and logs final GPIO19/20 IO
+  registers. Updated the kernel manifest source assertion for this call
+  signature and diagnostic marker. Repository validation, Python syntax, patch
+  formatting, and diff checks pass. No device write made for this revision.
+- Next: commit/push the instrumentation, run strict CI, then if green build and
+  verify a held wrapper before flashing only `boot_b` (standing user approval).
+  Use the next screen photo's phase/SDA/SCL values to choose the next bus fix.
+
 ## >>> UPDATE 2026-10-27 (SE8 FIFO-disabled result; GPIO fallback candidate) <<<
 
 - New photo confirms the wrapper S-AHB HWCG check passed (`0x53008 =

@@ -252,8 +252,8 @@ new file mode 100644
 +touch_active_gpio_start(vm_offset_t tlmm)
 +{
 +	touch_active_gpio_cfg(tlmm, 19, 0, 3, 2, false, false);
-+	if (!touch_active_gpio_scl_high(tlmm) ||
-+	    !(touch_active_rd(tlmm, TLMM_GPIO_IO(19)) & 1u)) return EBUSY;
++	if (!touch_active_gpio_scl_high(tlmm)) return ETIMEDOUT;
++	if (!(touch_active_rd(tlmm, TLMM_GPIO_IO(19)) & 1u)) return EBUSY;
 +	delay(5);
 +	touch_active_gpio_cfg(tlmm, 19, 0, 3, 2, true, false);
 +	delay(5);
@@ -326,18 +326,22 @@ new file mode 100644
 +
 +static int
 +touch_active_gpio_read_reg(vm_offset_t tlmm, uint8_t addr, uint16_t reg,
-+    uint8_t *buf, unsigned len)
++    uint8_t *buf, unsigned len, const char **phase)
 +{
-+	if (!len || len > 12) return EINVAL;
++	if (!len || len > 12) { *phase = "length"; return EINVAL; }
++	*phase = "start";
 +	int error = touch_active_gpio_start(tlmm);
-+	if (!error) error = touch_active_gpio_write_byte(tlmm, (uint8_t)(addr << 1));
-+	if (!error) error = touch_active_gpio_write_byte(tlmm, (uint8_t)(reg >> 8));
-+	if (!error) error = touch_active_gpio_write_byte(tlmm, (uint8_t)reg);
-+	if (!error) error = touch_active_gpio_start(tlmm);
-+	if (!error) error = touch_active_gpio_write_byte(tlmm, (uint8_t)((addr << 1) | 1u));
-+	for (unsigned i = 0; !error && i < len; ++i)
++	if (!error) { *phase = "address-write"; error = touch_active_gpio_write_byte(tlmm, (uint8_t)(addr << 1)); }
++	if (!error) { *phase = "register-high"; error = touch_active_gpio_write_byte(tlmm, (uint8_t)(reg >> 8)); }
++	if (!error) { *phase = "register-low"; error = touch_active_gpio_write_byte(tlmm, (uint8_t)reg); }
++	if (!error) { *phase = "repeated-start"; error = touch_active_gpio_start(tlmm); }
++	if (!error) { *phase = "address-read"; error = touch_active_gpio_write_byte(tlmm, (uint8_t)((addr << 1) | 1u)); }
++	for (unsigned i = 0; !error && i < len; ++i) {
++		*phase = "read-data";
 +		error = touch_active_gpio_read_byte(tlmm, &buf[i], i + 1u < len);
++	}
 +	int stop_error = touch_active_gpio_stop(tlmm);
++	if (!error && stop_error) *phase = "stop";
 +	return error ? error : stop_error;
 +}
 +
@@ -457,12 +461,13 @@ new file mode 100644
 +	uint32_t if_disable = touch_active_rd(se, 0x64) & 1u;
 +	uint8_t id[12] = {0};
 +	int error;
++	const char *gpio_phase = "se";
 +	if (if_disable) {
 +		/* GENI IF_DISABLE_RO says FIFO mode is unavailable; don't write FIFO regs. */
 +		printf("VEUX TOUCH ACTIVE: GENI FIFO disabled; using bounded GPIO I2C read\n");
 +		touch_active_bus_gpio(tlmm);
 +		touch_active_power_and_reset(tlmm);
-+		error = touch_active_gpio_read_reg(tlmm, 0x5d, 0x4022, id, sizeof(id));
++		error = touch_active_gpio_read_reg(tlmm, 0x5d, 0x4022, id, sizeof(id), &gpio_phase);
 +	} else {
 +		if (!touch_active_clocks(gcc)) return;
 +		touch_active_bus_qup(tlmm);
@@ -471,8 +476,11 @@ new file mode 100644
 +		error = touch_active_read_reg(se, 0x5d, 0x4022, id, sizeof(id));
 +	}
 +	bool gt9896 = !error && id[0] == '9' && id[1] == '8' && id[2] == '9' && id[3] == '6';
-+	printf("VEUX TOUCH ACTIVE: id-read error=%d transport=%s id=%02x%02x%02x%02x rev=%02x.%02x.%02x.%02x gt9896=%u irq=%#x\n",
++	uint32_t gpio_sda = if_disable ? touch_active_rd(tlmm, TLMM_GPIO_IO(19)) : 0;
++	uint32_t gpio_scl = if_disable ? touch_active_rd(tlmm, TLMM_GPIO_IO(20)) : 0;
++	printf("VEUX TOUCH ACTIVE: id-read error=%d transport=%s phase=%s sda=%#x scl=%#x id=%02x%02x%02x%02x rev=%02x.%02x.%02x.%02x gt9896=%u irq=%#x\n",
 +	    error, if_disable ? "gpio" : "se",
++	    gpio_phase, gpio_sda, gpio_scl,
 +	    id[0], id[1], id[2], id[3], id[8], id[9], id[10], id[11],
 +	    (unsigned)gt9896, touch_active_rd(se, SE_IRQ));
 +}
