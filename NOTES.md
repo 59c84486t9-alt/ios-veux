@@ -9,14 +9,19 @@
   registers. Updated the kernel manifest source assertion for this call
   signature and diagnostic marker. Repository validation, Python syntax, patch
   formatting, and diff checks pass. No device write made for this revision.
-- Next: commit/push the instrumentation, run strict CI, then if green build and
-  verify a held wrapper before flashing only `boot_b` (standing user approval).
-  Use the next screen photo's phase/SDA/SCL values to choose the next bus fix.
+- Instrumentation commit `4027075` was pushed; the phone remains in Fastboot
+  (serial `4078cac030c8`). If CI is green, build and verify a held wrapper
+  before flashing only `boot_b` (standing user approval), then use the next
+  screen photo's phase/SDA/SCL values to choose the next bus fix.
 - CI [40440500483](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40440500483)
   failed compiling `veux_touch_active.c`: the new-file patch hunk declared 421
   lines but contained 429, truncating the final source lines and `#endif`.
-  Corrected the hunk to 429 locally; validation and patch formatting pass.
-  No artifact was produced and no device write was made. Rerun CI is pending.
+  Corrected the hunk to 429 in commit `9810196`; repository validation and
+  patch formatting pass. Run [40442110457](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40442110457)
+  then failed before compilation when the runner's macOS 13.5 Kernel Debug Kit
+  download was reset at 25.5% (`curl: (56) Recv failure: Connection reset by
+  peer`). No artifact was produced and no device write was made. Network retry
+  pending.
 - Source research: upstream Linux says `GENI_IF_DISABLE_RO/FIFO_IF_DISABLE`
   requires GPI DMA; SM6375 DTS maps I2C8/SE8 (`0x4c88000`, GCC wrapper1 S2) to
   GPI DMA TX/RX channels 0/1 index 2 and QUP12 pins GPIO19/20 with 2 mA
