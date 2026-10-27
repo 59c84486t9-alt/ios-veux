@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Register the existing digitizer HID service on VEUX
+
+The SWEET HID event service is built into this kernel, but its IOKit matching
+entry is currently inside the SWEET-only KernelConfigTables block. VEUX can
+reach SpringBoard without ever creating a digitizer service. Register only the
+touch service on VEUX so a future VEUX controller driver has a real HID event
+destination; leave SWEET matching and the VEUX boot path otherwise unchanged.
+
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -99,6 +99,13 @@
+ #endif
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++    "   {"
++    "     'IOClass'         = SweetHIDTouch;"
++    "     'IOProviderClass' = IOResources;"
++    "     'IOMatchCategory' = SweetHIDTouch;"
++    "   },"
++#endif
+     "   {"
+     "     'IOClass'         = IOPanicPlatform;"
+     "     'IOProviderClass' = IOPlatformExpertDevice;"
+     "     'IOProbeScore'    = 0:32;"
+     "   }"

@@ -1,3 +1,23 @@
+## >>> UPDATE 2026-10-27 (VEUX lock screen confirmed; HID path audit) <<<
+
+- User confirms the current image reaches the lock screen and its clock runs,
+  but physical touch remains nonfunctional. This establishes a bootable UI,
+  not a working touch stack.
+- The last flashed 405353 wrapper only enabled the read-only GPI/SMMU
+  preflight. It did not pass `veuxtouchprobe=1` or
+  `veuxtouchprobeactive=1`, and no GT9896 event polling ran.
+- Source audit found a second concrete blocker: `SweetHID.cpp` and the event
+  classes are included in the kernel, but `SweetHIDTouch` is only registered
+  in `KernelConfigTables.cpp` inside `ARM64_BOARD_CONFIG_SWEET`. VEUX has no
+  digitizer service receiving contacts. Added patch 0136 to register only the
+  existing touch service on VEUX. Patch applies cleanly against the current
+  CI source and repository validation passes.
+- This is a necessary HID-layer fix, not a physical touch driver. The VEUX
+  GT9896 still needs a working SE8 GPI-DMA path and a proven SMMU/DMA mapping;
+  old bit-banged/GENI-FIFO probes are not valid substitutes. Do not flash the
+  HID-only change as a claimed touch fix. Current host check sees no device in
+  either `adb devices` or `fastboot devices`; no device write was made.
+
 ## >>> UPDATE 2026-10-27 (GPI preflight summary replay implementation) <<<
 
 - Reviewed the new `IMG_0810.MOV` early-boot segment. It shows XNU/MAC init
