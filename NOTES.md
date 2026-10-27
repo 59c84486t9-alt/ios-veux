@@ -9,9 +9,15 @@
   scrolled away. At the end, the console is replaced by an Apple logo; the
   clip ends before showing whether this is a reboot or eventual UI transition.
 - No new phone command or partition write was performed after this recording.
-  The device is currently absent from both ADB and Fastboot enumeration. Await
-  the user's report whether the Apple logo appeared on its own and whether the
-  lock screen eventually appears before choosing the next diagnostic.
+  At the last host check, the device was absent from both ADB and Fastboot.
+- User confirms the Apple logo appeared without pressing a button and the
+  phone eventually reached the lock screen, but touch does not work. Thus the
+  image boots to UI but does not solve touch. Capture the first XNU console
+  seconds on a normal reboot with this same `boot_b` image; no flash is needed.
+  The key output is the hook's `arg_present` line and, when enabled, SMMU/GPI
+  registers. If it cannot be captured, move the diagnostic call to a later,
+  stable console point and surface a compact persistent result before any DMA
+  or active touch work.
 
 ## >>> UPDATE 2026-10-27 (GPI preflight hook visibility build) <<<
 
