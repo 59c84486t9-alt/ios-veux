@@ -16,7 +16,8 @@ diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
  	st.gcc = ml_io_map(TOUCH_GCC_PA, 0x80000);
 +	printf("VEUX TOUCH DIAG: GCC va=%#llx\n", (unsigned long long)st.gcc);
 +	printf("VEUX TOUCH DIAG: map TLMM pa=%#x\n", TOUCH_NORTH_PA);
- 	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x800000);
+-	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x40000);
++	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x40000);
 -#endif
 +	printf("VEUX TOUCH DIAG: TLMM va=%#llx\n", (unsigned long long)st.gpio);
 +#endif

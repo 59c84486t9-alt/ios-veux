@@ -164,7 +164,7 @@ index 03defe6..03c2521 100644
  	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x5b000);
 +#else
 +	st.gcc = ml_io_map(TOUCH_GCC_PA, 0x80000);
-+	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x800000);
++	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x40000);
 +#endif
  	st.se = ml_io_map(TOUCH_SE_PA, 0x4000);
  	if (!st.gcc || !st.gpio || !st.se) {
