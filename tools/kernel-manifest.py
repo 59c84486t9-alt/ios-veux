@@ -144,7 +144,8 @@ source_checks["veux_touch_tlmm_mapping_dump_and_drive_test_are_bounded"] = (
     and "if (!main_live)" in touch_probe
     and "primary DT window all zero; alternate was read-only" in touch_probe
     and "static const unsigned pins[] = {19, 20, 21, 22, 44, 51}" in touch_probe
-    and "| (1u << 6)" in touch_probe
+    and "old & ~(7u << 6)" in touch_probe
+    and "drive << 6" in touch_probe
     and "*(volatile uint32_t *)addr = old;" in touch_probe
     and "old=%#x set=%#x got=%#x restore=%#x" in touch_probe
     and "VEUX TLMM HEX rows:" in touch_probe
