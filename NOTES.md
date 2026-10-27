@@ -3988,5 +3988,24 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `shim/out/veux-xnu-40490907017-tlmm-probe/shim-boot-veux-xnu-40490907017-tlmm-probe.img`
   to `boot_b` and rebooted with slot B selected. No `boot_a` write occurred.
   Thirty seconds later the host saw neither ADB nor Fastboot. Await a straight-
-  on photo of the screen to read the build ID and last TLMM/TOUCH checkpoint;
-  no more flash until that result is understood.
+  on photo to read the build ID and last TLMM/TOUCH checkpoint before choosing
+  the next diagnostic step.
+- The follow-up photo shows the TLMM address calculation is byte-correct:
+  GPIO51 CFG/IO at PA `0x433000/0x433004` and VA
+  `0xfffffe544218f000/0xfffffe544218f004`, with GPIO51, GPIO44, and GPIO3
+  reading zero. It does not show the final compact-dump summary or build-ID
+  line, so the probe's end state is not confirmed. The wrapper was launched
+  with `veuxtouchprobehold=1`; after diagnostics, `veux_touch_probe_init()`
+  enters an intentional infinite `wfe` loop. It cannot continue to iOS from
+  that path, and a black screen afterward is consistent with backlight timeout
+  or watchdog reset. Next probe wrapper should omit hold (or replace it with a
+  short bounded hold) and must retain a way to collect final logs. GPIO reads
+  of zero remain a separate unresolved TLMM mapping/access issue.
+- Prepared a no-hold wrapper from the same verified CI kernel to distinguish
+  the intentional WFE hold from a crash earlier in the probe. It retains the
+  GUI/sandbox/iolog and active-probe arguments but omits
+  `veuxtouchprobehold=1`; wrapper SHA-256 is
+  `4da4d542267b9f9406eeedd928adad02efe5ad4c307f0ce53cfa3b9983425321`.
+  Wrapper verification passed. It has not been flashed because the phone is
+  currently black and neither Fastboot nor ADB enumerates; wait until it is
+  returned to Fastboot, then write only `boot_b`.
