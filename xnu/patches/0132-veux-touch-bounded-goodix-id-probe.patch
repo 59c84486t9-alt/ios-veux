@@ -54,7 +54,7 @@ diff --git a/bsd/dev/veux_touch_active.c b/bsd/dev/veux_touch_active.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/veux_touch_active.c
-@@ -0,0 +1,276 @@
+@@ -0,0 +1,277 @@
 +/* One-shot VEUX GT9896 power/reset and I2C identity diagnostic. */
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +#include <sys/param.h>

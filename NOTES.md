@@ -1,3 +1,12 @@
+## >>> UPDATE 2026-10-27 (touch probe CI hunk-count fix) <<<
+
+- CI run [40431925948](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40431925948)
+  reached XNU compilation but failed because the new `bsd/dev/veux_touch_active.c`
+  patch hunk declared 276 added lines while containing 277. The omitted final
+  line was the closing `#endif`, causing an unterminated conditional directive.
+- Corrected patch 0132's new-file hunk count to 277. No kernel from this failed
+  run was packaged or used, and no phone partition was written. Rerun pending.
+
 ## >>> UPDATE 2026-10-27 (held SE8 probe captured; next-stage boundary) <<<
 
 - User supplied two photos of the held read-only probe. On-screen values:
