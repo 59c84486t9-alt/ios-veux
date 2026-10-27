@@ -3935,7 +3935,7 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   sequence and HID event polling be enabled. Keep the successful default path
   unchanged and use boot_b for tests.
 
-### VEUX TLMM mapping diagnostic — CI pending — 2026-10-27
+### VEUX TLMM mapping diagnostic — CI passed; probe booted — 2026-10-27
 
 - Replaced the earlier read-only SE8-only probe with an opt-in TLMM mapping
   diagnostic plus a separately gated, bounded GT9896 identity probe. The TLMM
@@ -3970,5 +3970,23 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   target the post-0117 positions. Run 40453673211 rejected the short 0131
   conf-files hunk at line 114. Replaced both 0131/0132 source-list hunks with
   wider neighboring context; checked the exact 0117 → 0131 → 0132 sequence on
-  a tracked source copy. Repository validation passes, pending CI. Never write
-  boot_a.
+  a tracked source copy. The later probe additions compiled in CI run
+  40489093004 but its compiler error showed patch 0131 declared a 212-line
+  new file while actually carrying 225 lines, truncating the closing function
+  and `#endif`. Commit `85c9660` corrected that hunk count and was pushed.
+- Strict CI run [40490907017](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40490907017)
+  passed the XNU build, synthetic diagnostic bounds checks, and feature
+  manifest. Kernel SHA-256 is
+  `c0180cfd3d2c0eca5a41b377ea8435408dabb40225b33b5b37ac11ac4bb9e113`.
+  The wrapper passed `verify-veux-wrapper.py` with build ID 40490907017, the
+  known phone DTB SHA-256
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`, and
+  the GUI/sandbox/iolog plus TLMM/active-probe/hold arguments. Wrapper SHA-256:
+  `a234aface3ab3cb5fcfdc224fc05863b708b7d1008818754a8f65b48e13c63d3`.
+- Fastboot verified serial `4078cac030c8`, product `veux`, unlocked, current
+  slot B, and `boot_b` size 128 MiB. Flashed only
+  `shim/out/veux-xnu-40490907017-tlmm-probe/shim-boot-veux-xnu-40490907017-tlmm-probe.img`
+  to `boot_b` and rebooted with slot B selected. No `boot_a` write occurred.
+  Thirty seconds later the host saw neither ADB nor Fastboot. Await a straight-
+  on photo of the screen to read the build ID and last TLMM/TOUCH checkpoint;
+  no more flash until that result is understood.
