@@ -1,3 +1,22 @@
+## >>> UPDATE 2026-10-27 (bounded GT9896 ID probe flashed to boot_b) <<<
+
+- Run [40434800946](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40434800946)
+  succeeded on commit `0a880d1`: XNU build, host bounds checks, strict feature
+  manifest, and artifact upload all passed. Kernel SHA-256:
+  `ec958f71630ea1c50387bd617ebe659f7479b0ef63ed452dbcd253d1cf470531`.
+- Built and independently verified
+  `/tmp/veux-touch-probe-40434800946/shim-boot-veux-touchprobe-active-hold-40434800946.img`
+  (SHA-256 `9143ed0068604f6b32eddad3ca48b6139f04ff47e3fa5113a281532737a41b8f`).
+  It uses the previously verified VEUX ADT and phone DTB, enables
+  `veuxtouchprobe=1 veuxtouchprobeactive=1 veuxtouchprobehold=1`, and omits
+  `rootrw=1`, `ufsrw=1`, and `veuxlog=1`. Payload reconstruction, CI kernel,
+  wrapper payload, DTB, build ID, and boot arguments all verified.
+- Fastboot confirmed product `veux`, current slot `b`, and `boot_b` capacity
+  `0x8000000`. Flashed only `boot_b`; send/write and reboot returned `OKAY`.
+  `boot_a` and userdata were not touched. At 12 seconds the phone did not
+  enumerate as ADB/Fastboot/USB, consistent with the pre-root-mount hold. The
+  on-screen `VEUX TOUCH ACTIVE: id-read ...` result is pending a phone photo.
+
 ## >>> UPDATE 2026-10-27 (touch probe CI hunk-count fix) <<<
 
 - CI run [40431925948](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40431925948)
