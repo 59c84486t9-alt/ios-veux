@@ -1,3 +1,23 @@
+## >>> UPDATE 2026-10-27 (SE8 FIFO-disabled result; GPIO fallback candidate) <<<
+
+- New photo confirms the wrapper S-AHB HWCG check passed (`0x53008 =
+  0x8000000a`), and active probing advanced to SE8 preflight. Screen values
+  are fw `0x303`, status `0`, HW_PARAM0 `0x20102864`, HW_PARAM1 `0x20104800`.
+  Their advertised FIFO widths/depths pass the code's checks; the remaining
+  failure predicate is bit 0 of GENI `IF_DISABLE_RO` at SE8 offset `0x64`.
+- Upstream Linux defines that bit as `FIFO_IF_DISABLE` and its GENI I2C driver
+  switches to GPI DMA when set. The SM6375 device tree assigns QUP wrapper 1
+  SE2/GPIO19-20 to GPI DMA RX/TX channels 0/1, index 2. Thus the stopped probe
+  did not attempt the I2C transaction or change the rails; the next transport
+  must avoid the disabled FIFO.
+- Patch 0132 now contains a bounded open-drain GPIO19/20 fallback for the one
+  register-pointer plus 12-byte GT9896 identity read. It never drives either
+  bus line high, does not write touch configuration, and is bounded by a 2 ms
+  SCL-rise wait per edge. Source manifest checks now require this fallback.
+  This candidate has local patch/repo validation but no CI build yet. Do not
+  flash it until CI and wrapper verification pass; current `boot_b` still has
+  the last green clock-only probe. `boot_a` and userdata remain untouched.
+
 ## >>> UPDATE 2026-10-27 (active probe clock-gating false stop corrected) <<<
 
 - The latest phone photo shows the active probe stopped at wrapper S-AHB

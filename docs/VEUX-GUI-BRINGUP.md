@@ -162,6 +162,20 @@ It is paired with `veuxtouchprobehold=1`, so it stops before root mount and
 does not require userdata access. Only `boot_b` is authorized for test images;
 `boot_a` remains untouched.
 
+### Active probe result and FIFO fallback
+
+The active probe photo shows wrapper S-AHB `0x53008 = 0x8000000a` accepted in
+HWCG mode, followed by an SE8 preflight failure. Firmware `0x303`, status `0`,
+and HW parameter registers `0x20102864` / `0x20104800` satisfy the displayed
+firmware, busy, and FIFO-capacity checks. By elimination, the failed condition
+is `GENI_IF_DISABLE_RO` bit 0 at SE8 offset `0x64`. Linux defines this as
+`FIFO_IF_DISABLE`; its GENI I2C driver uses GPI DMA when set because the FIFO
+interface is unavailable. The DT maps QUP wrapper 1 serial engine 2 to GPI DMA
+channels 0/1 with channel index 2. Patch 0132 now uses open-drain GPIO19/20
+bit-banging for a single bounded ID read in that case, avoiding FIFO register
+access and a full GPI DMA driver. This fallback still needs a green CI build and
+one `boot_b` hardware run; the prior build stopped before touching the rails.
+
 ## Validation and pending hardware test
 
 Local syntax checks: all seven changed translation units passed; after the

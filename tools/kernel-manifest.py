@@ -145,6 +145,10 @@ source_checks["veux_gt9896_active_probe_is_opt_in_bounded_and_identity_only"] = 
     and "veux_touch_active_probe(se, gcc, tlmm);" in touch_probe
     and "touch_active_read_reg(se, 0x5d, 0x4022, id, sizeof(id))" in touch_active
     and touch_active.count("touch_active_read_reg(") == 2
+    and "if_disable = touch_active_rd(se, 0x64) & 1u" in touch_active
+    and "GENI FIFO disabled; using bounded GPIO I2C read" in touch_active
+    and "touch_active_gpio_read_reg(tlmm, 0x5d, 0x4022, id, sizeof(id))" in touch_active
+    and "touch_active_bus_gpio(tlmm);" in touch_active
     and "touch_active_gpio_cfg(tlmm, 51" in touch_active
     and "touch_active_gpio_cfg(tlmm, 44" in touch_active
     and "touch_active_gpio_cfg(tlmm, 21" in touch_active
