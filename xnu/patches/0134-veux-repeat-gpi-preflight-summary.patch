@@ -1,0 +1,130 @@
+From: ios-veux
+Subject: [PATCH] Repeat the read-only GPI snapshot after early console scroll
+
+Retain the preflight result in kernel memory and reprint a compact summary in
+three late early-boot console samples. This performs no additional MMIO reads,
+no writes and no filesystem logging.
+
+diff --git a/bsd/dev/veux_gpi_preflight.c b/bsd/dev/veux_gpi_preflight.c
+--- a/bsd/dev/veux_gpi_preflight.c
++++ b/bsd/dev/veux_gpi_preflight.c
+@@ -29,6 +29,15 @@
+ #define SMMU_SMR_STRIDE   4u
+ #define SMMU_SID          0xd6u
+ 
++/* Read-only snapshot retained for a few late console summaries. */
++static volatile uint32_t gpi_summary_complete;
++static uint32_t gpi_summary_hook, gpi_summary_arg, gpi_summary_enabled;
++static uint32_t gpi_summary_map_gpi, gpi_summary_map_smmu;
++static uint32_t gpi_summary_idr0, gpi_summary_idr1, gpi_summary_idr2;
++static uint32_t gpi_summary_scr0, gpi_summary_gbpa, gpi_summary_sid_supported;
++static uint32_t gpi_summary_matches, gpi_summary_ch0_cfg, gpi_summary_ch1_cfg;
++static uint32_t gpi_summary_ev0_cfg;
++
+ static uint32_t
+ gpi_preflight_read(vm_offset_t base, uint32_t off)
+ {
+@@ -51,16 +60,23 @@
+ {
+ 	int enabled = 0;
+ 	int arg_present = PE_parse_boot_argn("veuxgpipreflight", &enabled, sizeof(enabled));
++	gpi_summary_hook = 1;
++	gpi_summary_arg = (uint32_t)arg_present;
++	gpi_summary_enabled = (uint32_t)enabled;
+ 	printf("VEUX GPI PREFLIGHT: hook reached arg_present=%d enabled=%d; read-only\n",
+ 	    arg_present, enabled);
+ 	if (!arg_present || enabled != 1) {
++		gpi_summary_complete = 1;
+ 		veux_fb_print_build_id();
+ 		return;
+ 	}
+ 
+ 	vm_offset_t gpi = ml_io_map(VEUX_GPI_PA, VEUX_GPI_MAP_SIZE);
+ 	vm_offset_t smmu = ml_io_map(VEUX_SMMU_PA, VEUX_SMMU_SIZE);
++	gpi_summary_map_gpi = gpi != 0;
++	gpi_summary_map_smmu = smmu != 0;
+ 	if (!gpi || !smmu) {
++		gpi_summary_complete = 1;
+ 		printf("VEUX GPI PREFLIGHT: map failed gpi=%u smmu=%u; read-only, no DMA attempted\n",
+ 		    gpi != 0, smmu != 0);
+ 		veux_fb_print_build_id();
+@@ -72,6 +88,11 @@
+ 	uint32_t idr2 = gpi_preflight_read(smmu, SMMU_IDR2);
+ 	uint32_t scr0 = gpi_preflight_read(smmu, SMMU_SCR0);
+ 	uint32_t gbpa = gpi_preflight_read(smmu, SMMU_GBPA);
++	gpi_summary_idr0 = idr0;
++	gpi_summary_idr1 = idr1;
++	gpi_summary_idr2 = idr2;
++	gpi_summary_scr0 = scr0;
++	gpi_summary_gbpa = gbpa;
+ 	printf("VEUX GPI PREFLIGHT: read-only top PA=%#llx VA=%p size=%#x EE offset=%#x GPII=%u mask=%#x pool=%#x+%#x; Apps-SMMU PA=%#llx VA=%p size=%#x\n",
+ 	    (unsigned long long)VEUX_GPI_PA, (void *)gpi, VEUX_GPI_MAP_SIZE,
+ 	    VEUX_GPI_EE_OFFSET, GPII_ID, VEUX_GPII_MASK, VEUX_DMA_POOL_IOVA, VEUX_DMA_POOL_SIZE,
+@@ -81,8 +102,10 @@
+ 
+ 	/* Stream-match groups are architecturally reported by IDR0.SMS and IDR2.NUMSMRG. */
+ 	if (!(idr0 & (1u << 27))) {
++		gpi_summary_sid_supported = 0;
+ 		printf("VEUX SMMU PREFLIGHT: stream matching not reported by IDR0; refusing to infer DMA addressing\n");
+ 	} else {
++		gpi_summary_sid_supported = 1;
+ 		unsigned groups = ((idr2 >> 16) & 0xffu) + 1u;
+ 		if (groups > 128u) groups = 128u; /* map is bounded to the architected low window */
+ 		unsigned matches = 0;
+@@ -95,6 +118,7 @@
+ 				++matches;
+ 			}
+ 		}
++		gpi_summary_matches = matches;
+ 		printf("VEUX SMMU PREFLIGHT: SID %#x matching groups=%u; read-only, did not change stream mapping\n",
+ 		    SMMU_SID, matches);
+ 	}
+@@ -114,6 +138,30 @@
+ 	    gpi_preflight_read(gpi, ev_off + 8), gpi_preflight_read(gpi, ev_off + 12),
+ 	    gpi_preflight_read(gpi, ev_off + 16), gpi_preflight_read(gpi, ev_off + 20),
+ 	    gpi_preflight_read(gpi, ev_off + 24), gpi_preflight_read(gpi, ev_off + 28));
++	gpi_summary_ch0_cfg = gpi_preflight_read(gpi, GPI_CH_CTX(0) - VEUX_GPI_EE_OFFSET);
++	gpi_summary_ch1_cfg = gpi_preflight_read(gpi, GPI_CH_CTX(1) - VEUX_GPI_EE_OFFSET);
++	gpi_summary_ev0_cfg = gpi_preflight_read(gpi, ev_off);
++	gpi_summary_complete = 1;
+ 	veux_fb_print_build_id();
+ }
++
++void
++veux_gpi_preflight_report(void)
++{
++	int enabled = 0;
++	if (!PE_parse_boot_argn("veuxgpipreflight", &enabled, sizeof(enabled)) || enabled != 1) {
++		return;
++	}
++	uint32_t complete = gpi_summary_complete;
++	printf("VEUX GPI SUMMARY: state=%s hook=%u arg=%u enabled=%u map=%u/%u chcfg=%#x/%#x evcfg=%#x\n",
++	    complete ? "complete" : "not-reached", gpi_summary_hook, gpi_summary_arg,
++	    gpi_summary_enabled, gpi_summary_map_gpi, gpi_summary_map_smmu,
++	    gpi_summary_ch0_cfg, gpi_summary_ch1_cfg, gpi_summary_ev0_cfg);
++	if (complete && gpi_summary_hook && gpi_summary_enabled == 1) {
++		printf("VEUX SMMU SUMMARY: idr=%#x/%#x/%#x scr0=%#x gbpa=%#x sid=%#x supported=%u matches=%u\n",
++		    gpi_summary_idr0, gpi_summary_idr1, gpi_summary_idr2,
++		    gpi_summary_scr0, gpi_summary_gbpa, SMMU_SID,
++		    gpi_summary_sid_supported, gpi_summary_matches);
++	}
++}
+ #endif
+
+diff --git a/bsd/dev/veux_liveness.c b/bsd/dev/veux_liveness.c
+--- a/bsd/dev/veux_liveness.c
++++ b/bsd/dev/veux_liveness.c
+@@ -147,6 +147,13 @@
+ 			for (unsigned int i = 0; i < live_count; i++) (void)veux_pid_seen(live_entries[i].pid);
+ 		}
+ 		veux_live_launchd();
++		/* Repeat the immutable read-only GPI snapshot a few times after console scroll. */
++		static unsigned gpi_report_count;
++		if (gpi_report_count < 3) {
++			extern void veux_gpi_preflight_report(void);
++			veux_gpi_preflight_report();
++			gpi_report_count++;
++		}
+ 		(void)tsleep(&live_chan, PWAIT, "veuxlive", 10 * hz);
+ 	}
+ }

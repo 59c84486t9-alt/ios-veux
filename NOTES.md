@@ -1,3 +1,19 @@
+## >>> UPDATE 2026-10-27 (GPI preflight summary replay implementation) <<<
+
+- Reviewed the new `IMG_0810.MOV` early-boot segment. It shows XNU/MAC init
+  followed by `launchd` output; no GPI/SMMU result is readable before the
+  console advances. This confirms progress to userspace but does not establish
+  whether the one-shot preflight ran or was simply scrolled away.
+- Added patch `0134` to retain the existing read-only preflight values in RAM
+  and print compact GPI/SMMU summary lines during the first three liveness
+  samples (0, 10, and 20 seconds after the sampler starts). If the preflight
+  was never reached, the summary says so. It reuses captured values; no extra
+  MMIO reads, storage logging, waits, GPIO operations, or touch power/reset
+  actions are added.
+- Added strict patch-status, kernel-string, and source-manifest checks. The
+  synthetic `git apply --check` for 0134 and repository/Python/shell validation
+  pass. CI has not yet run; no commit or phone flash has occurred.
+
 ## >>> UPDATE 2026-10-27 (early boot segment IMG_0808.MOV) <<<
 
 - Reviewed the user's 19-second early boot clip. The loader screen reports
