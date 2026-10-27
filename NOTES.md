@@ -4062,3 +4062,12 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   remains unexplained by the hold and needs separate display/boot investigation.
   CI itself does not store wrapper boot args; the local manifests distinguish
   those wrapper configurations.
+- To restore the last confirmed iOS lock-screen candidate, verified the exact
+  40413116842 sandbox/iolog wrapper against its manifest (SHA-256
+  `d921cb95cb72c76daff5b6e5c75f74a66a3a66f8d40318aa3c05bb2c8f2c0f42`; CI
+  kernel `c762eb704fe1eaf686daf64f5c741441456efbf670065f30c8af0e94b1da5fba`).
+  Fastboot confirmed serial `4078cac030c8`, product `veux`, unlocked, active
+  slot A, and 128 MiB `boot_a`/`boot_b`. Flashed only that wrapper to `boot_b`,
+  selected slot B, and rebooted successfully; `boot_a` was not flashed. Twenty
+  seconds later neither ADB nor Fastboot enumerated, consistent with the prior
+  lock-screen run; wait for user screen confirmation before further action.
