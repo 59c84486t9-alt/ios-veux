@@ -1,3 +1,30 @@
+## >>> UPDATE 2026-10-27 (GPI preflight hook visibility build) <<<
+
+- The user's new `IMG_0806.MOV` shows a live XNU console followed by launchd
+  service output; it does not show a black-screen hang. It contains no visible
+  preflight result. The video is boot evidence only, not evidence of touch.
+- CI run [40513098723](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40513098723)
+  passed, including the kernel build, synthetic diagnostic bounds checks,
+  feature manifest, and packaging. Kernel SHA-256:
+  `d503643a4a87c7983a2ecb0e4bc7ec27ba463e07ba7bab1a27a139fe1d525d2e`.
+- Built a new wrapper from that CI kernel, the previously verified bootable
+  shim/DTB, and unchanged iOS boot arguments with `veuxgpipreflight=1`.
+  `tools/verify-veux-wrapper.py` passed. Wrapper SHA-256:
+  `4e9538c0a4587f87508b71b11f9c69b0e4ec9a5d6627ae20fb04e6425cb0da7d`;
+  verification manifest and image are in
+  `/tmp/veux-gpi-preflight-40513098723/`.
+- Fastboot identified unlocked VEUX, current slot B, and 128 MiB `boot_b`.
+  Flashed only the verified wrapper to `boot_b`; send/write returned `OKAY`,
+  then reboot returned `OKAY`. `boot_a` was not written. After reboot, neither
+  ADB nor Fastboot enumerated at the 15-second check. The on-device preflight
+  banner/output is still pending; do not treat the build as touch support.
+- The new hook logs whether it ran and whether the boot arg was present. If
+  the flag is missing, it prints the build ID and returns before MMIO. If the
+  user-visible screen shows the hook but `arg_present=0`, investigate boot
+  argument propagation. If no hook line appears, investigate hook ordering or
+  output. Do not start DMA or write SMMU/GPI state without a captured,
+  understood read-only preflight.
+
 ## >>> UPDATE 2026-10-27 (GPI/SMMU preflight image booted from boot_b) <<<
 
 - Inspected the user's new 86-second `IMG_0806.MOV` recording via the Drive
