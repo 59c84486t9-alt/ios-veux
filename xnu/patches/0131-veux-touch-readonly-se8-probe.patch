@@ -28,7 +28,7 @@ new file mode 100644
 index 0000000..d5de204
 --- /dev/null
 +++ b/bsd/dev/veux_touch_probe.c
-@@ -0,0 +1,95 @@
+@@ -0,0 +1,104 @@
 +/*
 + * VEUX GT9896 first-stage probe. This path is strictly read-only: it snapshots
 + * the SE8, GCC and TLMM state inherited at XNU startup and never sends I2C.
@@ -122,5 +122,14 @@ index 0000000..d5de204
 +	touch_probe_gpio(tlmm, 44, "dvdd");
 +	touch_probe_gpio(tlmm, 51, "avdd");
 +	printf("VEUX TOUCH PROBE: done; no GPIO/GCC/SE writes and no I2C transfer\n");
++
++	int hold = 0;
++	/* Pause before root mount so the read-only snapshot can be photographed. */
++	if (PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold)) && hold == 1) {
++		printf("VEUX TOUCH PROBE: holding after read-only snapshot; hard reset to reboot\n");
++		for (;;) {
++			__asm__ volatile("wfe" ::: "memory");
++		}
++	}
 +}
 +#endif /* ARM64_BOARD_CONFIG_VEUX */

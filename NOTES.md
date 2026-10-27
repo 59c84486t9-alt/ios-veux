@@ -1,3 +1,23 @@
+## >>> UPDATE 2026-10-27 (reviewed IMG_0795.MOV; hold for probe readout) <<<
+
+- Inspected the 2:19 Drive clip in the browser. It shows kernel/Backboardd log
+  output, an Apple logo around 1:25, a dark screen around 1:48, and the logo
+  again near the end. It does not expose readable `VEUX TOUCH PROBE` register
+  lines or a lock screen. A prior pair of photos from the read-only-filesystem
+  run shows the separate `mount_hfs: Read-only file system` panic.
+- Added an optional `veuxtouchprobehold=1` branch to patch 0131. When paired
+  with `veuxtouchprobe=1`, it holds after the SE8/GCC/TLMM snapshot, before
+  `sweet_ufs_init` returns and before root mount. It uses only WFE in an
+  infinite wait; it performs no writes and requires a hardware reset to reboot.
+  The read-only UFS path can be used for this held probe because mount/launchd
+  never start. Added a kernel manifest marker and source assertion for the
+  hold path. Repository validation and Python syntax checks pass; CI has not
+  yet rebuilt this revision.
+- Next: commit/push and run strict CI. If green, compose a held-probe wrapper
+  with filesystem RW args omitted, then use only `boot_b` as already authorized.
+  Ask the user to photograph the held SE8/GCC/GPIO lines; no touch input is
+  expected from this diagnostic.
+
 ## >>> UPDATE 2026-10-27 (known-good mount flags restored on probe boot) <<<
 
 - User returned the phone to Fastboot. Reflashed the corrected wrapper

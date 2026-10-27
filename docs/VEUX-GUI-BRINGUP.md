@@ -118,7 +118,17 @@ SE8 firmware/status/clock/IRQ/FIFO registers, the Blair GCC SE8 source and
 branch state, and TLMM config/input-output registers for GPIOs 19, 20, 21, 22,
 44 and 51. It does not write controller, clock, GPIO, or PMIC registers and
 does not issue I2C. The normal boot path is unchanged when the argument is
-absent. Build and on-device results are pending; this is not touch support.
+absent. CI 40420136793 built and verified the probe, but no legible probe values
+have been captured from the phone yet. The probe does not generate touch input.
+
+The first on-device probe wrapper omitted `rootrw=1 ufsrw=1` and panicked when
+`mount_hfs` received `Read-only file system`; this is a root-mount requirement,
+not a probe write. A follow-up clip shows kernel and Backboardd logging, then an
+Apple logo, a dark screen, and the logo again; it does not show readable probe
+lines. The next probe revision adds `veuxtouchprobehold=1`, which leaves the
+register snapshot on the console and pauses before root mount. That test can
+omit the RW pair; UFS remains read-only and the user must force-reset to leave
+the held diagnostic screen. It still does not implement touch.
 
 ## Validation and pending hardware test
 

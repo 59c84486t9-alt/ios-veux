@@ -68,6 +68,7 @@ needles = {
     "software_gui_swap_trace": b"VEUX GUI: framebuffer swap %u mask=0x%x",
     "software_apple_keystore_service": b"SWEET AKS: AppleKeyStore registered (no passcode, unlocked)",
     "veux_touch_readonly_probe": b"VEUX TOUCH PROBE: read-only SE8 fw=",
+    "veux_touch_readonly_probe_hold": b"VEUX TOUCH PROBE: holding after read-only snapshot; hard reset to reboot",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
     "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",
@@ -124,6 +125,8 @@ source_checks["framebuffer_console_and_marker_are_unconditional"] = (
 )
 source_checks["veux_touch_probe_is_opt_in_and_read_only"] = (
     'PE_parse_boot_argn("veuxtouchprobe", &enabled, sizeof(enabled))' in touch_probe
+    and 'PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold))' in touch_probe
+    and 'volatile("wfe"' in touch_probe
     and "VEUX_TOUCH_SE_PA       0x04c88000u" in touch_probe
     and "VEUX_TOUCH_GCC_PA      0x01400000u" in touch_probe
     and "VEUX_TOUCH_GCC_SIZE    0x80000u" in touch_probe
