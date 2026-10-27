@@ -27,10 +27,14 @@ index 7adee14..a32f477 100644
 diff --git a/bsd/conf/files b/bsd/conf/files
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -114,2 +114,3 @@
+@@ -112,6 +112,7 @@
+ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
  bsd/dev/sweet_usb.c			standard
 +bsd/dev/veux_touch_probe.c		standard
  bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
 diff --git a/bsd/dev/veux_touch_probe.c b/bsd/dev/veux_touch_probe.c
 new file mode 100644
 index 0000000..0000000

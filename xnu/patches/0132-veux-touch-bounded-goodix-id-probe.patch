@@ -10,11 +10,15 @@ It never writes touch configuration or firmware and does not start polling.
 diff --git a/bsd/conf/files b/bsd/conf/files
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
-@@ -114,3 +114,4 @@
+@@ -112,7 +112,8 @@
+ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
  bsd/dev/sweet_usb.c			standard
  bsd/dev/veux_touch_probe.c		standard
 +bsd/dev/veux_touch_active.c		standard
  bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
 diff --git a/bsd/dev/veux_touch_active.c b/bsd/dev/veux_touch_active.c
 new file mode 100644
 --- /dev/null
