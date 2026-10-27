@@ -1,3 +1,26 @@
+## >>> UPDATE 2026-10-27 (held SE8 probe captured; next-stage boundary) <<<
+
+- User supplied two photos of the held read-only probe. On-screen values:
+  SE8 fw `0x303`, status `0`, MCLK `0x11`, clk_sel `0`, IRQ `0`, IRQ_EN
+  `0x33c0007e`, TX/RX counts `0`; GCC RCGR `0x80000000`, CFG `0x100000`,
+  SE8 branch `0x80004220`, M-AHB `0`, S-AHB `0x8000000a`, vote `0xb1e07e0`;
+  GPIOs 19/20/21/22/44/51 all `cfg=0 io=0`. `0x303` is GENI SE firmware
+  revision, not the Goodix ID. The SE8 and S-AHB branch halt bits are set.
+- Local Linux VEUX reference confirms bus mux `qup12` on GPIO19/20 and the
+  GT9896 reference sequence: AVDD GPIO51 then DVDD GPIO44, then reset pulse on
+  GPIO21. IRQ is GPIO22. One bounded identity read is Goodix I2C `0x5d`,
+  register `0x4022`; no panel configuration or firmware write is needed for
+  that test. These are reference-driver facts; no XNU hardware-write attempt
+  has been made.
+- Fastboot currently enumerates as `4078cac030c8` (product veux). User's
+  standing partition constraint remains: test images may use `boot_b`; never
+  write `boot_a`. Earlier request was for a read-only touch probe, so the next
+  test must not configure pins, enable rails, pulse reset, or issue I2C until
+  the user explicitly authorizes that transition.
+- Updated `docs/VEUX-GUI-BRINGUP.md` with the measured values and next-stage
+  boundary. `git diff --check` passes. Pending: commit this evidence update;
+  request authorization for the bounded GPIO/clock/power/reset/identity test.
+
 ## >>> UPDATE 2026-10-27 (held read-only SE8 probe flashed to boot_b) <<<
 
 - CI run `40426388161` succeeded on commit `975b208`, including patch 0131,

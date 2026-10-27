@@ -118,8 +118,8 @@ SE8 firmware/status/clock/IRQ/FIFO registers, the Blair GCC SE8 source and
 branch state, and TLMM config/input-output registers for GPIOs 19, 20, 21, 22,
 44 and 51. It does not write controller, clock, GPIO, or PMIC registers and
 does not issue I2C. The normal boot path is unchanged when the argument is
-absent. CI 40420136793 built and verified the probe, but no legible probe values
-have been captured from the phone yet. The probe does not generate touch input.
+absent. CI 40420136793 built and verified the probe. The probe does not
+generate touch input.
 
 The first on-device probe wrapper omitted `rootrw=1 ufsrw=1` and panicked when
 `mount_hfs` received `Read-only file system`; this is a root-mount requirement,
@@ -129,6 +129,33 @@ lines. The next probe revision adds `veuxtouchprobehold=1`, which leaves the
 register snapshot on the console and pauses before root mount. That test can
 omit the RW pair; UFS remains read-only and the user must force-reset to leave
 the held diagnostic screen. It still does not implement touch.
+
+### Held readout — 2026-10-27
+
+The photo shows SE8 firmware register `0x303`, status `0`, MCLK `0x11`,
+clock-select `0`, zero IRQ/FIFO counts, and `irq_en=0x33c0007e`. `0x303` is
+the GENI SE firmware register, not a Goodix chip identity. GCC reads are
+`RCGR=0x80000000`, `CFG=0x100000`, SE8 branch `0x80004220`, M-AHB `0`,
+S-AHB `0x8000000a`, and vote `0xb1e07e0`. The SE8 branch and S-AHB branch
+halt registers have bit 31 set, indicating they are halted in this snapshot.
+
+GPIO 19/20 (SE8 SDA/SCL), 21 (reset), 22 (IRQ), 44 (DVDD), and 51 (AVDD)
+each read `cfg=0 io=0`. The matching Linux device tree assigns GPIO 19/20 to
+the `qup12` mux, and its GT9896 driver enables AVDD then DVDD before resetting
+the controller. The snapshot therefore confirms that the touch pins are not
+configured by this XNU boot path. It does not prove whether the external rails
+are electrically at zero, since a GPIO register snapshot is not a voltage
+measurement.
+
+The next hardware test is a separate opt-in, bounded bring-up: configure the
+SE8 I2C pin mux and clock, perform the reference AVDD/DVDD enable sequence,
+pulse reset, then make one GT9896 identity read (`0x5d`, register `0x4022`).
+It must stop after logging that one read and must not write controller
+configuration/firmware or begin touch polling. This crosses the earlier
+read-only hardware policy, so do not build or flash that version until the
+user explicitly authorizes the power/reset and I2C test. Fastboot currently
+enumerates; only `boot_b` is authorized for test images, with `boot_a` left
+untouched.
 
 ## Validation and pending hardware test
 
