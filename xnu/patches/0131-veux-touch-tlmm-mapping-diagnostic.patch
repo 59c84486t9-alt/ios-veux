@@ -24,23 +24,12 @@ index 7adee14..a32f477 100644
 +#endif
  	return 0;
  }
-diff --git a/bsd/conf/files b/bsd/conf/files
---- a/bsd/conf/files
-+++ b/bsd/conf/files
-@@ -112,6 +112,7 @@
- bsd/dev/sweet_rpmh.c			standard
- bsd/dev/sweet_spmi.c			standard
- bsd/dev/sweet_usb.c			standard
-+bsd/dev/veux_touch_probe.c		standard
- bsd/dev/mem.c				standard
- bsd/dev/munge.c 			optional config_requires_u32_munging
- bsd/dev/unix_startup.c			standard
 diff --git a/bsd/dev/veux_touch_probe.c b/bsd/dev/veux_touch_probe.c
 new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/bsd/dev/veux_touch_probe.c
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,212 @@
 +/* Bounded VEUX GT9896 TLMM mapping and drive-strength diagnostic. */
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +#include <sys/param.h>
@@ -112,7 +101,7 @@ index 0000000..0000000
 +		uint32_t cfg = touch_probe_rd(va, off);
 +		uint32_t io = touch_probe_rd(va, off + 4u);
 +		any_nonzero |= cfg != 0 || io != 0;
-+		if (pin == 3 || (pin >= 7 && pin <= 9)) {
++		if (pin == 3 || (pin >= 7 && pin <= 9) || pin == 21 || pin == 22 || pin == 44 || pin == 51) {
 +			control_cfg_nonzero += cfg != 0;
 +			printf("VEUX TLMM CTRL pin=%u cfg/io=%08x/%08x\n", pin, cfg, io);
 +		}
@@ -120,7 +109,7 @@ index 0000000..0000000
 +		    pin, cfg, io, (unsigned long long)cfg_pa, (void *)cfg_va,
 +		    (unsigned long long)io_pa, (void *)io_va);
 +	}
-+	printf("VEUX TLMM %s summary nonzero=%u control_cfg_nonzero=%u/4 (gpio3,7,8,9)\n",
++	printf("VEUX TLMM %s summary nonzero=%u control_cfg_nonzero=%u/8 (gpio3,7,8,9,21,22,44,51)\n",
 +	    tag, (unsigned)any_nonzero, control_cfg_nonzero);
 +	return any_nonzero;
 +}
@@ -149,6 +138,33 @@ index 0000000..0000000
 +		    stage, pin, (unsigned long long)(pa + off),
 +		    (void *)addr, old, set, got, restored);
 +	}
++}
++
++static void
++touch_probe_tlmm_compact_snapshot(vm_offset_t va, vm_offset_t pa, const char *tag)
++{
++	uint32_t cfg[64], io[64];
++	unsigned control_cfg_nonzero = 0;
++	printf("VEUX TLMM PHOTO BEGIN %s PA=%#llx VA=%p; pins 0-63, pin:cfg/io (hex)\n",
++	    tag, (unsigned long long)pa, (void *)va);
++	for (unsigned pin = 0; pin < 64; ++pin) {
++		uint32_t off = TLMM_GPIO_CFG(pin);
++		cfg[pin] = touch_probe_tlmm_rd(va, pa, off);
++		io[pin] = touch_probe_tlmm_rd(va, pa, off + 4u);
++		if ((pin == 3 || (pin >= 7 && pin <= 9) || pin == 21 || pin == 22 || pin == 44 || pin == 51) && cfg[pin] != 0) {
++			++control_cfg_nonzero;
++		}
++	}
++	for (unsigned row = 0; row < 16; ++row) {
++		printf("VEUX TLMM HEX %02u:%08x/%08x %02u:%08x/%08x %02u:%08x/%08x %02u:%08x/%08x\n",
++		    row * 4, cfg[row * 4], io[row * 4], row * 4 + 1, cfg[row * 4 + 1], io[row * 4 + 1],
++		    row * 4 + 2, cfg[row * 4 + 2], io[row * 4 + 2], row * 4 + 3, cfg[row * 4 + 3], io[row * 4 + 3]);
++	}
++	printf("VEUX TLMM PHOTO CTRL cfg/io 03=%08x/%08x 07=%08x/%08x 08=%08x/%08x 09=%08x/%08x\n",
++	    cfg[3], io[3], cfg[7], io[7], cfg[8], io[8], cfg[9], io[9]);
++	printf("VEUX TLMM PHOTO CTRL cfg/io 21=%08x/%08x 22=%08x/%08x 44=%08x/%08x 51=%08x/%08x nonzero_cfg=%u/8\n",
++	    cfg[21], io[21], cfg[22], io[22], cfg[44], io[44], cfg[51], io[51], control_cfg_nonzero);
++	printf("VEUX TLMM PHOTO END %s; addresses use PA/VA base+pin*0x1000, IO+4; read width 32-bit\n", tag);
 +}
 +
 +static void
@@ -190,6 +206,8 @@ index 0000000..0000000
 +		vm_offset_t alt = ml_io_map(VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
 +		if (alt) (void)touch_probe_tlmm_dump(alt, VEUX_TOUCH_TLMM_ALT_PA, "ALT-READONLY");
 +		printf("VEUX TLMM: primary DT window all zero; alternate was read-only; pin writes and active probe skipped\n");
++		if (alt) touch_probe_tlmm_compact_snapshot(alt, VEUX_TOUCH_TLMM_ALT_PA, "ALT-READONLY");
++		else touch_probe_tlmm_compact_snapshot(tlmm, VEUX_TOUCH_TLMM_PA, "DT-ZERO");
 +		veux_fb_print_build_id();
 +		return;
 +	}
@@ -219,6 +237,7 @@ index 0000000..0000000
 +	int hold = 0;
 +	bool should_hold = PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold)) && hold == 1;
 +	if (should_hold) printf("VEUX TOUCH PROBE: holding after TLMM diagnostic; hard reset to reboot\n");
++	touch_probe_tlmm_compact_snapshot(active_tlmm, active_pa, "FINAL");
 +	veux_fb_print_build_id();
 +	if (should_hold) for (;;) __asm__ volatile("wfe" ::: "memory");
 +}

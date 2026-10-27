@@ -152,7 +152,13 @@ source_checks["veux_touch_tlmm_mapping_dump_and_drive_test_are_bounded"] = (
     and "ioPA/VA=%#llx/%p" in touch_probe
     and "no UART/SPMI/UFS GPIO consumer reported" in touch_probe
     and "VEUX TLMM CTRL pin=%u cfg/io=%08x/%08x" in touch_probe
-    and "control_cfg_nonzero=%u/4 (gpio3,7,8,9)" in touch_probe
+    and "pin == 21 || pin == 22 || pin == 44 || pin == 51" in touch_probe
+    and "control_cfg_nonzero=%u/8 (gpio3,7,8,9,21,22,44,51)" in touch_probe
+    and "VEUX TLMM PHOTO BEGIN" in touch_probe
+    and "VEUX TLMM HEX %02u:%08x/%08x" in touch_probe
+    and "VEUX TLMM PHOTO END" in touch_probe
+    and touch_probe.index('touch_probe_tlmm_compact_snapshot(active_tlmm, active_pa, "FINAL");')
+        < touch_probe.rindex("veux_fb_print_build_id();")
     and "attr=Device-nGnRnE(VM_WIMG_IO)" in touch_probe
     and 'veux_touch_probe_init();' in ufs
 )
