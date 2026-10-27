@@ -1,10 +1,10 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 Subject: [PATCH] Use no-fault translation for VEUX TLMM diagnostic
 
-The previous diagnostic's normal pmap lookup can fall back to a locked page
-walk when the no-fault VA translation returns zero. Use the no-fault helper
-explicitly so an unmapped MMIO VA is reported as zero rather than entering the
-fallback path. Emit a breadcrumb before each translation.
+The regular translation helper first tries a hardware VA translation and then
+falls back to a software page-table walk when that returns zero. Use the
+no-fault helper explicitly so an unmapped MMIO VA is reported as zero without
+the fallback walk. Emit a breadcrumb before each translation.
 
 diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
 --- a/bsd/dev/sweet_touch.c
