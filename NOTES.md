@@ -1,5 +1,36 @@
 ## >>> UPDATE 2026-10-27 (VEUX lock screen confirmed; HID path audit) <<<
 
+- Added patch 0137, adapting the already-working SWEET GT9896 FIFO/report/HID
+  driver for VEUX. It maps SE8, GCC and Blair TLMM, configures QUP12 GPIO19/20,
+  powers AVDD/DVDD on GPIO51/44, sequences reset/IRQ GPIO21/22, and refuses to
+  continue if those pin writes fail readback. It uses the known short-message
+  GENI FIFO path, polls reports after a 45-second UI delay, validates Goodix
+  checksums, scales the sensor's 8640x19200 coordinates to 1080x2400, and
+  dispatches through the VEUX-registered SweetHIDTouch service.
+- Patch 0137 applies cleanly to the exact source tree from CI 40554836312;
+  repository/patch validation and `git diff --check` pass. CI compile is the
+  next gate. The phone is currently not enumerating after a read-only reboot
+  to slot-A recovery; no partition has been written in this turn.
+
+- Correction from the exact Xiaomi SM6375 Linux 5.4.302 source audit: the
+  previous notes overstate GPI as the required transport. `i2c-qcom-geni.c`
+  uses GENI's own DMA registers for DMA transfers, but short I2C messages use
+  FIFO mode; the GT9896 register-pointer and ID reads are short. Its SE8
+  wrapper is attached to Apps-SMMU SID `0xc3` with IOVA pool
+  `0x40000000..0x4fffffff`, while the separate GPI engine uses SID `0xd6`.
+- More directly, patch 0132 currently reads `GENI_IF_DISABLE_RO` at `0x64`
+  before enabling SE8 clocks, treats bit 0 as proof that FIFO is unavailable,
+  and diverts to GPIO bit-banging. The matching Linux GENI driver does not
+  use this bit as a FIFO veto: it initializes the SE and supports FIFO mode.
+  Thus the observed GPIO `error=60 phase=start` does not test the Linux
+  transport at all. Next driver change should port the Linux FIFO setup and
+  short-message sequencing, make the `0x64` value diagnostic only, and then
+  validate the ID read before enabling Goodix report polling.
+- This correction does not resolve the separate TLMM/power question. Prior
+  XNU dumps showed zero CFG/IO across the sampled window, and no successful
+  readback of AVDD/DVDD/reset has been established. Do not interpret the
+  latest HID-registration-only CI as a touch driver or flash it as one.
+
 - User confirms the current image reaches the lock screen and its clock runs,
   but physical touch remains nonfunctional. This establishes a bootable UI,
   not a working touch stack.

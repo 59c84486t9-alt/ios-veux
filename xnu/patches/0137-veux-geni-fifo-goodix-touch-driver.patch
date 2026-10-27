@@ -1,0 +1,267 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Port the SWEET GT9896 FIFO/HID driver to VEUX SE8
+
+Build the existing bounded Goodix report parser and HID event bridge for VEUX.
+Use VEUX SE8/GCC/TLMM mappings, enable and verify GPIO AVDD/DVDD/reset and
+QUP12 pin mux readbacks, then run the Linux-compatible short-message GENI
+FIFO path. Treat GENI_IF_DISABLE_RO as informational, and scale the VEUX
+8640x19200 sensor coordinates to the 1080x2400 digitizer surface.
+
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 03defe6..03c2521 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -5,7 +5,7 @@
+  * No firmware/config upload or direct PMIC writes. Only IC data write:
+  * zero to GT9896's event status after reading a report. See touch2/report.md.
+  */
+-#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+ #include <sys/param.h>
+ #include <sys/systm.h>
+ #include <sys/errno.h>
+@@ -22,13 +22,35 @@ extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
+ void sweet_touch_init(void);
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
+ #define TOUCH_SE_PA      0x00a84000u
+ #define TOUCH_GCC_PA     0x00100000u
+ #define TOUCH_NORTH_PA   0x03900000u /* DT TLMM + NORTH (0x500000) */
+ #define TOUCH_GCC_VOTE   0x5200cu
+-#define TOUCH_RCG       0x18148u    /* wrapper1 LOCAL S1 = global SE7 */
++#define TOUCH_RCG        0x18148u    /* wrapper1 LOCAL S1 = global SE7 */
++#define TOUCH_GCC_VOTE_MASK ((0x0fu << 18) | (1u << 23))
++#define TOUCH_GPIO_SDA   6u
++#define TOUCH_GPIO_SCL   7u
++#define TOUCH_GPIO_RESET 8u
++#define TOUCH_GPIO_IRQ   9u
++#define TOUCH_GPIO_CFG(n) ((uint32_t)(n) * 0x1000u)
++#define TOUCH_GPIO_IO(n)  (TOUCH_GPIO_CFG(n) + 4u)
++#else
++#define TOUCH_SE_PA      0x04c88000u
++#define TOUCH_GCC_PA     0x01400000u
++#define TOUCH_NORTH_PA   0x00400000u /* Blair TLMM, exact VEUX phone DT */
++#define TOUCH_GCC_VOTE   0x7900cu
++#define TOUCH_RCG        0x5327cu    /* QUP1 SE8 S2 */
++#define TOUCH_GCC_VOTE_MASK ((1u << 17) | (1u << 18) | (1u << 23))
++#define TOUCH_GPIO_SDA   19u
++#define TOUCH_GPIO_SCL   20u
++#define TOUCH_GPIO_RESET 21u
++#define TOUCH_GPIO_IRQ   22u
++#define TOUCH_GPIO_DVDD  44u
++#define TOUCH_GPIO_AVDD  51u
+ #define TOUCH_GPIO_CFG(n) ((uint32_t)(n) * 0x1000u)
+ #define TOUCH_GPIO_IO(n)  (TOUCH_GPIO_CFG(n) + 4u)
++#endif
+ #define TOUCH_MAX        10u
+ #define TOUCH_GOODIX     1
+ #define TOUCH_FTS        2
+@@ -118,7 +140,7 @@ touch_wait_clear(vm_offset_t base, uint32_t off, uint32_t mask)
+ 	return false;
+ }
+ 
+-static void
++static bool
+ touch_gpio(unsigned pin, unsigned mux, unsigned pull, unsigned drive, bool out, bool high)
+ {
+ 	uint32_t off = TOUCH_GPIO_CFG(pin);
+@@ -131,13 +153,27 @@ touch_gpio(unsigned pin, unsigned mux, unsigned pull, unsigned drive, bool out,
+ 	cfg &= ~0x3ffu;
+ 	cfg |= (mux << 2) | pull | (drive << 6) | (out ? 0x200u : 0u);
+ 	touch_wr(st.gpio, off, cfg);
++	bool ok = (touch_rd(st.gpio, off) & 0x3ffu) == (cfg & 0x3ffu);
++	if (out) {
++		ok = ok && ((touch_rd(st.gpio, TOUCH_GPIO_IO(pin)) & 2u) == (high ? 2u : 0u));
++	}
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (!ok) {
++		printf("VEUX TOUCH: GPIO%u write/readback failed cfg=%#x wanted=%#x io=%#x out=%u high=%u\n",
++		    pin, touch_rd(st.gpio, off), cfg, touch_rd(st.gpio, TOUCH_GPIO_IO(pin)),
++		    out ? 1u : 0u, high ? 1u : 0u);
++	}
++	return ok;
++#else
++	return true;
++#endif
+ }
+ 
+ static bool
+ touch_clocks(void)
+ {
+ 	/* Vote on only wrapper1 and SE7, preserving other clock users. */
+-	uint32_t mask = (0x0fu << 18) | (1u << 23);
++	uint32_t mask = TOUCH_GCC_VOTE_MASK;
+ 	touch_wr(st.gcc, TOUCH_GCC_VOTE, touch_rd(st.gcc, TOUCH_GCC_VOTE) | mask);
+ 	uint32_t dfs = touch_rd(st.gcc, TOUCH_RCG + 0x14u);
+ 	uint32_t cfg = touch_rd(st.gcc, TOUCH_RCG + 4u);
+@@ -160,8 +196,19 @@ touch_clocks(void)
+ 			return false;
+ 		}
+ 	}
++#if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	const uint32_t branches[] = {0x18004, 0x18008, 0x1800c, 0x18010, 0x18144};
++#else
++	const uint32_t branches[] = {0x53004, 0x53008, 0x53278};
++#endif
+ 	for (unsigned i = 0; i < sizeof(branches) / sizeof(branches[0]); ++i) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		if (i < 2 && (touch_rd(st.gcc, branches[i]) & (1u << 1))) {
++			printf("VEUX TOUCH: wrapper branch %#x is hardware clock gated (%#x)\n",
++			    branches[i], touch_rd(st.gcc, branches[i]));
++			continue;
++		}
++#endif
+ 		if (!touch_wait_clear(st.gcc, branches[i], 1u << 31)) {
+ 			printf("SWEET TOUCH: GCC branch %#x halted (%#x)\n", branches[i],
+ 			    touch_rd(st.gcc, branches[i]));
+@@ -423,9 +470,16 @@ touch_goodix(void)
+ 		const uint8_t *p = buf + GOODIX_HEAD_LEN + i * GOODIX_POINT_LEN;
+ 		unsigned id = p[0] >> 4;
+ 		unsigned px = touch_be16(p + 2), py = touch_be16(p + 4);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		bool coords_bad = px >= 8640u || py >= 19200u;
++		px /= 8u;
++		py /= 8u;
++#else
++		bool coords_bad = px > 1079u || py > 2399u;
++#endif
+ 		/* Low nibble 1/3 denotes pen data in the vendor parser. */
+ 		if ((p[0] & 15u) == 1u || (p[0] & 15u) == 3u || id >= TOUCH_MAX ||
+-		    (mask & (1u << id)) || px > 1079 || py > 2399) {
++		    (mask & (1u << id)) || coords_bad) {
+ 			(void)touch_goodix_ack();
+ 			return EIO;
+ 		}
+@@ -495,7 +549,9 @@ touch_se_init(void)
+ 	printf("SWEET TOUCH: se7 fw=%#x proto=%u status=%#x tx=%#x rx=%#x ios=%#x\n",
+ 	    fw, (fw >> 8) & 0xffu, touch_rd(st.se, SE_STATUS), tx, rx,
+ 	    touch_rd(st.se, 0x908));
+-	if (((fw >> 8) & 0xffu) != 3u || (touch_rd(st.se, 0x64) & 1u) ||
++	uint32_t if_disable = touch_rd(st.se, 0x64) & 1u;
++	printf("TOUCH: GENI_IF_DISABLE_RO=%u (informational; Linux configures FIFO mode)\n", if_disable);
++	if (((fw >> 8) & 0xffu) != 3u ||
+ 	    ((tx >> 24) & 0x3fu) != 32u || ((rx >> 24) & 0x3fu) != 32u ||
+ 	    ((tx >> 16) & 0x3fu) < 2u || ((rx >> 16) & 0x3fu) < 2u) {
+ 		printf("SWEET TOUCH: need ABL-loaded I2C firmware and 32-bit FIFOs; probes skipped\n");
+@@ -555,12 +611,22 @@ touch_thread(void *arg, wait_result_t result)
+ 	 * Start late (boot-arg sweettouchdelay, seconds): if the bus access
+ 	 * below hangs the SoC, the persistent log and the GUI got there first.
+ 	 */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	(void)PE_parse_boot_argn("sweettouchdelay", &delay_s, sizeof(delay_s));
+-	printf("SWEET TOUCH: starting in %u s\n", delay_s);
++#else
++	delay_s = 45;
++	(void)PE_parse_boot_argn("veuxtouchdelay", &delay_s, sizeof(delay_s));
++#endif
++	printf("TOUCH: starting in %u s\n", delay_s);
+ 	touch_wait(delay_s * 1000u);
+-	printf("SWEET TOUCH: mapping GCC/TLMM/SE7\n");
++	printf("TOUCH: mapping GCC/TLMM/GENI\n");
++#if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	st.gcc = ml_io_map(TOUCH_GCC_PA, 0x60000);
+ 	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x5b000);
++#else
++	st.gcc = ml_io_map(TOUCH_GCC_PA, 0x80000);
++	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x800000);
++#endif
+ 	st.se = ml_io_map(TOUCH_SE_PA, 0x4000);
+ 	if (!st.gcc || !st.gpio || !st.se) {
+ 		printf("SWEET TOUCH: MMIO mapping failed\n");
+@@ -569,26 +635,46 @@ touch_thread(void *arg, wait_result_t result)
+ 	if (!touch_clocks() || !touch_se_init()) {
+ 		goto out;
+ 	}
++#if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	printf("SWEET TOUCH: TLMM reset=%#x irq=%#x vdd90=%#x; voting L11C through RPMh\n",
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(8)), touch_rd(st.gpio, TOUCH_GPIO_IO(9)),
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(90)));
+ 	/* Keep the IC in reset while its rails settle; IRQ stays an input. */
+-	touch_gpio(9, 0, 3, 3, false, false); /* IRQ input, 8 mA, pull-up */
+-	touch_gpio(8, 0, 3, 3, true, false);
++	if (!touch_gpio(TOUCH_GPIO_IRQ, 0, 3, 3, false, false) ||
++	    !touch_gpio(TOUCH_GPIO_RESET, 0, 3, 3, true, false)) goto out;
+ 	int power_error = sweet_rpmh_vreg_enable("ldoc11", 3200);
+ 	if (power_error) {
+ 		printf("SWEET TOUCH: L11C RPMh enable failed %d; probes skipped\n", power_error);
+ 		goto out;
+ 	}
+-	touch_gpio(90, 0, 0, 0, true, true); /* board digital power enable */
+-	touch_wait(10); /* conservative rail settling; not a DT timing value */
+-	touch_gpio(6, 1, 0, 0, false, false); /* qup11 SDA/SCL, 2 mA */
+-	touch_gpio(7, 1, 0, 0, false, false);
+-	/* Vendor GT9896 dev_confirm: reset low 2 ms, then high. */
+-	touch_gpio(8, 0, 3, 3, true, false);
++	if (!touch_gpio(90, 0, 0, 0, true, true)) goto out;
++	touch_wait(10);
++	if (!touch_gpio(TOUCH_GPIO_SDA, 1, 0, 0, false, false) ||
++	    !touch_gpio(TOUCH_GPIO_SCL, 1, 0, 0, false, false)) goto out;
++	if (!touch_gpio(TOUCH_GPIO_RESET, 0, 3, 3, true, false)) goto out;
+ 	touch_wait(2);
+-	touch_gpio(8, 0, 3, 3, true, true);
+-	touch_wait(300); /* exceeds vendor 5 ms test + 95 ms post-test wait */
++	if (!touch_gpio(TOUCH_GPIO_RESET, 0, 3, 3, true, true)) goto out;
++	touch_wait(300);
++#else
++	printf("VEUX TOUCH: TLMM reset=%#x irq=%#x rails AVDD=%u DVDD=%u\n",
++	    touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_RESET)),
++	    touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_IRQ)), TOUCH_GPIO_AVDD, TOUCH_GPIO_DVDD);
++	if (!touch_gpio(TOUCH_GPIO_SDA, 1, 3, 0, false, false) ||
++	    !touch_gpio(TOUCH_GPIO_SCL, 1, 3, 0, false, false)) goto out;
++	if (!touch_gpio(TOUCH_GPIO_IRQ, 0, 3, 0, false, false)) goto out;
++	if (!touch_gpio(TOUCH_GPIO_AVDD, 0, 0, 0, true, true)) goto out;
++	touch_wait(650);
++	if (!touch_gpio(TOUCH_GPIO_DVDD, 0, 0, 0, true, true)) goto out;
++	touch_wait(650);
++	if (!touch_gpio(TOUCH_GPIO_RESET, 0, 0, 0, true, false)) goto out;
++	touch_wait(20);
++	if (!touch_gpio(TOUCH_GPIO_IRQ, 0, 0, 0, true, false)) goto out;
++	touch_wait(1);
++	if (!touch_gpio(TOUCH_GPIO_RESET, 0, 0, 0, true, true)) goto out;
++	touch_wait(8);
++	if (!touch_gpio(TOUCH_GPIO_IRQ, 0, 1, 0, false, false)) goto out;
++	touch_wait(300);
++#endif
+ 	uint8_t gid[32], legacy[32], fid1 = 0, fid2 = 0;
+ 	st.probing = true;
+ 	int ge = touch_probe_info(GOODIX_PID_REG, gid);
+@@ -613,7 +699,7 @@ touch_thread(void *arg, wait_result_t result)
+ 	unsigned errors = 0, ticks = 0;
+ 	while (!st.dead) {
+ 		/* Optional IRQ hint still reads every 100ms, and always while down. */
+-		if (!st.irq_hint || st.active || !(touch_rd(st.gpio, TOUCH_GPIO_IO(9)) & 1u) ||
++		if (!st.irq_hint || st.active || !(touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_IRQ)) & 1u) ||
+ 		    (++ticks % 10u) == 0) {
+ 			int err = st.kind == TOUCH_GOODIX ? touch_goodix() : touch_focaltech();
+ 			if (err) {
+@@ -644,10 +730,15 @@ sweet_touch_init(void)
+ 		return;
+ 	}
+ 	st.started = true;
++#if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	(void)PE_parse_boot_argn("sweettouch", &enabled, sizeof(enabled));
+ 	(void)PE_parse_boot_argn("sweettouchirq", &st.irq_hint, sizeof(st.irq_hint));
++#else
++	(void)PE_parse_boot_argn("veuxtouch", &enabled, sizeof(enabled));
++	(void)PE_parse_boot_argn("veuxtouchirq", &st.irq_hint, sizeof(st.irq_hint));
++#endif
+ 	if (!enabled) {
+-		printf("SWEET TOUCH: disabled (sweettouch=0)\n");
++		printf("TOUCH: disabled by boot argument\n");
+ 		return;
+ 	}
+ 	kern_return_t kr = kernel_thread_start(touch_thread, NULL, &thread);
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+index ab6f612..00b26bd 100644
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -737,6 +737,8 @@ sweet_ufs_init(void)
+ 	extern void veux_touch_probe_init(void);
+ 	/* Bounded touch diagnostic; disabled unless explicitly requested. */
+ 	veux_touch_probe_init();
++	/* VEUX GT9896 polling driver; its worker starts after the UI delay. */
++	sweet_touch_init();
+ 	extern void veux_gpi_preflight(void);
+ 	veux_gpi_preflight();
+ #endif
