@@ -1,0 +1,335 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Add bounded opt-in VEUX GT9896 identity probe
+
+Use the VEUX pin, clock and GPIO data to perform one bounded GT9896 identity
+read only when explicitly requested. The probe configures SE8, powers AVDD and
+DVDD, pulses reset, reads 12 bytes from 0x4022, then returns. It never writes
+touch configuration or firmware and does not start event polling.
+
+diff --git a/bsd/dev/veux_touch_probe.c b/bsd/dev/veux_touch_probe.c
+--- a/bsd/dev/veux_touch_probe.c
++++ b/bsd/dev/veux_touch_probe.c
+@@ -9,8 +9,9 @@
+ #include <machine/machine_routines.h>
+ #include <pexpert/pexpert.h>
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern void veux_touch_active_probe(vm_offset_t, vm_offset_t, vm_offset_t);
+ 
+ #define VEUX_TOUCH_SE_PA       0x04c88000u
+ #define VEUX_TOUCH_GCC_PA      0x01400000u
+ #define VEUX_TOUCH_TLMM_PA     0x00400000u
+@@ -89,14 +90,20 @@
+ 	touch_probe_gpio(tlmm, 21, "reset");
+ 	touch_probe_gpio(tlmm, 22, "irq");
+ 	touch_probe_gpio(tlmm, 44, "dvdd");
+ 	touch_probe_gpio(tlmm, 51, "avdd");
+-	printf("VEUX TOUCH PROBE: done; no GPIO/GCC/SE writes and no I2C transfer\n");
++	printf("VEUX TOUCH PROBE: done; baseline snapshot complete\n");
++
++	int active = 0;
++	if (PE_parse_boot_argn("veuxtouchprobeactive", &active, sizeof(active)) && active == 1) {
++		printf("VEUX TOUCH ACTIVE: bounded GPIO/clock/reset and GT9896 ID read starting\n");
++		veux_touch_active_probe(se, gcc, tlmm);
++	}
+ 
+ 	int hold = 0;
+ 	/* Pause before root mount so the read-only snapshot can be photographed. */
+ 	if (PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold)) && hold == 1) {
+-		printf("VEUX TOUCH PROBE: holding after read-only snapshot; hard reset to reboot\n");
++		printf("VEUX TOUCH PROBE: holding after probe; hard reset to reboot\n");
+ 		for (;;) {
+ 			__asm__ volatile("wfe" ::: "memory");
+ 		}
+ 	}
+diff --git a/bsd/conf/files b/bsd/conf/files
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -110,3 +110,4 @@
+ bsd/dev/sweet_usb.c			standard
+ bsd/dev/veux_touch_probe.c		standard
++bsd/dev/veux_touch_active.c		standard
+ bsd/dev/mem.c				standard
+diff --git a/bsd/dev/veux_touch_active.c b/bsd/dev/veux_touch_active.c
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/veux_touch_active.c
+@@ -0,0 +1,276 @@
++/* One-shot VEUX GT9896 power/reset and I2C identity diagnostic. */
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <machine/machine_routines.h>
++
++#define SE_STATUS              0x040u
++#define SE_M_CLK               0x048u
++#define SE_FW_REV              0x068u
++#define SE_CLK_SEL             0x07cu
++#define SE_DMA                 0x258u
++#define SE_TX_LEN              0x26cu
++#define SE_RX_LEN              0x270u
++#define SE_SCL                 0x278u
++#define SE_CMD                 0x600u
++#define SE_CTRL                0x604u
++#define SE_IRQ                 0x610u
++#define SE_IRQ_EN              0x614u
++#define SE_IRQ_CLR             0x618u
++#define SE_TX                  0x700u
++#define SE_RX                  0x780u
++#define SE_TX_COUNT            0x800u
++#define SE_RX_COUNT            0x804u
++#define SE_HW_TX               0xe24u
++#define SE_HW_RX               0xe28u
++#define GCC_SE8_CMD_RCGR       0x5327cu
++#define GCC_SE8_BRANCH         0x53278u
++#define GCC_M_AHB_BRANCH       0x53004u
++#define GCC_S_AHB_BRANCH       0x53008u
++#define GCC_BRANCH_VOTE        0x7900cu
++#define TLMM_GPIO_CFG(pin)     ((uint32_t)(pin) * 0x1000u)
++#define TLMM_GPIO_IO(pin)      (TLMM_GPIO_CFG(pin) + 4u)
++#define SE_DONE                (1u << 0)
++#define SE_NACK                (1u << 10)
++#define SE_ERRORS              (0x0eu | (1u << 9) | (1u << 10) | (1u << 12) | \
++                                (1u << 13) | (3u << 24) | (3u << 28))
++#define SE_EVENTS              (SE_DONE | SE_ERRORS | (1u << 5) | (1u << 26) | \
++                                (1u << 27) | (1u << 30))
++
++static uint32_t
++touch_active_rd(vm_offset_t base, uint32_t offset)
++{
++	uint32_t value = *(volatile uint32_t *)(base + offset);
++	__asm__ volatile("dmb oshld" ::: "memory");
++	return value;
++}
++
++static void
++touch_active_wr(vm_offset_t base, uint32_t offset, uint32_t value)
++{
++	__asm__ volatile("dmb oshst" ::: "memory");
++	*(volatile uint32_t *)(base + offset) = value;
++	__asm__ volatile("dsb osh" ::: "memory");
++}
++
++static bool
++touch_active_wait_clear(vm_offset_t base, uint32_t offset, uint32_t mask, unsigned limit_us)
++{
++	for (unsigned i = 0; i < limit_us; ++i) {
++		if (!(touch_active_rd(base, offset) & mask)) {
++			return true;
++		}
++		delay(1);
++	}
++	return false;
++}
++
++static bool
++touch_active_clocks(vm_offset_t gcc)
++{
++	/* Vote only the two wrapper buses and the SE8 leaf, preserving other users. */
++	touch_active_wr(gcc, GCC_BRANCH_VOTE,
++	    touch_active_rd(gcc, GCC_BRANCH_VOTE) | (1u << 17) | (1u << 18) | (1u << 23));
++	uint32_t dfs = touch_active_rd(gcc, GCC_SE8_CMD_RCGR + 0x14u);
++	uint32_t cfg = touch_active_rd(gcc, GCC_SE8_CMD_RCGR + 4u);
++	if (dfs & 1u) {
++		/* Only use the lowest, XO/1 DFS configuration; do not raise voltage. */
++		uint32_t xo = touch_active_rd(gcc, GCC_SE8_CMD_RCGR + 0x1cu);
++		if ((xo & 0x371fu) != 1u) {
++			printf("VEUX TOUCH ACTIVE: refusing unsafe DFS clock level=%#x\n", xo);
++			return false;
++		}
++	} else {
++		/* 19.2 MHz XO/1: no PLL reprogramming or voltage-level increase. */
++		cfg = (cfg & ~(0x371fu | (1u << 20))) | 1u;
++		touch_active_wr(gcc, GCC_SE8_CMD_RCGR + 4u, cfg);
++		touch_active_wr(gcc, GCC_SE8_CMD_RCGR,
++		    touch_active_rd(gcc, GCC_SE8_CMD_RCGR) | 1u);
++		if (!touch_active_wait_clear(gcc, GCC_SE8_CMD_RCGR, 1u, 1000)) {
++			printf("VEUX TOUCH ACTIVE: SE8 clock source update timed out\n");
++			return false;
++		}
++	}
++
++	const uint32_t branches[] = {GCC_M_AHB_BRANCH, GCC_S_AHB_BRANCH, GCC_SE8_BRANCH};
++	for (unsigned i = 0; i < sizeof(branches) / sizeof(branches[0]); ++i) {
++		if (!touch_active_wait_clear(gcc, branches[i], 1u << 31, 100000)) {
++			printf("VEUX TOUCH ACTIVE: clock branch %#x stayed halted (%#x)\n",
++			    branches[i], touch_active_rd(gcc, branches[i]));
++			return false;
++		}
++	}
++	uint32_t cmd = touch_active_rd(gcc, GCC_SE8_CMD_RCGR);
++	if (cmd & (1u << 31)) {
++		printf("VEUX TOUCH ACTIVE: SE8 source remains off after clock vote cmd=%#x\n", cmd);
++		return false;
++	}
++	return true;
++}
++
++static void
++touch_active_gpio_cfg(vm_offset_t tlmm, unsigned pin, unsigned mux,
++    unsigned pull, unsigned drive, bool output, bool high)
++{
++	uint32_t cfg_off = TLMM_GPIO_CFG(pin), io_off = TLMM_GPIO_IO(pin);
++	uint32_t cfg = touch_active_rd(tlmm, cfg_off);
++	if (output) {
++		uint32_t io = touch_active_rd(tlmm, io_off);
++		io = (io & ~2u) | (high ? 2u : 0u); /* output latch before output-enable */
++		touch_active_wr(tlmm, io_off, io);
++	}
++	cfg &= ~0x3ffu;
++	cfg |= (mux << 2) | pull | (drive << 6) | (output ? 0x200u : 0u);
++	touch_active_wr(tlmm, cfg_off, cfg);
++}
++
++static void
++touch_active_power_and_reset(vm_offset_t tlmm)
++{
++	/* GPIO19/20 use QUP12, 8 mA, pull-up per the VEUX active pinctrl state. */
++	touch_active_gpio_cfg(tlmm, 19, 1, 3, 3, false, false);
++	touch_active_gpio_cfg(tlmm, 20, 1, 3, 3, false, false);
++	/* Reference GT9896 sequence: AVDD 51, then DVDD 44. */
++	touch_active_gpio_cfg(tlmm, 51, 0, 0, 0, true, true);
++	delay(650);
++	touch_active_gpio_cfg(tlmm, 44, 0, 0, 0, true, true);
++	delay(650);
++	touch_active_gpio_cfg(tlmm, 51, 0, 0, 0, true, true);
++	delay(450);
++	touch_active_gpio_cfg(tlmm, 44, 0, 0, 0, true, true);
++	delay(3000);
++	/* Goodix reset/address strap: reset low >10 ms; 0x5d selects IRQ low. */
++	touch_active_gpio_cfg(tlmm, 21, 0, 0, 3, true, false);
++	delay(20000);
++	touch_active_gpio_cfg(tlmm, 22, 0, 0, 3, true, false);
++	delay(1000);
++	touch_active_gpio_cfg(tlmm, 21, 0, 0, 3, true, true);
++	delay(8000);
++	touch_active_gpio_cfg(tlmm, 22, 0, 1, 1, false, false);
++}
++
++static bool
++touch_active_se_init(vm_offset_t se)
++{
++	uint32_t fw = touch_active_rd(se, SE_FW_REV);
++	uint32_t tx = touch_active_rd(se, SE_HW_TX), rx = touch_active_rd(se, SE_HW_RX);
++	if (((fw >> 8) & 0xffu) != 3u || (touch_active_rd(se, 0x64) & 1u) ||
++	    ((tx >> 24) & 0x3fu) != 32u || ((rx >> 24) & 0x3fu) != 32u ||
++	    ((tx >> 16) & 0x3fu) < 2u || ((rx >> 16) & 0x3fu) < 2u ||
++	    (touch_active_rd(se, SE_STATUS) & 0x1001u)) {
++		printf("VEUX TOUCH ACTIVE: SE8 firmware/FIFO/busy preflight failed fw=%#x status=%#x tx=%#x rx=%#x\n",
++		    fw, touch_active_rd(se, SE_STATUS), tx, rx);
++		return false;
++	}
++	if ((touch_active_rd(se, SE_TX_COUNT) & 0xfffffffu) ||
++	    (touch_active_rd(se, SE_RX_COUNT) & 0x1ffffffu)) {
++		printf("VEUX TOUCH ACTIVE: inherited FIFO data; refusing SE8 setup\n");
++		return false;
++	}
++	touch_active_wr(se, 0xe18, 0);
++	touch_active_wr(se, 0xe1c, 0);
++	touch_active_wr(se, 0x644, 0);
++	touch_active_wr(se, SE_IRQ_CLR, 0xffffffffu);
++	touch_active_wr(se, 0x648, 0xffffffffu);
++	touch_active_wr(se, SE_DMA, 0);
++	touch_active_wr(se, 0x28, touch_active_rd(se, 0x28) | 0x7fu);
++	touch_active_wr(se, 0xe30, touch_active_rd(se, 0xe30) | 0x0fu);
++	touch_active_wr(se, 0x24, 0x7f);
++	touch_active_wr(se, 0x20, 1);
++	touch_active_wr(se, SE_CLK_SEL, 0);
++	touch_active_wr(se, SE_M_CLK, (7u << 4) | 1u);
++	touch_active_wr(se, SE_SCL, (10u << 20) | (11u << 10) | 26u);
++	touch_active_wr(se, 0x254, 0);
++	touch_active_wr(se, 0x260, 0x0004380eu);
++	touch_active_wr(se, 0x264, 0x000c3e0eu);
++	touch_active_wr(se, 0x284, 0x0004380eu);
++	touch_active_wr(se, 0x288, 0x000c3e0eu);
++	touch_active_wr(se, 0x80c, 1);
++	touch_active_wr(se, 0x810, 0);
++	touch_active_wr(se, 0x814, ((rx >> 16) & 0x3fu) - 1u);
++	touch_active_wr(se, SE_IRQ_EN, SE_EVENTS);
++	return true;
++}
++
++static int
++touch_active_read_message(vm_offset_t se, uint8_t addr, const uint8_t *tx,
++    unsigned tx_len, uint8_t *rx, unsigned rx_len, bool stretch)
++{
++	if (tx_len > 3 || rx_len > 12 || (tx_len && rx_len) || (!tx_len && !rx_len)) {
++		return EINVAL;
++	}
++	if (!touch_active_wait_clear(se, SE_STATUS, 1u, 1000)) {
++		return EBUSY;
++	}
++	touch_active_wr(se, SE_IRQ_CLR, 0xffffffffu);
++	touch_active_wr(se, rx_len ? SE_RX_LEN : SE_TX_LEN, rx_len ? rx_len : tx_len);
++	touch_active_wr(se, SE_CMD, ((rx_len ? 2u : 1u) << 27) |
++	    ((uint32_t)addr << 9) | (stretch ? 4u : 0u));
++	unsigned sent = 0, got = 0;
++	for (unsigned i = 0; i < 20000; ++i) {
++		uint32_t irq = touch_active_rd(se, SE_IRQ);
++		if (irq & SE_ERRORS) {
++			/* No retry: preserve the first bounded-transfer result. */
++			touch_active_wr(se, SE_IRQ_CLR, irq);
++			return (irq & SE_NACK) ? ENXIO : EIO;
++		}
++		if (tx_len && !sent && (irq & (1u << 30))) {
++			uint32_t word = 0;
++			for (unsigned j = 0; j < tx_len; ++j) word |= (uint32_t)tx[j] << (8u * j);
++			touch_active_wr(se, SE_TX, word);
++			sent = tx_len;
++		}
++		uint32_t count = touch_active_rd(se, SE_RX_COUNT) & 0x1ffffffu;
++		if (count > 4) return EIO;
++		while (count--) {
++			uint32_t word = touch_active_rd(se, SE_RX);
++			for (unsigned j = 0; j < 4 && got < rx_len; ++j)
++				rx[got++] = (uint8_t)(word >> (8u * j));
++		}
++		if (irq & SE_DONE) {
++			touch_active_wr(se, SE_IRQ_CLR, irq);
++			bool idle = !(touch_active_rd(se, SE_STATUS) & 1u) &&
++			    !(touch_active_rd(se, SE_TX_COUNT) & 0xfffffffu) &&
++			    !(touch_active_rd(se, SE_RX_COUNT) & 0x1ffffffu);
++			return got == rx_len && sent == tx_len && idle ? 0 : EIO;
++		}
++		touch_active_wr(se, SE_IRQ_CLR, irq & ((1u << 26) | (1u << 27) | (1u << 30)));
++		delay(1);
++	}
++	touch_active_wr(se, SE_CTRL, 2);
++	return ETIMEDOUT;
++}
++
++static int
++touch_active_read_reg(vm_offset_t se, uint8_t addr, uint16_t reg,
++    uint8_t *buf, unsigned len)
++{
++	uint8_t pointer[2] = {(uint8_t)(reg >> 8), (uint8_t)reg};
++	int error = touch_active_read_message(se, addr, pointer, sizeof(pointer), NULL, 0, true);
++	if (error) return error;
++	return touch_active_read_message(se, addr, NULL, 0, buf, len, false);
++}
++
++void
++veux_touch_active_probe(vm_offset_t se, vm_offset_t gcc, vm_offset_t tlmm)
++{
++	uint32_t status = touch_active_rd(se, SE_STATUS);
++	uint32_t tx_count = touch_active_rd(se, SE_TX_COUNT) & 0xfffffffu;
++	uint32_t rx_count = touch_active_rd(se, SE_RX_COUNT) & 0x1ffffffu;
++	if ((status & 0x1001u) || tx_count || rx_count) {
++		printf("VEUX TOUCH ACTIVE: SE8 busy before setup status=%#x tx=%u rx=%u; skipped\n",
++		    status, tx_count, rx_count);
++		return;
++	}
++	if (!touch_active_clocks(gcc)) return;
++	touch_active_power_and_reset(tlmm);
++	if (!touch_active_se_init(se)) return;
++	uint8_t id[12] = {0};
++	int error = touch_active_read_reg(se, 0x5d, 0x4022, id, sizeof(id));
++	bool gt9896 = !error && id[0] == '9' && id[1] == '8' && id[2] == '9' && id[3] == '6';
++	printf("VEUX TOUCH ACTIVE: id-read error=%d id=%02x%02x%02x%02x rev=%02x.%02x.%02x.%02x gt9896=%u irq=%#x\n",
++	    error, id[0], id[1], id[2], id[3], id[8], id[9], id[10], id[11],
++	    (unsigned)gt9896, touch_active_rd(se, SE_IRQ));
++}
++#endif /* ARM64_BOARD_CONFIG_VEUX */
+-- 
+2.39.5

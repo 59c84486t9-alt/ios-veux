@@ -147,15 +147,17 @@ configured by this XNU boot path. It does not prove whether the external rails
 are electrically at zero, since a GPIO register snapshot is not a voltage
 measurement.
 
-The next hardware test is a separate opt-in, bounded bring-up: configure the
-SE8 I2C pin mux and clock, perform the reference AVDD/DVDD enable sequence,
-pulse reset, then make one GT9896 identity read (`0x5d`, register `0x4022`).
-It must stop after logging that one read and must not write controller
-configuration/firmware or begin touch polling. This crosses the earlier
-read-only hardware policy, so do not build or flash that version until the
-user explicitly authorizes the power/reset and I2C test. Fastboot currently
-enumerates; only `boot_b` is authorized for test images, with `boot_a` left
-untouched.
+The next hardware test is patch 0132, gated separately by
+`veuxtouchprobeactive=1`. It configures the SE8 I2C pin mux and a conservative
+XO/1 clock, performs the reference AVDD/DVDD enable sequence and Goodix reset/address-strap sequence,
+then makes one GT9896 identity read (`0x5d`, register `0x4022`). SE8 must pass
+idle/FIFO checks, and the clock branch and source must report ready before any
+rail or reset GPIO is changed. The probe stops after logging the result; it
+does not write controller configuration/firmware or begin touch polling. The
+user authorized this bounded power/reset and identity-read test on 2026-10-27.
+It is paired with `veuxtouchprobehold=1`, so it stops before root mount and
+does not require userdata access. Only `boot_b` is authorized for test images;
+`boot_a` remains untouched.
 
 ## Validation and pending hardware test
 

@@ -14,12 +14,21 @@
   has been made.
 - Fastboot currently enumerates as `4078cac030c8` (product veux). User's
   standing partition constraint remains: test images may use `boot_b`; never
-  write `boot_a`. Earlier request was for a read-only touch probe, so the next
-  test must not configure pins, enable rails, pulse reset, or issue I2C until
-  the user explicitly authorizes that transition.
+-  write `boot_a`. User explicitly authorized the bounded GPIO/clock/rail/reset
+  and one Goodix identity read on `boot_b` in the current turn. Do not write
+  `boot_a` or userdata.
 - Updated `docs/VEUX-GUI-BRINGUP.md` with the measured values and next-stage
-  boundary. `git diff --check` passes. Pending: commit this evidence update;
-  request authorization for the bounded GPIO/clock/power/reset/identity test.
+  boundary. Patch 0132 now adds an explicit `veuxtouchprobeactive=1` path:
+  read-only idle/FIFO preflight, XO/1 SE8 clock setup and branch checks, QUP12
+  pin mux, AVDD then DVDD, Goodix reset-low/address strap for 20 ms followed
+  by release and settle, one read of `0x5d:0x4022`, then return. This follows
+  the pinned Goodix/Linux reset timing (the earlier draft's 2 ms pulse was
+  corrected before any flash).
+  It is paired with the existing hold arg and never mounts root for the test.
+  No touch config write or event polling is included. Patch applies after 0131
+  in a local fixture; repository validator and Python syntax pass. Pending:
+  strict CI, compose the held active-probe wrapper, flash only `boot_b`, and
+  capture the resulting ID/error line.
 
 ## >>> UPDATE 2026-10-27 (held read-only SE8 probe flashed to boot_b) <<<
 
