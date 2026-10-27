@@ -3963,6 +3963,7 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Commit `c35544c` was pushed to `veux-xnu-build`; workflow file was unchanged.
   CI run 40452408718 passed repository preflight and patch fetch, then failed
   applying patch 0123 because its framebuffer hunk expected the build-ID helper
-  to be absent from patch 0120. Updated the 0123 hunk to anchor on the existing
-  console-putc declaration and preserve its feature additions. Local repo
-  validation passes; this fix needs a new CI run. Never write boot_a.
+  to be absent from patch 0120. A context-based retry still failed at the same
+  hunk; changed that single insertion to a zero-context hunk at the post-0120
+  insertion line. Local repository validation passes, but the patch sequence
+  still needs CI confirmation. Never write boot_a.
