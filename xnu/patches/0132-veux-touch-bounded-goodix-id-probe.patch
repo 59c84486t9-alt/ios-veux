@@ -55,7 +55,7 @@ diff --git a/bsd/dev/veux_touch_active.c b/bsd/dev/veux_touch_active.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/veux_touch_active.c
-@@ -0,0 +1,429 @@
+@@ -0,0 +1,445 @@
 +/* One-shot VEUX GT9896 power/reset and I2C identity diagnostic. */
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +#include <sys/param.h>
@@ -198,11 +198,24 @@ new file mode 100644
 +}
 +
 +static void
++touch_active_gpio_snapshot(vm_offset_t tlmm, const char *stage)
++{
++	printf("VEUX TOUCH ACTIVE: GPIO %s cfg19=%#x io19=%#x cfg20=%#x io20=%#x cfg21=%#x io21=%#x cfg44=%#x io44=%#x cfg51=%#x io51=%#x\n",
++	    stage,
++	    touch_active_rd(tlmm, TLMM_GPIO_CFG(19)), touch_active_rd(tlmm, TLMM_GPIO_IO(19)),
++	    touch_active_rd(tlmm, TLMM_GPIO_CFG(20)), touch_active_rd(tlmm, TLMM_GPIO_IO(20)),
++	    touch_active_rd(tlmm, TLMM_GPIO_CFG(21)), touch_active_rd(tlmm, TLMM_GPIO_IO(21)),
++	    touch_active_rd(tlmm, TLMM_GPIO_CFG(44)), touch_active_rd(tlmm, TLMM_GPIO_IO(44)),
++	    touch_active_rd(tlmm, TLMM_GPIO_CFG(51)), touch_active_rd(tlmm, TLMM_GPIO_IO(51)));
++}
++
++static void
 +touch_active_bus_gpio(vm_offset_t tlmm)
 +{
 +	/* Open-drain bit-bang: high means input/released, low means driven low. */
-+	touch_active_gpio_cfg(tlmm, 19, 0, 3, 2, false, false);
-+	touch_active_gpio_cfg(tlmm, 20, 0, 3, 2, false, false);
++	touch_active_gpio_cfg(tlmm, 19, 0, 3, 0, false, false);
++	touch_active_gpio_cfg(tlmm, 20, 0, 3, 0, false, false);
++	touch_active_gpio_snapshot(tlmm, "bus-gpio");
 +}
 +
 +static void
@@ -237,7 +250,7 @@ new file mode 100644
 +static bool
 +touch_active_gpio_scl_high(vm_offset_t tlmm)
 +{
-+	touch_active_gpio_cfg(tlmm, 20, 0, 3, 2, false, false);
++	touch_active_gpio_cfg(tlmm, 20, 0, 3, 0, false, false);
 +	for (unsigned i = 0; i < 2000; ++i) {
 +		if (touch_active_rd(tlmm, TLMM_GPIO_IO(20)) & 1u) {
 +			delay(5);
@@ -251,13 +264,13 @@ new file mode 100644
 +static int
 +touch_active_gpio_start(vm_offset_t tlmm)
 +{
-+	touch_active_gpio_cfg(tlmm, 19, 0, 3, 2, false, false);
++	touch_active_gpio_cfg(tlmm, 19, 0, 3, 0, false, false);
 +	if (!touch_active_gpio_scl_high(tlmm)) return ETIMEDOUT;
 +	if (!(touch_active_rd(tlmm, TLMM_GPIO_IO(19)) & 1u)) return EBUSY;
 +	delay(5);
-+	touch_active_gpio_cfg(tlmm, 19, 0, 3, 2, true, false);
++	touch_active_gpio_cfg(tlmm, 19, 0, 3, 0, true, false);
 +	delay(5);
-+	touch_active_gpio_cfg(tlmm, 20, 0, 3, 2, true, false);
++	touch_active_gpio_cfg(tlmm, 20, 0, 3, 0, true, false);
 +	delay(5);
 +	return 0;
 +}
@@ -265,10 +278,10 @@ new file mode 100644
 +static int
 +touch_active_gpio_stop(vm_offset_t tlmm)
 +{
-+	touch_active_gpio_cfg(tlmm, 19, 0, 3, 2, true, false);
++	touch_active_gpio_cfg(tlmm, 19, 0, 3, 0, true, false);
 +	delay(5);
 +	bool clock_high = touch_active_gpio_scl_high(tlmm);
-+	touch_active_gpio_cfg(tlmm, 19, 0, 3, 2, false, false);
++	touch_active_gpio_cfg(tlmm, 19, 0, 3, 0, false, false);
 +	delay(5);
 +	return clock_high ? 0 : ETIMEDOUT;
 +}
@@ -276,11 +289,11 @@ new file mode 100644
 +static int
 +touch_active_gpio_write_bit(vm_offset_t tlmm, bool high)
 +{
-+	touch_active_gpio_cfg(tlmm, 19, 0, 3, 2, !high, false);
++	touch_active_gpio_cfg(tlmm, 19, 0, 3, 0, !high, false);
 +	delay(5);
 +	if (!touch_active_gpio_scl_high(tlmm)) return ETIMEDOUT;
 +	if (high && !(touch_active_rd(tlmm, TLMM_GPIO_IO(19)) & 1u)) return EBUSY;
-+	touch_active_gpio_cfg(tlmm, 20, 0, 3, 2, true, false);
++	touch_active_gpio_cfg(tlmm, 20, 0, 3, 0, true, false);
 +	delay(5);
 +	return 0;
 +}
@@ -288,11 +301,11 @@ new file mode 100644
 +static int
 +touch_active_gpio_read_ack(vm_offset_t tlmm)
 +{
-+	touch_active_gpio_cfg(tlmm, 19, 0, 3, 2, false, false);
++	touch_active_gpio_cfg(tlmm, 19, 0, 3, 0, false, false);
 +	delay(5);
 +	if (!touch_active_gpio_scl_high(tlmm)) return ETIMEDOUT;
 +	bool nack = (touch_active_rd(tlmm, TLMM_GPIO_IO(19)) & 1u) != 0;
-+	touch_active_gpio_cfg(tlmm, 20, 0, 3, 2, true, false);
++	touch_active_gpio_cfg(tlmm, 20, 0, 3, 0, true, false);
 +	delay(5);
 +	return nack ? ENXIO : 0;
 +}
@@ -312,11 +325,11 @@ new file mode 100644
 +{
 +	uint8_t byte = 0;
 +	for (unsigned bit = 0; bit < 8; ++bit) {
-+		touch_active_gpio_cfg(tlmm, 19, 0, 3, 2, false, false);
++		touch_active_gpio_cfg(tlmm, 19, 0, 3, 0, false, false);
 +		if (!touch_active_gpio_scl_high(tlmm)) return ETIMEDOUT;
 +		byte = (uint8_t)((byte << 1) |
 +		    !!(touch_active_rd(tlmm, TLMM_GPIO_IO(19)) & 1u));
-+		touch_active_gpio_cfg(tlmm, 20, 0, 3, 2, true, false);
++		touch_active_gpio_cfg(tlmm, 20, 0, 3, 0, true, false);
 +		delay(5);
 +	}
 +	int error = touch_active_gpio_write_bit(tlmm, !ack);
@@ -467,6 +480,7 @@ new file mode 100644
 +		printf("VEUX TOUCH ACTIVE: GENI FIFO disabled; using bounded GPIO I2C read\n");
 +		touch_active_bus_gpio(tlmm);
 +		touch_active_power_and_reset(tlmm);
++		touch_active_gpio_snapshot(tlmm, "powered");
 +		error = touch_active_gpio_read_reg(tlmm, 0x5d, 0x4022, id, sizeof(id), &gpio_phase);
 +	} else {
 +		if (!touch_active_clocks(gcc)) return;
@@ -478,9 +492,11 @@ new file mode 100644
 +	bool gt9896 = !error && id[0] == '9' && id[1] == '8' && id[2] == '9' && id[3] == '6';
 +	uint32_t gpio_sda = if_disable ? touch_active_rd(tlmm, TLMM_GPIO_IO(19)) : 0;
 +	uint32_t gpio_scl = if_disable ? touch_active_rd(tlmm, TLMM_GPIO_IO(20)) : 0;
-+	printf("VEUX TOUCH ACTIVE: id-read error=%d transport=%s phase=%s sda=%#x scl=%#x id=%02x%02x%02x%02x rev=%02x.%02x.%02x.%02x gt9896=%u irq=%#x\n",
++	printf("VEUX TOUCH ACTIVE: id-read error=%d transport=%s phase=%s cfg19=%#x sda=%#x cfg20=%#x scl=%#x id=%02x%02x%02x%02x rev=%02x.%02x.%02x.%02x gt9896=%u irq=%#x\n",
 +	    error, if_disable ? "gpio" : "se",
-+	    gpio_phase, gpio_sda, gpio_scl,
++	    gpio_phase,
++	    if_disable ? touch_active_rd(tlmm, TLMM_GPIO_CFG(19)) : 0, gpio_sda,
++	    if_disable ? touch_active_rd(tlmm, TLMM_GPIO_CFG(20)) : 0, gpio_scl,
 +	    id[0], id[1], id[2], id[3], id[8], id[9], id[10], id[11],
 +	    (unsigned)gt9896, touch_active_rd(se, SE_IRQ));
 +}

@@ -1,3 +1,25 @@
+## >>> UPDATE 2026-10-27 (GPIO START timeout; config readback revision in progress) <<<
+
+- Latest photo from the active probe reports `id-read error=60`,
+  `transport=gpio`, `phase=start`, and final SDA/SCL IO values both zero. The
+  timeout happens waiting for SCL before any I2C address is transmitted; this
+  does not indicate a Goodix NACK.
+- Verified the selected phone DTB directly: `/soc/pinctrl@400000` has
+  `compatible="qcom,blair-pinctrl"` and `reg=<0x400000 0x800000>`. Therefore
+  patch 0132's TLMM PA `0x00400000` is correct; earlier upstream SM6375 generic
+  DT reasoning about `0x00500000` does not apply to this Blair board variant.
+  Upstream SM6375 pinctrl code corroborates the `pin * 0x1000` register stride,
+  IO offset `+4`, and config bit positions. References:
+  https://codebrowser.dev/linux/linux/drivers/pinctrl/qcom/pinctrl-sm6375.c.html
+  https://kernel.googlesource.com/pub/scm/linux/kernel/git/torvalds/linux/%2B/07e492eb8921a8aa53fd2bf637bee3da94cc03fe/drivers/pinctrl/qcom/pinctrl-msm.c
+- Patch 0132 now changes the SDA/SCL GPIO drive field from code 2 (6 mA) to
+  code 0 (2 mA), matching the Blair DTS `drive-strength=<2>`, and logs CFG/IO
+  readbacks at bus setup, after rail/reset sequencing, and at the I2C result.
+  This is a diagnostic and electrical-setting alignment; whether the input
+  pull-ups take effect is not yet known. Repository validator passes; strict
+  CI and any device flash for this revision are pending. Preserve the current
+  lock-screen baseline; only `boot_b` remains authorized, never `boot_a`.
+
 ## >>> UPDATE 2026-10-27 (failure-phase probe flashed to boot_b) <<<
 
 - CI [40442466371](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40442466371)

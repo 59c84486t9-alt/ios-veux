@@ -176,6 +176,28 @@ bit-banging for a single bounded ID read in that case, avoiding FIFO register
 access and a full GPI DMA driver. CI run 40438943893 passed, and its verified
 wrapper was flashed only to `boot_b`; the held-screen result is pending.
 
+### GPIO START timeout — 2026-10-27
+
+The new screen photo reports `id-read error=60 transport=gpio phase=start`
+with SDA and SCL both reading zero. `ETIMEDOUT` (60 on this target) occurs
+while waiting for SCL to rise, before an I2C address or Goodix response is
+sent. The controller address suspected during triage was checked against the
+phone's actual selected `dtb_1.dtb`: its `/soc/pinctrl@400000` node is
+compatible with `qcom,blair-pinctrl` and declares `reg=<0x400000 0x800000>`;
+the base `0x00400000` in patch 0132 is correct. Upstream Linux's SM6375 TLMM
+driver independently gives GPIO registers a `pin * 0x1000` stride, with IO at
+`+0x4`, config pull bits 0-1, drive bits 6-8, output-enable bit 9 and input
+bit 0. So this timeout does not support changing the base or stride.
+
+The reference Blair DTS requests pull-up and `drive-strength=<2>` for SE8
+GPIO19/20. Linux encodes 2 mA as drive field zero; the XNU probe had used
+field two (6 mA). The next diagnostic aligns it to 2 mA and logs the GPIO
+config and IO registers after bus setup, after rails/reset, and after the
+failed transaction. This distinguishes a config-write/readback issue from
+pins that remain electrically low despite the requested input pull-up. The
+test remains one identity read only, with no touch config, polling, or
+userdata access. Do not change `boot_a`.
+
 ## Validation and pending hardware test
 
 Local syntax checks: all seven changed translation units passed; after the
