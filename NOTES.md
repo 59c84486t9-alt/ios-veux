@@ -1,3 +1,25 @@
+## >>> UPDATE 2026-10-27 (VEUX GPI-DMA prerequisite) <<<
+
+- User requested the Android/Linux GPI-DMA route for GT9896 on XNU, while
+  preserving the currently bootable iOS image and avoiding all previously
+  black-screening builds. No phone flash or reboot is part of this step.
+- Ground truth from the existing recovery logs and live DT: VEUX GPI at PA
+  `0x04c00000` (size `0x60000`) is assigned to Apps-SMMU stream ID `0xd6`;
+  recovery Linux reports it attached to IOMMU group 7. SE8 at `0x04c88000`
+  uses TX/RX GPI channels 0/1, DMA index 2. Linux's GPI path therefore cannot
+  safely be copied into XNU with unverified physical addresses. XNU has no
+  Qualcomm Apps-SMMU driver or confirmed identity/bypass mapping for SID `0xd6`.
+- Added opt-in patch `0133` to read the Apps-SMMU IDs, matching SMR/S2CR for
+  SID `0xd6`, and GPI channel/event ring contexts. It is strictly read-only,
+  gated by `veuxgpipreflight=1`, and does no DMA, I2C, GPIO, rail, reset, or
+  stream-mapping writes. The existing default boot path remains unchanged.
+- This preflight is a prerequisite, not a working touch driver. A full driver
+  still requires a verified DMA mapping strategy and a working TLMM mapping;
+  the previous XNU screenshots showed GPIO CFG/IO reads as zero. Do not claim
+  touch works or flash the preflight/driver image until those prerequisites
+  are resolved. The restored 40413116842 boot baseline remains the last
+  user-confirmed working image; `boot_a` remains untouched.
+
 ## >>> UPDATE 2026-10-27 (SWEET touch bring-up comparison) <<<
 
 - Read the working SWEET history and patches `0060`, `0062`, and `0063`.

@@ -1,0 +1,137 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Add opt-in read-only VEUX GPI/SMMU preflight
+
+Before implementing GPI DMA, report the live GPI context and Apps-SMMU stream
+mapping for the VEUX SE8 client. This diagnostic is separately boot-arg gated
+and performs no MMIO writes, DMA, GPIO changes, or sensor power/reset actions.
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -112,5 +112,6 @@
+ bsd/dev/sweet_usb.c			standard
+ bsd/dev/veux_touch_probe.c		standard
+ bsd/dev/veux_touch_active.c		standard
++bsd/dev/veux_gpi_preflight.c		standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -665,1 +665,3 @@ sweet_ufs_init(void)
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
++	extern void veux_gpi_preflight(void);
++	veux_gpi_preflight();
+diff --git a/bsd/dev/veux_gpi_preflight.c b/bsd/dev/veux_gpi_preflight.c
+new file mode 100644
+--- /dev/null
++++ b/bsd/dev/veux_gpi_preflight.c
+@@ -0,0 +1,108 @@
++/* Read-only GPI/SMMU state capture for VEUX GT9896 DMA bring-up. */
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <pexpert/pexpert.h>
++#include <machine/machine_routines.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern void veux_fb_print_build_id(void);
++
++#define VEUX_GPI_PA       0x04c00000u
++#define VEUX_GPI_SIZE     0x00060000u
++#define VEUX_SMMU_PA      0x0c600000u
++#define VEUX_SMMU_SIZE    0x00080000u
++#define GPII_ID           2u
++#define GPI_CH_CTX(ch)    (0x20000u + 0x4000u * GPII_ID + 0x80u * (ch))
++#define GPI_EV_CTX(ev)    (0x21000u + 0x4000u * GPII_ID + 0x80u * (ev))
++#define SMMU_IDR0         0x20u
++#define SMMU_IDR1         0x24u
++#define SMMU_IDR2         0x28u
++#define SMMU_SCR0         0x00u
++#define SMMU_GBPA         0x44u
++#define SMMU_SMR_BASE     0x800u
++#define SMMU_S2CR_BASE    0xc00u
++#define SMMU_SMR_STRIDE   4u
++#define SMMU_SID          0xd6u
++
++static uint32_t
++gpi_preflight_read(vm_offset_t base, uint32_t off)
++{
++	uint32_t value = *(volatile uint32_t *)(base + (vm_offset_t)off);
++	__asm__ volatile("dmb oshld" ::: "memory");
++	return value;
++}
++
++static bool
++gpi_preflight_smr_matches(uint32_t smr, uint32_t sid)
++{
++	/* ARM SMMUv2 SMR: VALID[31], MASK[30:16], ID[15:0]. */
++	uint32_t mask = (smr >> 16) & 0x7fffu;
++	uint32_t id = smr & 0xffffu;
++	return (smr & 0x80000000u) && ((sid & ~mask) == (id & ~mask));
++}
++
++void
++veux_gpi_preflight(void)
++{
++	int enabled = 0;
++	if (!PE_parse_boot_argn("veuxgpipreflight", &enabled, sizeof(enabled)) || enabled != 1) return;
++
++	vm_offset_t gpi = ml_io_map(VEUX_GPI_PA, VEUX_GPI_SIZE);
++	vm_offset_t smmu = ml_io_map(VEUX_SMMU_PA, VEUX_SMMU_SIZE);
++	if (!gpi || !smmu) {
++		printf("VEUX GPI PREFLIGHT: map failed gpi=%u smmu=%u; read-only, no DMA attempted\n",
++		    gpi != 0, smmu != 0);
++		veux_fb_print_build_id();
++		return;
++	}
++
++	uint32_t idr0 = gpi_preflight_read(smmu, SMMU_IDR0);
++	uint32_t idr1 = gpi_preflight_read(smmu, SMMU_IDR1);
++	uint32_t idr2 = gpi_preflight_read(smmu, SMMU_IDR2);
++	uint32_t scr0 = gpi_preflight_read(smmu, SMMU_SCR0);
++	uint32_t gbpa = gpi_preflight_read(smmu, SMMU_GBPA);
++	printf("VEUX GPI PREFLIGHT: read-only GPI PA=%#llx VA=%p size=%#x GPII=%u; Apps-SMMU PA=%#llx VA=%p\n",
++	    (unsigned long long)VEUX_GPI_PA, (void *)gpi, VEUX_GPI_SIZE, GPII_ID,
++	    (unsigned long long)VEUX_SMMU_PA, (void *)smmu);
++	printf("VEUX SMMU PREFLIGHT: IDR0=%#x IDR1=%#x IDR2=%#x SCR0=%#x GBPA=%#x SID=%#x\n",
++	    idr0, idr1, idr2, scr0, gbpa, SMMU_SID);
++
++	/* Stream-match groups are architecturally reported by IDR0.SMS and IDR2.NUMSMRG. */
++	if (!(idr0 & (1u << 27))) {
++		printf("VEUX SMMU PREFLIGHT: stream matching not reported by IDR0; refusing to infer DMA addressing\n");
++	} else {
++		unsigned groups = ((idr2 >> 16) & 0xffu) + 1u;
++		if (groups > 128u) groups = 128u; /* map is bounded to the architected low window */
++		unsigned matches = 0;
++		for (unsigned i = 0; i < groups; ++i) {
++			uint32_t smr = gpi_preflight_read(smmu, SMMU_SMR_BASE + i * SMMU_SMR_STRIDE);
++			if (gpi_preflight_smr_matches(smr, SMMU_SID)) {
++				uint32_t s2cr = gpi_preflight_read(smmu, SMMU_S2CR_BASE + i * SMMU_SMR_STRIDE);
++				printf("VEUX SMMU PREFLIGHT: SID %#x matches SMR[%u]=%#x S2CR[%u]=%#x type=%u cb=%u\n",
++				    SMMU_SID, i, smr, i, s2cr, s2cr & 3u, (s2cr >> 8) & 0xffu);
++				++matches;
++			}
++		}
++		printf("VEUX SMMU PREFLIGHT: SID %#x matching groups=%u; read-only, did not change stream mapping\n",
++		    SMMU_SID, matches);
++	}
++
++	/* Linux DT maps this SE8 client's TX/RX to GPI channel pair 0/1. */
++	for (unsigned ch = 0; ch < 2; ++ch) {
++		uint32_t off = GPI_CH_CTX(ch);
++		printf("VEUX GPI PREFLIGHT: ch%u ctx=%#x cfg=%#x len=%#x ring=%#x:%#x rp=%#x:%#x wp=%#x:%#x\n",
++		    ch, off, gpi_preflight_read(gpi, off), gpi_preflight_read(gpi, off + 4),
++		    gpi_preflight_read(gpi, off + 8), gpi_preflight_read(gpi, off + 12),
++		    gpi_preflight_read(gpi, off + 16), gpi_preflight_read(gpi, off + 20),
++		    gpi_preflight_read(gpi, off + 24), gpi_preflight_read(gpi, off + 28));
++	}
++	uint32_t ev_off = GPI_EV_CTX(0);
++	printf("VEUX GPI PREFLIGHT: ev0 ctx=%#x cfg=%#x len=%#x ring=%#x:%#x rp=%#x:%#x wp=%#x:%#x\n",
++	    ev_off, gpi_preflight_read(gpi, ev_off), gpi_preflight_read(gpi, ev_off + 4),
++	    gpi_preflight_read(gpi, ev_off + 8), gpi_preflight_read(gpi, ev_off + 12),
++	    gpi_preflight_read(gpi, ev_off + 16), gpi_preflight_read(gpi, ev_off + 20),
++	    gpi_preflight_read(gpi, ev_off + 24), gpi_preflight_read(gpi, ev_off + 28));
++	veux_fb_print_build_id();
++}
++#endif
