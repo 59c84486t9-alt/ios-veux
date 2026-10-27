@@ -4259,10 +4259,21 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   MMIO, touch GPIOs, power rails, reset the controller, or write persistent
   logs. The existing boot-argument gate remains `veuxgpipreflight=1`.
 - Local repository validation and Python syntax checks passed. Patches 0133,
-  0134, and 0135 apply in order against the cached XNU source. CI and the
-  verified wrapper build are pending; no device flash has happened for this
-  change yet.
-- Device currently enumerates in Fastboot as serial `4078cac030c8`, product
-  `veux`, unlocked, active slot B; `boot_b` reports 128 MiB. When CI and image
-  verification pass, the authorized test target is `boot_b` only; never write
-  `boot_a`.
+  0134, and 0135 apply in order against the cached XNU source. CI run
+  [40535340602](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40535340602)
+  passed the kernel build, synthetic diagnostic bounds checks, strict kernel
+  manifest, artifact packaging, and KDK inspection.
+- The image uses CI kernel SHA-256
+  `b502adf75470d7948ef23b988b37b1b8ad39c7c4ff998e643064762ea8c1dfbf`,
+  preserved phone DTB SHA-256
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`, and
+  known-good shim. `verify-veux-wrapper.py` passed with build ID `40535340602`,
+  exact CI kernel/ADT/payload/DTB checks, and boot args retaining only the
+  read-only GPI preflight gate. Wrapper SHA-256 is
+  `173c5cba27fe451c580cb8983df9cd9ccf6247f028a4c079516dd9f2fefc59d3`.
+- Fastboot confirmed serial `4078cac030c8`, product `veux`, unlocked, current
+  slot B, and 128 MiB `boot_b`. Flashed the 17.2 MB verified image to `boot_b`
+  only and rebooted; `boot_a` was not written. Twenty seconds after reboot,
+  ADB/Fastboot were not enumerating. Runtime boot and screen output are not yet
+  confirmed; user should capture the delayed `VEUX GPI SUMMARY THREAD` and
+  `VEUX GPI SUMMARY` lines or report what the screen shows.
