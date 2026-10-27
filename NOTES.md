@@ -4247,3 +4247,22 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   selected slot B, and rebooted successfully; `boot_a` was not flashed. Twenty
   seconds later neither ADB nor Fastboot enumerated, consistent with the prior
   lock-screen run; wait for user screen confirmation before further action.
+# VEUX GPI summary trigger follow-up — 2026-10-27
+
+- Reviewed the latest early-boot video. It reaches launchd/backboardd, but the
+  screen does not show `VEUX GPI SUMMARY`, `VEUX SMMU SUMMARY`, or a
+  `VEUX BUILD` marker; the delayed replay tied to the liveness sampler did not
+  produce visible diagnostics on this path.
+- Added patch 0135 to start a bounded worker directly from the GPI preflight
+  hook. It waits 2 seconds, then prints the captured read-only GPI/SMMU
+  summary three times at 10-second intervals. It does not perform additional
+  MMIO, touch GPIOs, power rails, reset the controller, or write persistent
+  logs. The existing boot-argument gate remains `veuxgpipreflight=1`.
+- Local repository validation and Python syntax checks passed. Patches 0133,
+  0134, and 0135 apply in order against the cached XNU source. CI and the
+  verified wrapper build are pending; no device flash has happened for this
+  change yet.
+- Device currently enumerates in Fastboot as serial `4078cac030c8`, product
+  `veux`, unlocked, active slot B; `boot_b` reports 128 MiB. When CI and image
+  verification pass, the authorized test target is `boot_b` only; never write
+  `boot_a`.

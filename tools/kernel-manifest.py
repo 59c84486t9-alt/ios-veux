@@ -47,6 +47,7 @@ for patch in (
     "0132-veux-touch-bounded-goodix-id-probe.patch",
     "0133-veux-gpi-smmu-readonly-preflight.patch",
     "0134-veux-repeat-gpi-preflight-summary.patch",
+    "0135-veux-start-gpi-summary-from-probe.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -116,6 +117,7 @@ needles = {
     "synchronous_ufs_ring_flush": b"veux_log_flush_sync",
     "read_only_gpi_summary": b"VEUX GPI SUMMARY: state=%s hook=%u arg=%u enabled=%u map=%u/%u",
     "read_only_smmu_summary": b"VEUX SMMU SUMMARY: idr=%#x/%#x/%#x scr0=%#x gbpa=%#x",
+    "gpi_summary_thread_started": b"VEUX GPI SUMMARY THREAD: started; three delayed read-only reports",
 }
 checks = {name: needle in kernel for name, needle in needles.items()}
 source_checks = {}
@@ -211,6 +213,8 @@ source_checks["read_only_gpi_summary_replayed_after_console_scroll"] = (
     and "gpi_report_count < 3" in live_sampler
     and "gpi_summary_complete" in (a.source_root / "bsd/dev/veux_gpi_preflight.c").read_text()
     and "VEUX GPI SUMMARY: state=%s hook=%u arg=%u enabled=%u map=%u/%u" in (a.source_root / "bsd/dev/veux_gpi_preflight.c").read_text()
+    and "kernel_thread_start(gpi_summary_thread" in (a.source_root / "bsd/dev/veux_gpi_preflight.c").read_text()
+    and "tsleep(&gpi_summary_sleep_chan" in (a.source_root / "bsd/dev/veux_gpi_preflight.c").read_text()
 )
 source_checks["liveness_does_not_emit_unchanged_cpu_counters"] = (
     "old->user_us != e->user_us" not in live_sampler
