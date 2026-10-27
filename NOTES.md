@@ -59,6 +59,62 @@
   path. Keep the probe held and boot only from `boot_b`; do not alter `boot_a`
   or userdata.
 
+## >>> UPDATE 2026-10-27 (slot-A recovery touch ground truth) <<<
+
+- Used Fastboot only to select slot A and boot its existing recovery; no
+  partition was flashed or erased. Recovery ADB identified product `veux`,
+  slot suffix `_a`, and root UID 0. After the read-only session, returned to
+  Fastboot and restored active slot B; Fastboot now reports current slot `b`.
+- Live recovery DT confirms `/soc/pinctrl@400000` compatible
+  `qcom,blair-pinctrl`, `reg=<0x00400000 0x00800000>`, and the active Goodix
+  client at `/soc/i2c@4c88000/goodix-gtx8@5d` with address `0x5d`, reset 21,
+  IRQ 22, AVDD 51, DVDD 44. This validates the target addresses/pins.
+- Recovery dmesg shows the Goodix driver probed successfully, parsed GT9896
+  Yellowstone firmware `PID=GT9896`, `VID=03030008`, read the current version,
+  skipped firmware update because versions matched, sent the board config,
+  registered IRQ 223, and created `goodix_ts` input devices. Thus stock
+  recovery brings up the sensor and completes I2C transfers on SE8.
+- Recovery cannot expose raw pin register values: its config has
+  `CONFIG_DEBUG_FS` and `CONFIG_DEVMEM` disabled, `/dev/mem` and
+  `/sys/kernel/debug` are absent, and GPIO sysfs/debug reports are unavailable.
+  Do not claim measured CFG/IO or line-voltage values from this session.
+- Read-only GPIO chardev ioctl info reports `gpiochip0` label
+  `400000.pinctrl`, 157 lines. GPIO19/20 have no GPIO consumer because the
+  active pinctrl mux routes them to SE8. GPIO21 `ts_reset_gpio`, GPIO22
+  `ts_irq_gpio`, GPIO44 `dvdd-gpio`, and GPIO51 `avdd-gpio` are claimed by
+  Goodix. Neighbor line-info also reports GPIO3 `aw8624_int`, GPIO7/8/9 NFC
+  consumers, GPIO18 unnamed output, and GPIO23 interrupt. `/proc/interrupts`
+  shows `msmgpio 22 Edge goodix_ts`, IRQ 223, count 71.
+- The live QUP parent has tx/rx DMA names and GPI DMA phandles; recovery dmesg
+  initializes GPI DMA controllers and probes `4c88000.i2c` at 400 kHz. The
+  Goodix power-on log is at 2.008572s, GPIO setup at 2.013653s, successful
+  probe at 2.124131s, matching version read at 2.129180s, config validated at
+  2.180548s, and IRQ registered at 2.185362s. This is the successful Linux
+  I2C path; actual SDA/SCL voltage remains unmeasured.
+- VEUX's Xiaomi DTS removes the dummy `touch_avdd` regulator. The Goodix
+  driver enables AVDD GPIO51 then DVDD GPIO44; its logs report `avdd name is
+  NULL` and `iovdd name is NULL`, then `Device power on`. This does not show a
+  SWEET-like RPMh rail dependency. Active SE8 pinctrl selects GPIO19/20
+  function `qup12`, internal pull-ups, drive strength 8 mA; its sleep state
+  uses GPIO mux, bias-disable, 2 mA. Goodix active reset/IRQ uses pull-up,
+  8 mA; suspend states use pull-down, 2 mA. The actual pull-up supply and
+  SDA/SCL voltage are not identified by DT or directly measured. The
+  enabled PM6125 L11 shown in regulator sysfs has SDHC/UFS consumers, not
+  Goodix.
+- The follow-up XNU probe is now scoped to a compact CFG/IO dump for GPIO0-63,
+  then a drive-strength-only write/read/restore on touch pins 19/20/21/22/44/51
+  before and after the power/reset sequence. This is explicitly opt-in and is
+  paired with an all-zero read-only alternate-base dump; no unclaimed pin is
+  written. The active sequence also checks AVDD/DVDD output-enable and output
+  latches before attempting I2C; those latches are not voltage measurements.
+- Source inventory finds only the new explicit XNU `ml_io_map(0x400000)` for
+  VEUX TLMM and `ml_io_map` uses the passed PA directly, with no ADT
+  translation. This is not a runtime page-table alias audit. Qualcomm
+  documents xPUs generally, but no VEUX-specific permission table or denied
+  access status is available; secure-only write protection remains unknown.
+  SWEET maps its TLMM/NORTH bank at PA `0x03900000` (commented as DT TLMM +
+  NORTH `0x500000`) and uses GPIO6/7 for SE7. That address is platform-specific.
+
 ## >>> UPDATE 2026-10-27 (GPIO CFG/IO readback probe flashed to boot_b) <<<
 
 - Strict CI [40444592303](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40444592303)
@@ -3879,18 +3935,34 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   sequence and HID event polling be enabled. Keep the successful default path
   unchanged and use boot_b for tests.
 
-### VEUX read-only touch probe — patch 0131 in progress — 2026-10-27
+### VEUX TLMM mapping diagnostic — CI pending — 2026-10-27
 
-- Added `xnu/patches/0131-veux-touch-readonly-se8-probe.patch`. It adds a
-  VEUX-only probe called after UFS root setup and gated by `veuxtouchprobe=1`.
-  It reads the GENI SE8 firmware/status/clock/IRQ/FIFO state, Blair GCC SE8
-  clock source/branch state, and TLMM pin state for 19/20/21/22/44/51. Source
-  has no GPIO/GCC/SE write path and sends no I2C transaction.
-- Added the patch to the strict kernel manifest and workflow source assertions.
-  Patch applies with zero fuzz to a locally modeled post-0086 UFS context;
-  Python compilation, repository validation (130 patch files, 0001-0131), and
-  `git diff --check` pass. XNU compilation, CI, wrapper creation, and device
-  readout remain pending.
-- Keep the probe opt-in; the lock-screen boot is still the baseline. Do not
-  add the boot arg to the existing wrapper until a strict CI kernel passes.
-  Then use `boot_b` for the diagnostic and leave `boot_a` untouched.
+- Replaced the earlier read-only SE8-only probe with an opt-in TLMM mapping
+  diagnostic plus a separately gated, bounded GT9896 identity probe. The TLMM
+  dump covers GPIO 0–63 and prints one compact hex row per pin, including the
+  computed CFG and IO physical/virtual addresses. It uses 32-bit reads and
+  `pin * 0x1000` byte offsets with IO at CFG+4. It labels the direct map and
+  `VM_WIMG_IO` Device memory attribute.
+- The recovery GPIO chardev showed consumed controls GPIO3 (`aw8624_int`),
+  GPIO7/8/9 (NFC), and Goodix GPIO21/22/44/51. No UART/SPMI/UFS GPIO consumer
+  was reported by chardev; those pins remain in the 0–63 dump as possible
+  nonzero controls. GPIO19/20 are selected by SE8 pinctrl, not GPIO line
+  consumers.
+- The drive-strength-only write/read/restore runs before power/reset and again
+  afterward, and only on touch pins 19/20/21/22/44/51. If the primary DT
+  window is all zero, the alternate `0x500000` candidate is mapped and dumped
+  read-only; no writes or active probe follow that branch. Build ID is printed
+  before an optional hold.
+- The active identity probe still requires `veuxtouchprobeactive=1`; it prints
+  rail GPIO latch state and skips I2C unless AVDD/DVDD output latches are high.
+  Physical rail voltage is not measured. No touch reports/HID polling are
+  implemented.
+- Added strict manifest source checks for the computed PA/VA columns and the
+  recovery control annotation. `python3 tools/validate-repo.py` passes all 131
+  patches, 27 Python tools, and 8 shell scripts; `git diff --check` is clean.
+- Current code is committed locally on `veux-xnu-build`, but not pushed and no
+  CI build has run yet. A previous push was rejected because the GitHub token
+  lacks workflow-file write scope; the workflow file is unchanged in this
+  revision. Next: verify the final commit diff, push only the explicit source
+  files/commits, dispatch `xnu.yml`, and validate CI + strict manifest before
+  preparing any boot_b wrapper. Never write boot_a.

@@ -7,11 +7,20 @@ diagnostic. Do not make them depend on optional veuxfb boot arguments.
 diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -1461,6 +1461,7 @@
+@@ -1461,6 +1461,16 @@
  static uint32_t veux_fb_console_stride;
  static uint32_t veux_fb_console_col, veux_fb_console_row;
  static bool veux_fb_console_ready;
 +extern void veux_fb_console_putc(char c);
++static const char build_id_line[] = "VEUX BUILD: ID=__VEUX_BUILD_ID__\n";
++
++void
++veux_fb_print_build_id(void)
++{
++	for (unsigned int i = 0; i < sizeof(build_id_line) - 1; ++i) {
++		veux_fb_console_putc(build_id_line[i]);
++	}
++}
  
  static void
  veux_fb_log(const char *text)
@@ -31,14 +40,11 @@ diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
  
  	/* The firmware simple-framebuffer node supplies address, size and format. */
  	vm_offset_t fb_vaddr = ml_io_map_wcomb((vm_offset_t)VEUX_FB_BASE, VEUX_FB_SIZE);
-@@ -1499,6 +1495,10 @@
+@@ -1499,6 +1495,7 @@
  		veux_fb_console_ready = true;
  		veux_fb_log("VEUX simplefb console 1080x2400 stride=4320 format=a8r8g8b8\n");
  	}
-+	static const char build_id_line[] = "VEUX BUILD: ID=__VEUX_BUILD_ID__\n";
-+	for (unsigned int i = 0; i < sizeof(build_id_line) - 1; ++i) {
-+		veux_fb_console_putc(build_id_line[i]);
-+	}
++	veux_fb_print_build_id();
  	if (write_marker != 0) {
  		for (uint32_t y = 16; y < 16 + VEUX_FB_MARKER_EDGE; y++) {
  			volatile uint32_t *row = fb + y * (VEUX_FB_STRIDE / sizeof(uint32_t));

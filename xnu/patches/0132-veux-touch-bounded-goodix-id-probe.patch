@@ -7,42 +7,6 @@ bounded open-drain GPIO I2C transfer when hardware disables the FIFO. It then
 powers AVDD and DVDD, pulses reset, reads 12 bytes from 0x4022, then returns.
 It never writes touch configuration or firmware and does not start polling.
 
-diff --git a/bsd/dev/veux_touch_probe.c b/bsd/dev/veux_touch_probe.c
---- a/bsd/dev/veux_touch_probe.c
-+++ b/bsd/dev/veux_touch_probe.c
-@@ -9,8 +9,9 @@
- #include <machine/machine_routines.h>
- #include <pexpert/pexpert.h>
- 
- extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
-+extern void veux_touch_active_probe(vm_offset_t, vm_offset_t, vm_offset_t);
- 
- #define VEUX_TOUCH_SE_PA       0x04c88000u
- #define VEUX_TOUCH_GCC_PA      0x01400000u
- #define VEUX_TOUCH_TLMM_PA     0x00400000u
-@@ -89,14 +90,20 @@
- 	touch_probe_gpio(tlmm, 21, "reset");
- 	touch_probe_gpio(tlmm, 22, "irq");
- 	touch_probe_gpio(tlmm, 44, "dvdd");
- 	touch_probe_gpio(tlmm, 51, "avdd");
--	printf("VEUX TOUCH PROBE: done; no GPIO/GCC/SE writes and no I2C transfer\n");
-+	printf("VEUX TOUCH PROBE: done; baseline snapshot complete\n");
-+
-+	int active = 0;
-+	if (PE_parse_boot_argn("veuxtouchprobeactive", &active, sizeof(active)) && active == 1) {
-+		printf("VEUX TOUCH ACTIVE: bounded GPIO/clock/reset and GT9896 ID read starting\n");
-+		veux_touch_active_probe(se, gcc, tlmm);
-+	}
- 
- 	int hold = 0;
- 	/* Pause before root mount so the read-only snapshot can be photographed. */
- 	if (PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold)) && hold == 1) {
--		printf("VEUX TOUCH PROBE: holding after read-only snapshot; hard reset to reboot\n");
-+		printf("VEUX TOUCH PROBE: holding after probe; hard reset to reboot\n");
- 		for (;;) {
- 			__asm__ volatile("wfe" ::: "memory");
- 		}
- 	}
 diff --git a/bsd/conf/files b/bsd/conf/files
 --- a/bsd/conf/files
 +++ b/bsd/conf/files
@@ -55,7 +19,7 @@ diff --git a/bsd/dev/veux_touch_active.c b/bsd/dev/veux_touch_active.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/veux_touch_active.c
-@@ -0,0 +1,445 @@
+@@ -0,0 +1,466 @@
 +/* One-shot VEUX GT9896 power/reset and I2C identity diagnostic. */
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +#include <sys/param.h>
@@ -63,6 +27,7 @@ new file mode 100644
 +#include <sys/errno.h>
 +#include <kern/clock.h>
 +#include <machine/machine_routines.h>
++extern void veux_touch_tlmm_drive_check(vm_offset_t, vm_offset_t, const char *);
 +
 +#define SE_STATUS              0x040u
 +#define SE_M_CLK               0x048u
@@ -200,11 +165,12 @@ new file mode 100644
 +static void
 +touch_active_gpio_snapshot(vm_offset_t tlmm, const char *stage)
 +{
-+	printf("VEUX TOUCH ACTIVE: GPIO %s cfg19=%#x io19=%#x cfg20=%#x io20=%#x cfg21=%#x io21=%#x cfg44=%#x io44=%#x cfg51=%#x io51=%#x\n",
++	printf("VEUX TOUCH ACTIVE: GPIO %s cfg19=%#x io19=%#x cfg20=%#x io20=%#x cfg21=%#x io21=%#x cfg22=%#x io22=%#x cfg44=%#x io44=%#x cfg51=%#x io51=%#x\n",
 +	    stage,
 +	    touch_active_rd(tlmm, TLMM_GPIO_CFG(19)), touch_active_rd(tlmm, TLMM_GPIO_IO(19)),
 +	    touch_active_rd(tlmm, TLMM_GPIO_CFG(20)), touch_active_rd(tlmm, TLMM_GPIO_IO(20)),
 +	    touch_active_rd(tlmm, TLMM_GPIO_CFG(21)), touch_active_rd(tlmm, TLMM_GPIO_IO(21)),
++	    touch_active_rd(tlmm, TLMM_GPIO_CFG(22)), touch_active_rd(tlmm, TLMM_GPIO_IO(22)),
 +	    touch_active_rd(tlmm, TLMM_GPIO_CFG(44)), touch_active_rd(tlmm, TLMM_GPIO_IO(44)),
 +	    touch_active_rd(tlmm, TLMM_GPIO_CFG(51)), touch_active_rd(tlmm, TLMM_GPIO_IO(51)));
 +}
@@ -245,6 +211,20 @@ new file mode 100644
 +	touch_active_gpio_cfg(tlmm, 21, 0, 0, 3, true, true);
 +	delay(8000);
 +	touch_active_gpio_cfg(tlmm, 22, 0, 1, 1, false, false);
++}
++
++static bool
++touch_active_rails_latched_on(vm_offset_t tlmm)
++{
++	uint32_t avdd_cfg = touch_active_rd(tlmm, TLMM_GPIO_CFG(51));
++	uint32_t avdd_io = touch_active_rd(tlmm, TLMM_GPIO_IO(51));
++	uint32_t dvdd_cfg = touch_active_rd(tlmm, TLMM_GPIO_CFG(44));
++	uint32_t dvdd_io = touch_active_rd(tlmm, TLMM_GPIO_IO(44));
++	bool on = (avdd_cfg & 0x200u) && (avdd_io & 2u) &&
++	    (dvdd_cfg & 0x200u) && (dvdd_io & 2u);
++	printf("VEUX TOUCH ACTIVE: rail GPIO latches avdd=%#x/%#x dvdd=%#x/%#x expected_on=%u; voltage unmeasured\n",
++	    avdd_cfg, avdd_io, dvdd_cfg, dvdd_io, (unsigned)on);
++	return on;
 +}
 +
 +static bool
@@ -480,12 +460,17 @@ new file mode 100644
 +		printf("VEUX TOUCH ACTIVE: GENI FIFO disabled; using bounded GPIO I2C read\n");
 +		touch_active_bus_gpio(tlmm);
 +		touch_active_power_and_reset(tlmm);
++		veux_touch_tlmm_drive_check(tlmm, 0x00400000u, "post-power-reset");
 +		touch_active_gpio_snapshot(tlmm, "powered");
++		if (!touch_active_rails_latched_on(tlmm)) return;
 +		error = touch_active_gpio_read_reg(tlmm, 0x5d, 0x4022, id, sizeof(id), &gpio_phase);
 +	} else {
 +		if (!touch_active_clocks(gcc)) return;
 +		touch_active_bus_qup(tlmm);
 +		touch_active_power_and_reset(tlmm);
++		veux_touch_tlmm_drive_check(tlmm, 0x00400000u, "post-power-reset");
++		touch_active_gpio_snapshot(tlmm, "powered");
++		if (!touch_active_rails_latched_on(tlmm)) return;
 +		if (!touch_active_se_init(se)) return;
 +		error = touch_active_read_reg(se, 0x5d, 0x4022, id, sizeof(id));
 +	}

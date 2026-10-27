@@ -1,0 +1,223 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Add bounded opt-in VEUX TLMM mapping diagnostic
+
+The SWEET touch path uses a separate controller and GPIO map. Add a VEUX-only
+boot-arg-gated diagnostic that dumps the TLMM GPIO window with computed
+physical and virtual byte addresses, then performs one drive-strength-only
+write/read/restore on the six touch pins, before and after the bounded
+power/reset sequence. A second generic TLMM address is read-only fallback.
+The active GT9896 ID probe remains separately boot-arg gated.
+
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+index 7adee14..a32f477 100644
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -661,6 +661,11 @@ sweet_ufs_init(void)
+ 	sweet_keys_init();
+ 	sweet_touch_init();
+ 	sweet_usb_probe();
+ #endif
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	extern void veux_touch_probe_init(void);
++	/* Bounded touch diagnostic; disabled unless explicitly requested. */
++	veux_touch_probe_init();
++#endif
+ 	return 0;
+ }
+diff --git a/bsd/conf/files b/bsd/conf/files
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -110,2 +110,3 @@
+ bsd/dev/sweet_usb.c			standard
++bsd/dev/veux_touch_probe.c		standard
+ bsd/dev/mem.c				standard
+diff --git a/bsd/dev/veux_touch_probe.c b/bsd/dev/veux_touch_probe.c
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/bsd/dev/veux_touch_probe.c
+@@ -0,0 +1,182 @@
++/* Bounded VEUX GT9896 TLMM mapping and drive-strength diagnostic. */
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern void veux_touch_active_probe(vm_offset_t, vm_offset_t, vm_offset_t);
++extern void veux_fb_print_build_id(void);
++
++#define VEUX_TOUCH_SE_PA       0x04c88000u
++#define VEUX_TOUCH_GCC_PA      0x01400000u
++#define VEUX_TOUCH_TLMM_PA     0x00400000u
++#define VEUX_TOUCH_TLMM_ALT_PA 0x00500000u
++#define VEUX_TOUCH_SE_SIZE     0x4000u
++#define VEUX_TOUCH_GCC_SIZE    0x80000u
++#define VEUX_TOUCH_TLMM_SIZE   0x40000u
++
++#define SE_STATUS              0x040u
++#define SE_M_CLK               0x048u
++#define SE_FW_REV              0x068u
++#define SE_CLK_SEL             0x07cu
++#define SE_IRQ                 0x610u
++#define SE_IRQ_EN              0x614u
++#define SE_TX_COUNT            0x800u
++#define SE_RX_COUNT            0x804u
++#define GCC_QUP1_S2_CMD_RCGR   0x5327cu
++#define GCC_QUP1_S2_BRANCH     0x53278u
++#define GCC_QUP1_M_AHB_BRANCH  0x53004u
++#define GCC_QUP1_S_AHB_BRANCH  0x53008u
++#define GCC_BRANCH_VOTE        0x7900cu
++#define TLMM_GPIO_CFG(pin)     ((uint32_t)(pin) * 0x1000u)
++#define TLMM_GPIO_INOUT(pin)   (TLMM_GPIO_CFG(pin) + 4u)
++
++static uint32_t
++touch_probe_rd(vm_offset_t base, uint32_t offset)
++{
++	uint32_t value = *(volatile uint32_t *)(base + (vm_offset_t)offset);
++	__asm__ volatile("dmb oshld" ::: "memory");
++	return value;
++}
++
++static uint32_t
++touch_probe_tlmm_rd(vm_offset_t va, vm_offset_t pa, uint32_t offset)
++{
++	vm_offset_t addr = va + (vm_offset_t)offset;
++	uint32_t value = *(volatile uint32_t *)addr;
++	__asm__ volatile("dmb oshld" ::: "memory");
++	printf("VEUX TLMM READ32 pa=%#llx va=%p off=%#x value=%#x\n",
++	    (unsigned long long)(pa + offset), (void *)addr, offset, value);
++	return value;
++}
++
++static bool
++touch_probe_tlmm_dump(vm_offset_t va, vm_offset_t pa, const char *tag)
++{
++	bool any_nonzero = false;
++	unsigned control_cfg_nonzero = 0;
++	printf("VEUX TLMM MAP %s pa=%#llx va=%p size=%#x attr=Device-nGnRnE(VM_WIMG_IO) ADT-translation=none\n",
++	    tag, (unsigned long long)pa, (void *)va, VEUX_TOUCH_TLMM_SIZE);
++	printf("VEUX TLMM HEX rows: pin cfg/io; cfg PA/VA=base+pin*0x1000; IO PA/VA=CFG+4; 32-bit\n");
++	for (unsigned pin = 0; pin < 64; ++pin) {
++		uint32_t off = TLMM_GPIO_CFG(pin);
++		vm_offset_t cfg_va = va + (vm_offset_t)off;
++		vm_offset_t io_va = cfg_va + 4u;
++		vm_offset_t cfg_pa = pa + (vm_offset_t)off;
++		vm_offset_t io_pa = cfg_pa + 4u;
++		uint32_t cfg = touch_probe_rd(va, off);
++		uint32_t io = touch_probe_rd(va, off + 4u);
++		any_nonzero |= cfg != 0 || io != 0;
++		if (pin == 3 || (pin >= 7 && pin <= 9)) {
++			control_cfg_nonzero += cfg != 0;
++			printf("VEUX TLMM CTRL pin=%u cfg/io=%08x/%08x\n", pin, cfg, io);
++		}
++		printf("VEUX TLMM %02u cfg/io=%08x/%08x cfgPA/VA=%#llx/%p ioPA/VA=%#llx/%p\n",
++		    pin, cfg, io, (unsigned long long)cfg_pa, (void *)cfg_va,
++		    (unsigned long long)io_pa, (void *)io_va);
++	}
++	printf("VEUX TLMM %s summary nonzero=%u control_cfg_nonzero=%u/4 (gpio3,7,8,9)\n",
++	    tag, (unsigned)any_nonzero, control_cfg_nonzero);
++	return any_nonzero;
++}
++
++void
++veux_touch_tlmm_drive_check(vm_offset_t tlmm, vm_offset_t pa, const char *stage)
++{
++	static const unsigned pins[] = {19, 20, 21, 22, 44, 51};
++	printf("VEUX TLMM DRIVE %s: changing drive-strength field [8:6] to code 1, then restoring\n", stage);
++	for (unsigned i = 0; i < sizeof(pins) / sizeof(pins[0]); ++i) {
++		unsigned pin = pins[i];
++		uint32_t off = TLMM_GPIO_CFG(pin);
++		vm_offset_t addr = tlmm + (vm_offset_t)off;
++		uint32_t old = touch_probe_tlmm_rd(tlmm, pa, off);
++		unsigned drive = (old & (7u << 6)) == (1u << 6) ? 2u : 1u;
++		uint32_t set = (old & ~(7u << 6)) | (drive << 6);
++		__asm__ volatile("dmb oshst" ::: "memory");
++		*(volatile uint32_t *)addr = set;
++		__asm__ volatile("dsb osh" ::: "memory");
++		uint32_t got = touch_probe_tlmm_rd(tlmm, pa, off);
++		__asm__ volatile("dmb oshst" ::: "memory");
++		*(volatile uint32_t *)addr = old;
++		__asm__ volatile("dsb osh" ::: "memory");
++		uint32_t restored = touch_probe_tlmm_rd(tlmm, pa, off);
++		printf("VEUX TLMM DRIVE %s pin=%u pa=%#llx va=%p old=%#x set=%#x got=%#x restore=%#x\n",
++		    stage, pin, (unsigned long long)(pa + off),
++		    (void *)addr, old, set, got, restored);
++	}
++}
++
++static void
++touch_probe_gpio(vm_offset_t tlmm, vm_offset_t pa, unsigned pin, const char *label)
++{
++	uint32_t cfg = touch_probe_tlmm_rd(tlmm, pa, TLMM_GPIO_CFG(pin));
++	uint32_t io = touch_probe_tlmm_rd(tlmm, pa, TLMM_GPIO_INOUT(pin));
++	printf("VEUX TOUCH PROBE: gpio%u %s cfg=%#x io=%#x\n", pin, label, cfg, io);
++}
++
++void
++veux_touch_probe_init(void)
++{
++	int enabled = 0;
++	if (!PE_parse_boot_argn("veuxtouchprobe", &enabled, sizeof(enabled)) || enabled != 1) return;
++
++	vm_offset_t se = ml_io_map(VEUX_TOUCH_SE_PA, VEUX_TOUCH_SE_SIZE);
++	vm_offset_t gcc = ml_io_map(VEUX_TOUCH_GCC_PA, VEUX_TOUCH_GCC_SIZE);
++	vm_offset_t tlmm = ml_io_map(VEUX_TOUCH_TLMM_PA, VEUX_TOUCH_TLMM_SIZE);
++	if (!se || !gcc || !tlmm) {
++		printf("VEUX TOUCH PROBE: mapping failed se=%u gcc=%u tlmm=%u\n",
++		    se != 0, gcc != 0, tlmm != 0);
++		return;
++	}
++	printf("VEUX TOUCH PROBE: read-only SE8 fw=%#x status=%#x mclk=%#x clk_sel=%#x irq=%#x irq_en=%#x tx_count=%#x rx_count=%#x\n",
++	    touch_probe_rd(se, SE_FW_REV), touch_probe_rd(se, SE_STATUS),
++	    touch_probe_rd(se, SE_M_CLK), touch_probe_rd(se, SE_CLK_SEL),
++	    touch_probe_rd(se, SE_IRQ), touch_probe_rd(se, SE_IRQ_EN),
++	    touch_probe_rd(se, SE_TX_COUNT), touch_probe_rd(se, SE_RX_COUNT));
++	printf("VEUX TOUCH PROBE: read-only GCC rcgr=%#x cfg=%#x branch=%#x m_ahb=%#x s_ahb=%#x vote=%#x\n",
++	    touch_probe_rd(gcc, GCC_QUP1_S2_CMD_RCGR),
++	    touch_probe_rd(gcc, GCC_QUP1_S2_CMD_RCGR + 4u),
++	    touch_probe_rd(gcc, GCC_QUP1_S2_BRANCH), touch_probe_rd(gcc, GCC_QUP1_M_AHB_BRANCH),
++	    touch_probe_rd(gcc, GCC_QUP1_S_AHB_BRANCH), touch_probe_rd(gcc, GCC_BRANCH_VOTE));
++
++	printf("VEUX TLMM recovery line-info controls: gpio3=aw8624_int gpio7/8/9=NFC gpio21/22/44/51=Goodix; no UART/SPMI/UFS GPIO consumer reported\n");
++	bool main_live = touch_probe_tlmm_dump(tlmm, VEUX_TOUCH_TLMM_PA, "DT");
++	if (!main_live) {
++		vm_offset_t alt = ml_io_map(VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
++		if (alt) (void)touch_probe_tlmm_dump(alt, VEUX_TOUCH_TLMM_ALT_PA, "ALT-READONLY");
++		printf("VEUX TLMM: primary DT window all zero; alternate was read-only; pin writes and active probe skipped\n");
++		veux_fb_print_build_id();
++		return;
++	}
++	vm_offset_t active_tlmm = tlmm;
++	vm_offset_t active_pa = VEUX_TOUCH_TLMM_PA;
++	printf("VEUX TLMM: active diagnostic PA=%#llx (ADT translation=none)\n",
++	    (unsigned long long)active_pa);
++	veux_touch_tlmm_drive_check(active_tlmm, active_pa, "pre-power");
++	printf("VEUX TLMM MAP ALIAS: one explicit TLMM ml_io_map in this probe; other-map check is source/DT inventory only\n");
++	printf("VEUX TOUCH PROBE: read-only SE8/GCC snapshot complete\n");
++
++	int active = 0;
++	if (PE_parse_boot_argn("veuxtouchprobeactive", &active, sizeof(active)) && active == 1) {
++		if (active_pa != VEUX_TOUCH_TLMM_PA) {
++			printf("VEUX TOUCH ACTIVE: skipped; active power/reset path requires DT TLMM PA\n");
++		} else {
++			printf("VEUX TOUCH ACTIVE: bounded power/reset and GT9896 ID read starting\n");
++			veux_touch_active_probe(se, gcc, active_tlmm);
++		}
++	}
++	touch_probe_gpio(active_tlmm, active_pa, 19, "SE8-SDA");
++	touch_probe_gpio(active_tlmm, active_pa, 20, "SE8-SCL");
++	touch_probe_gpio(active_tlmm, active_pa, 21, "reset");
++	touch_probe_gpio(active_tlmm, active_pa, 22, "irq");
++	touch_probe_gpio(active_tlmm, active_pa, 44, "dvdd");
++	touch_probe_gpio(active_tlmm, active_pa, 51, "avdd");
++	int hold = 0;
++	bool should_hold = PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold)) && hold == 1;
++	if (should_hold) printf("VEUX TOUCH PROBE: holding after TLMM diagnostic; hard reset to reboot\n");
++	veux_fb_print_build_id();
++	if (should_hold) for (;;) __asm__ volatile("wfe" ::: "memory");
++}
++#endif
+-- 
+2.39.5
