@@ -4538,3 +4538,21 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   unlocked, current slot B, with `boot_b` capacity 0x8000000. No new image has
   been flashed in this update. If CI and wrapper verification pass, only
   `boot_b` is authorized for the diagnostic candidate; never write `boot_a`.
+
+## >>> UPDATE 2026-10-28 (persistent GUI touch diagnostic) <<<
+
+- User reports the normal build boots but touch remains nonfunctional, and the
+  touch output is not visible. Patch 0146 drew a one-shot status line at y=44;
+  a later GUI framebuffer present could overwrite it, and the line sat in the
+  top notch/status area. Early `goto out` paths also left only a broad stage
+  marker instead of a failure reason.
+- Added patch 0147 to redraw the retained touch status after every valid GUI
+  framebuffer present, move it below the notch to y=160, and distinguish
+  MMIO-map, GCC-clock, SE8, GPIO readback, GT9896 ID, unsupported-IC, and
+  report-read failures. The status reports the failing GPIO or error value.
+  It does not alter boot arguments or touch-register sequencing.
+- Exact CI 40695833403 build-tree patch dry-run passed; repo validation and
+  Python syntax checks pass. New strict CI and wrapper verification are needed
+  before flashing. The phone remains on the previously verified normal build;
+  no new image has been flashed. Only `boot_b` is authorized; never write
+  `boot_a`.

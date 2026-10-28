@@ -1,0 +1,190 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Keep VEUX touch diagnostics visible over GUI
+
+Move the touch status below the notch area, redraw it after each successful
+GUI framebuffer present, and report the stage and pin/error for early exits.
+
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -162,6 +162,7 @@
+ 	}
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	if (!ok) {
++		veux_fb_touch_status(7, pin);
+ 		printf("VEUX TOUCH: GPIO%u write/readback failed cfg=%#x wanted=%#x io=%#x out=%u high=%u\n",
+ 		    pin, touch_rd(st.gpio, off), cfg, touch_rd(st.gpio, TOUCH_GPIO_IO(pin)),
+ 		    out ? 1u : 0u, high ? 1u : 0u);
+@@ -676,6 +677,9 @@
+ 	printf("VEUX TOUCH DIAG: SE8 va=%#llx\n", (unsigned long long)st.se);
+ #endif
+ 	if (!st.gcc || !st.gpio || !st.se) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_fb_touch_status(9, (!st.gcc ? 1u : 0u) | (!st.gpio ? 2u : 0u) | (!st.se ? 4u : 0u));
++#endif
+ 		printf("SWEET TOUCH: MMIO mapping failed\n");
+ 		goto out;
+ 	}
+@@ -700,12 +704,18 @@
+ 	printf("VEUX TOUCH: entering GCC clock setup\n");
+ #endif
+ 	if (!touch_clocks()) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_fb_touch_status(8, 0);
++#endif
+ 		goto out;
+ 	}
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	printf("VEUX TOUCH: GCC setup returned; entering SE8 setup\n");
+ #endif
+ 	if (!touch_se_init()) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_fb_touch_status(10, 0);
++#endif
+ 		goto out;
+ 	}
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+@@ -786,6 +796,9 @@
+ 	bool goodix = !ge && gid[0] == '9' && gid[1] == '8' && gid[2] == '9' && gid[3] == '6';
+ 	bool fts = !fe1 && !fe2 && fid1 == 0x54 && fid2 == 0x52;
+ 	if (st.dead || goodix == fts) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_fb_touch_status(14, (goodix ? 1u : 0u) | (fts ? 2u : 0u) | (st.dead ? 4u : 0u));
++#endif
+ 		printf("SWEET TOUCH: no unique supported IC (goodix=%d fts=%d dead=%d); stopping\n",
+ 		    goodix, fts, st.dead);
+ 		goto out;
+@@ -793,6 +806,9 @@
+ 	st.kind = goodix ? TOUCH_GOODIX : TOUCH_FTS;
+ 	printf("SWEET TOUCH: selected %s, 1080x2400, poll=10ms irq-hint=%d\n",
+ 	    goodix ? "GT9896 Yellowstone" : "Focaltech 54:52", st.irq_hint);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_fb_touch_status(13, 0);
++#endif
+ 	unsigned errors = 0, ticks = 0;
+ 	while (!st.dead) {
+ 		/* Optional IRQ hint still reads every 100ms, and always while down. */
+@@ -801,6 +817,9 @@
+ 			int err = st.kind == TOUCH_GOODIX ? touch_goodix() : touch_focaltech();
+ 			if (err) {
+ 				if ((errors++ % 100u) == 0) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++					veux_fb_touch_status(11, (unsigned int)err);
++#endif
+ 					printf("SWEET TOUCH: report err=%d irq=%#x\n", err, st.irq_status);
+ 				}
+ 				if (errors == 10) {
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1700,8 +1700,11 @@
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ }
+ 
+-void
+-veux_fb_touch_status(unsigned int state, unsigned int detail)
++static volatile unsigned int veux_fb_touch_state = 0xffffffffu;
++static volatile unsigned int veux_fb_touch_detail;
++
++static void
++veux_fb_touch_status_draw(unsigned int state, unsigned int detail)
+ {
+ 	if (!veux_fb_console_base) return;
+ 	const char *message = state == 0 ? "TOUCH: worker started" :
+@@ -1709,29 +1712,40 @@
+ 	    state == 2 ? "TOUCH: GCC and SE8 setup" :
+ 	    state == 3 ? "TOUCH: GPIO and power setup" :
+ 	    state == 4 ? "TOUCH: reading GT9896 ID" :
+-	    state == 5 ? "TOUCH: GT9896 ID read OK" : "TOUCH: GT9896 ID read FAILED";
++	    state == 5 ? "TOUCH: GT9896 ID read OK" :
++	    state == 6 ? "TOUCH: GT9896 ID read FAILED" :
++	    state == 7 ? "TOUCH: GPIO write/readback FAILED pin=" :
++	    state == 8 ? "TOUCH: GCC clock setup FAILED" :
++	    state == 9 ? "TOUCH: MMIO map failed mask=" :
++	    state == 10 ? "TOUCH: SE8 setup FAILED" :
++	    state == 11 ? "TOUCH: report read FAILED err=" :
++	    state == 13 ? "TOUCH: GT9896 report polling" :
++	    state == 14 ? "TOUCH: unsupported/no unique IC flags=" :
++	    "TOUCH: unknown state";
+ 	volatile uint32_t *fb = veux_fb_console_base;
+-	const uint32_t x0 = 12, y0 = 44, pad = 6;
++	const uint32_t stride = veux_fb_console_stride / 4u;
++	const uint32_t x0 = 12, y0 = 160, pad = 6;
+ 	uint32_t msg_len = 0;
+ 	while (message[msg_len]) ++msg_len;
+-	const uint32_t width = (msg_len + 17u) * 8u + pad * 2u;
++	const uint32_t width = (msg_len + 10u) * 8u + pad * 2u;
++	if (!stride || x0 + width >= VEUX_FB_WIDTH || y0 + 16u + pad * 2u >= VEUX_FB_HEIGHT) return;
+ 	for (uint32_t y = y0; y < y0 + 16u + pad * 2u; ++y)
+-		for (uint32_t x = x0; x < x0 + width; ++x) fb[y * VEUX_FB_WIDTH + x] = 0xff000000u;
++		for (uint32_t x = x0; x < x0 + width; ++x) fb[y * stride + x] = 0xff000000u;
+ 	uint32_t x = x0 + pad;
+ 	for (const unsigned char *c = (const unsigned char *)message; *c; ++c, x += 8u) {
+ 		for (unsigned y = 0; y < 16; ++y) {
+ 			unsigned char bits = iso_font[(unsigned)*c * 16u + y];
+ 			for (unsigned b = 0; b < 8; ++b) if (bits & (0x80u >> b))
+-				fb[(y0 + pad + y) * VEUX_FB_WIDTH + x + b] = 0xffffffffu;
++				fb[(y0 + pad + y) * stride + x + b] = 0xffffffffu;
+ 		}
+ 	}
+-	static const char prefix[] = " err=0x";
++	static const char prefix[] = "0x";
+ 	static const char hex[] = "0123456789ABCDEF";
+ 	for (const unsigned char *c = (const unsigned char *)prefix; *c; ++c, x += 8u) {
+ 		for (unsigned y = 0; y < 16; ++y) {
+ 			unsigned char bits = iso_font[(unsigned)*c * 16u + y];
+ 			for (unsigned b = 0; b < 8; ++b) if (bits & (0x80u >> b))
+-				fb[(y0 + pad + y) * VEUX_FB_WIDTH + x + b] = 0xffffffffu;
++				fb[(y0 + pad + y) * stride + x + b] = 0xffffffffu;
+ 		}
+ 	}
+ 	for (int shift = 28; shift >= 0; shift -= 4, x += 8u) {
+@@ -1739,10 +1753,26 @@
+ 		for (unsigned y = 0; y < 16; ++y) {
+ 			unsigned char bits = iso_font[(unsigned)c * 16u + y];
+ 			for (unsigned b = 0; b < 8; ++b) if (bits & (0x80u >> b))
+-				fb[(y0 + pad + y) * VEUX_FB_WIDTH + x + b] = 0xffffffffu;
++				fb[(y0 + pad + y) * stride + x + b] = 0xffffffffu;
+ 		}
+ 	}
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ }
+ 
++void
++veux_fb_touch_status(unsigned int state, unsigned int detail)
++{
++	veux_fb_touch_detail = detail;
++	veux_fb_touch_state = state;
++	veux_fb_touch_status_draw(state, detail);
++}
++
++void
++veux_fb_touch_status_redraw(void)
++{
++	unsigned int state = veux_fb_touch_state;
++	if (state != 0xffffffffu)
++		veux_fb_touch_status_draw(state, veux_fb_touch_detail);
++}
++
+ #endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -39,6 +39,7 @@
+ extern "C" void veux_fb_gui_handoff(void);
+ extern "C" void veux_fb_normal_status_draw(void);
+ extern "C" void veux_fb_normal_status_clear(void);
++extern "C" void veux_fb_touch_status_redraw(void);
+ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+ 
+ #if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+@@ -568,6 +569,7 @@
+ 					veux_fb_gui_handoff();
+ 				}
+ 			}
++			veux_fb_touch_status_redraw();
+ #endif
+ 		}
+ 		s->release();
+-- 
+2.39.5

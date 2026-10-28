@@ -63,6 +63,7 @@ for patch in (
     "0144-veux-tlmm-two-read-fault-context.patch",
     "0145-veux-touch-use-regbase-adjusted-tlmm.patch",
     "0146-veux-touch-gui-status.patch",
+    "0147-veux-touch-status-persistent-present.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -93,6 +94,7 @@ needles = {
     "veux_variant_held": b"variant=held",
     "veux_variant_normal": b"variant=normal ID=",
     "veux_touch_gui_status": b"TOUCH: GT9896 ID read FAILED",
+    "veux_touch_gui_status_repaint": b"TOUCH: report read FAILED err=",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
     "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",
@@ -192,11 +194,13 @@ source_checks["veux_active_touch_uses_regbase_adjusted_tlmm"] = (
     and "#define TOUCH_GPIO_RESET 21u" in touch_driver
     and "#define TOUCH_GPIO_IRQ   22u" in touch_driver
 )
-source_checks["veux_touch_final_status_is_drawn_after_the_probe"] = (
-    "veux_fb_touch_status(unsigned int state, unsigned int detail)" in serial
-    and "TOUCH: GT9896 ID read FAILED" in serial
+source_checks["veux_touch_status_survives_gui_presents_and_identifies_failures"] = (
+    "veux_fb_touch_status_redraw(void)" in serial
+    and "veux_fb_touch_status_redraw();" in (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
+    and "const uint32_t x0 = 12, y0 = 160" in serial
+    and "veux_fb_touch_status(7, pin)" in touch_driver
     and "veux_fb_touch_status(ge == 0 ? 5u : 6u" in touch_driver
-    and "veux_fb_touch_status(4, 0)" in touch_driver
+    and "TOUCH: GPIO write/readback FAILED pin=" in serial
 )
 source_checks["direct_framebuffer_build_id_print"] = (
     'veux_fb_print_build_id();' in fb_init
