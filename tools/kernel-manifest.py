@@ -95,6 +95,8 @@ needles = {
     "veux_variant_normal": b"variant=normal ID=",
     "veux_touch_gui_status": b"TOUCH: GT9896 ID read FAILED",
     "veux_touch_gui_status_repaint": b"TOUCH: report read FAILED err=",
+    "veux_touch_gui_i2c_irq": b"TOUCH: I2C IRQ bits",
+    "veux_touch_gui_i2c_state": b"TOUCH: SE/tx/rx",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
     "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",

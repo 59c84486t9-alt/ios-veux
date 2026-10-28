@@ -1,3 +1,27 @@
+## >>> UPDATE 2026-10-28 (GUI touch result and transaction telemetry) <<<
+
+- The latest lock-screen photo shows the persistent status history after the
+  normal boot: GCC/SE8 setup passed; GPIO/power setup passed; the GT9896 ID
+  read failed with `0x3c` (60); no supported controller was identified. The
+  phone boots to the lock screen, but touch still does not work. ADB and
+  Fastboot are not enumerating while it is booted, so no live kernel log can be
+  pulled from this session.
+- The visible state localizes the failure to the I2C ID-read transaction after
+  the setup stages; it does not prove rail voltage or an address NACK. The
+  active path uses FIFO despite the earlier fallback confusion. Linux's GENI
+  driver selects DMA when it gets a DMA-safe message buffer and FIFO otherwise;
+  it asks for such a buffer at threshold 32 for the 32-byte XNU version probe.
+  This is a transport/sequence lead to verify, not yet a demonstrated root
+  cause. The exact Xiaomi vendor `i2c-qcom-geni` source is absent from the local
+  research checkout.
+- Extended patch 0147's GUI history on transfer errors with the accumulated
+  GENI IRQ bits and a packed SE status/TX/RX byte count. This keeps the next
+  test's useful transfer evidence visible after the console is handed to iOS;
+  it does not change touch transport, rails, reset, or HID behavior. Strict CI
+  and exact wrapper verification are still required before considering a
+  boot_b-only test. Keep the currently bootable image until the candidate is
+  verified; never write boot_a.
+
 ## >>> UPDATE 2026-10-27 (VEUX SE8 FIFO GT9896 driver CI and boot_b test) <<<
 
 - CI [40563653621](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40563653621)
