@@ -4512,6 +4512,29 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Downloaded CI kernel SHA-256 `9c7a9037d116c24e188e61da19f4d87a65b5d0db00ff5ef3f5632f4ccfeed09b`. Assembled the normal boot-v2 wrapper from the previously verified shim, embedded ADT, and phone DTB. `verify-veux-wrapper.py` passed for build/run ID `40674297635`, exact kernel/ADT/payload, DTB SHA-256 `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`, normal variant, and full args including `rootrw=1 ufsrw=1`. Wrapper SHA-256: `8b23739f55534f085c5d09271202637f5b305f7734a9995baa477b70b03f6976`; image/manifest at `/home/nyra/veux-artifacts/40674297635/`.
 - The wrapper is not yet flashed. Await the user reconnecting in Fastboot, then recheck product/unlocked/current slot/partition capacity and flash `boot_b` only; never touch `boot_a`. This normal variant has no diagnostic hold and runs the existing delayed active touch path, corrected to the REG_BASE-adjusted TLMM window. It is a test candidate, not a guarantee of working touch.
 
+### Persistent five-stage touch status build — 2026-10-28
+
+- The user reports the normal build reaches iOS but touch does not respond and
+  console text obscures the touch logs. Patch 0147 now keeps the latest five
+  touch stages in a dedicated status panel and redraws them after every valid
+  GUI framebuffer present. This is a diagnostics change; it does not claim to
+  fix the controller.
+- Commit `8386b2a` passed strict CI run `40704706456`: XNU build, host
+  framebuffer bounds checks, kernel feature manifest, and artifact packaging
+  all passed. CI kernel SHA-256 is
+  `4d005e72fcca30dbd3d9ffd0f49f6d724c15beb87fdd53c0688ceacd903e809c`.
+- Built and verified the normal wrapper at
+  `/home/nyra/veux-artifacts/40704706456/normal.img`; wrapper SHA-256 is
+  `cafd11c7fe32ea694dca60b489d6d4b59cac8120d355bcf10515e573da58721c`. The
+  verifier confirmed the exact CI kernel, embedded phone ADT, phone DTB, full
+  normal RW boot arguments, and both variants in the CI manifest.
+- Rechecked serial `4078cac030c8`, product `veux`, unlocked `yes`, current slot
+  B, and `boot_b` capacity `0x8000000`. Flashed only `boot_b`; Fastboot
+  reported send/write `OKAY`, slot B remained active, and reboot returned
+  `OKAY`. `boot_a` and the root image were not written. Host ADB/Fastboot did
+  not enumerate during the first 50 seconds after reboot; runtime status is
+  pending a device photo/response.
+
 ### Corrected active-path normal image flashed — 2026-10-28
 
 - User returned the phone in Fastboot. Reverified serial `4078cac030c8`, product `veux`, unlocked, active slot B, `boot_b` capacity `0x8000000`. The verified normal image SHA-256 was `8b23739f55534f085c5d09271202637f5b305f7734a9995baa477b70b03f6976` (17,260,544 bytes).
