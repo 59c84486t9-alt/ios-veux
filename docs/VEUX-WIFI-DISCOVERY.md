@@ -107,9 +107,15 @@ runtime silicon ID read.
 
 The recovery image has no `/vendor/firmware_mnt/image` directory. Its visible
 `/vendor/firmware` contains Goodix touchscreen files only; no `qca6750`,
-`wpss.mdt`, `bdwlan.*`, or `regdb.bin` files were found in the searched
-recovery firmware paths. This describes the mounted recovery filesystem, not
-the full Android vendor partition. No `/sys/class/remoteproc` is exposed.
+`wpss.mdt`, `bdwlan.*`, or `regdb.bin` files were found there. The Android
+`vendor_a` logical partition is inside `super` and is not mounted in this
+recovery; it was not mistaken for the recovery `/vendor`. The separate
+`modem_a` partition is mounted read-only at `/firmware`. Its `/firmware/image`
+contains `wlanmdsp.mbn`, `bdwlan.bin`, numerous `bdwlan.<board-id>` and
+`bdwlan.b<board-id>` files, plus `bdwlanu.*`; no `adrastea/` or `wpss.mdt`
+path was found. These files show a WLAN firmware/BDF package is present in
+the modem partition, but do not establish which chip uses it or that it has
+loaded. No `/sys/class/remoteproc` is exposed.
 
 Recovery has no `/sys/bus/pci/devices` directory; `/sys/bus/mmc/devices` is
 empty. The two SDHCI hosts exist but declare `no-sdio` in the live DT. There
@@ -131,14 +137,29 @@ could not be read. No sysfs attributes or hardware controls were written.
 ## Linux bring-up sequence from the local reference driver
 
 The reference `drivers/soc/qcom/icnss2` code recognizes WCN6750 (0x6750) and
-Adrastea (0xabcd). For the DT-selected Adrastea path, the driver obtains its
-regulators and MSA memory, waits for a WLFW QMI service, registers indications,
-exchanges MSA memory-info and MSA-ready messages, obtains WLFW capabilities,
-then powers the ICNSS platform and exchanges further WLFW messages. The
-reference code does not associate this compatible with the WCN6750-only
-WPSS-boot sysfs handler or the WCN6750 PCI BAR/MHI setup. Recovery logs do
-not show that the Adrastea WLFW service started, so the actual VEUX sequence
-and whether firmware boots on WPSS or another subsystem remain unobserved.
+Adrastea (0xabcd). For the DT-selected Adrastea path, ICNSS2 provisions MSA
+memory, waits for the WLAN firmware QMI service, registers indications, sends
+MSA memory-info, sends MSA-ready, requests capabilities, then powers the
+ICNSS platform and continues the WLFW exchange. The key server-arrival branch
+skips `wlfw_host_cap` for Adrastea; WCN6750 sends host-cap and follows its
+device-info/BAR/MHI path. The `wpss_boot` sysfs control is WCN6750-only in
+this source. The Adrastea ICNSS2 branch does not directly request `wlanmdsp`
+or BDF files; its QMI client expects the firmware service to have been
+started by the separate modem/remote-subsystem path. In this local tree,
+`request_firmware()` is used by BDF/QDSS download helpers, but the server
+arrival path calls BDF download only for WCN6750. Thus this source alone does
+not define an Adrastea executable filename or directory.
+
+On this phone the read-only modem partition supplies
+`/firmware/image/wlanmdsp.mbn` and board-data `bdwlan.*` files. The most likely
+downstream boot path is therefore the modem/WLAN subsystem loader starting a
+WLAN firmware domain, after which ICNSS2 performs the MSA/QMI handshake. That
+association is an inference from the file placement and the Q6-based ICNSS
+binding, not a confirmed loader trace. Recovery emitted no `wlanmdsp.mbn`,
+`wlanfw`, or board-data load message. The single clean runtime identity
+evidence would be the WLFW capability response's reported chip ID/family
+(and board ID); the `wlanfw` service name is shared and is not identifying by
+itself.
 
 For comparison, the separate WCN6750 path powers the platform, obtains device
 info and maps firmware-returned BAR/MHI state, then sends `regdb.bin` and the
@@ -162,15 +183,16 @@ ICNSS2 and firmware service are not SWEET patches.
 SWEET has no Wi-Fi hardware driver or Wi-Fi bring-up patch. Its `sweet` XNU
 patch set contains generic networking trace changes and unrelated network
 plumbing, but no Qualcomm CNSS/ICNSS, WCN, PCIe WLAN, or SDIO WLAN initialization.
-The VEUX XNU source likewise has no Qualcomm PCIe root-complex or SDHCI host
-driver. XNU IOKit contains generic PCI device abstractions, which alone do not
-enumerate a Qualcomm host or power a link. No Skywalk hardware hook for this
-radio is present.
+The VEUX XNU source has no Qualcomm PCIe root-complex, SDHCI, or ICNSS/SNOC
+WLAN host driver. XNU IOKit contains generic PCI abstractions, which alone do
+not enumerate a Qualcomm host or power a link. No Skywalk hardware hook for
+this radio is present.
 
 ## Existing XNU Wi-Fi ports
 
-HackiOS is structurally the closer starting point if the runtime device turns
-out to be WCN6750. Its published Wi-Fi port is more than ath11k plus LinuxKPI:
+HackiOS is structurally the closer starting point only if the runtime device
+turns out to be WCN6750. Its published Wi-Fi port is more than ath11k plus
+LinuxKPI:
 the WCN6750-specific XNU side supplies SMEM/SMP2P, power/mailbox handling,
 WPSS firmware loading and TrustZone start, GLINK/QRTR, QMI and WLFW, then
 exposes the hybrid AHB/PCIe device to ath11k through `wifi/lx`. The public
@@ -179,26 +201,45 @@ inputs. It is a reference implementation for the exact candidate chip, but
 its redwood SoC addresses, rails, GIC, SMMU, mailbox and firmware packaging
 cannot be copied to VEUX.
 
-ios-topaz's `TopazModem` patches (0113–0130) implement modem/WLFW/QMI/GLINK/
-QRTR services on SM6225 topaz. That is useful protocol-level reference if
-VEUX's Adrastea setup needs the same WLAN firmware service, but it is not the
-same SoC or proven same radio architecture. It does not supply VEUX's
-ICNSS/WPSS device support.
+ios-topaz's `TopazModem` patches (0113–0130) implement modem PAS boot, GLINK/
+QRTR, WLFW, SNOC copy engines, and the WLAN data/control path on SM6225 topaz.
+Its WLFW implementation uses the standard QMI service and message IDs and
+implements `ind_register -> host_cap -> MSA info -> MSA ready -> capabilities`.
+Adrastea uses the same MSA message pair but skips `host_cap`, so the Topaz
+QMI state machine is the closer adaptable reference: the server-arrival
+transition and MSA region parameters would need to change. It is not a
+drop-in port. Topaz hardcodes its MSA base/size, secure VMIDs, modem PAS
+layout, board-data policy, and WCN3988 CE/service map. Its SNOC CE routine
+maps registers at `0x0c800000 + 0x240000`, 12 engines at 4 KiB strides, and
+shadow registers at `0x0c832000`; that is a useful candidate map, not yet
+verified against VEUX's exact CE offsets. The VEUX DT independently confirms
+ICNSS membase `0x0c800000` size `0x00800000`, 12 direct GIC CE interrupt
+specifiers `0x166–0x171`, and the IOMMU specifier. These are SNOC/GIC
+resources, not PCI BARs/MSI. The QCA host-CMN configuration uses SNOC for
+ICNSS/Adrastea; its CE programming model is memory-mapped ring registers plus
+DMA descriptor rings, with the 12 CE interrupts routed directly to the GIC.
 
-The single largest missing piece for either route is the VEUX-specific
-Qualcomm remote WLAN host stack: establish and power the actual Adrastea/iWCN
-target, load/start its remote firmware if required, and implement the
-SMEM/SMP2P + mailbox + GLINK/QRTR + QMI/WLFW control path. ath11k/LinuxKPI
-comes later and cannot discover or start this platform by itself. Given the
-DT mismatch, do not choose the WCN6750 `wifi/lx` path until recovery runtime
-identifies the chip and confirms WPSS and firmware-service behavior.
+Therefore ios-topaz is structurally closer than HackiOS for the DT-described
+Adrastea target, at both the WLFW protocol and SNOC HIF layers. The single
+largest missing piece in VEUX XNU is the VEUX-specific WLAN platform host
+stack: safely start the modem/WLAN firmware service, allocate/assign its MSA
+regions, then map/program the Adrastea SNOC CE/DMA and GIC interrupts. There
+is no existing VEUX implementation of that path. The Topaz QMI and CE code is
+an adaptable reference, but the hardware parameters and boot flow need
+independent confirmation from a live WLFW capability response and downstream
+HIF configuration.
+
+Do not select the WCN6750 `wifi/lx` path based only on the presence of the
+generic `wpss_boot` sysfs attribute. ath11k/LinuxKPI comes later and cannot
+discover or start this platform by itself.
 
 ## Diagnostic build decision
 
-Do not report an XNU enumeration result yet: XNU currently has no host driver
-that can perform one. Do not read arbitrary ICNSS or PCIe registers as a
-substitute; the saved device tree does not identify a confirmed PCIe host
-window or a safe clocked register set. A meaningful first diagnostic should
+Do not report an XNU radio enumeration result yet: XNU currently has no
+Adrastea/SNOC host driver that can perform one. Do not read arbitrary ICNSS
+registers as a substitute; the CE offset map and clock/power state have not
+been verified for VEUX. The DT identifies an ICNSS membase and CE interrupt
+range, but not an APSS PCI host window. A meaningful first diagnostic should
 be strictly read-only and should report separate outcomes for (1) host
 controller found, (2) controller/link state accessible, (3) endpoint ID
 read, (4) WLAN enable/reset pin state, and (5) rail/clock state. Unsupported
@@ -207,8 +248,8 @@ must be displayed explicitly as `NOT PROBED`, not as absent or powered off.
 Remaining hardware questions are the physical silicon/runtime ID, whether
 Android's full vendor image contains and starts matching radio firmware, and
 the actual WLAN pin/clock states. The recovery-only data does not justify an
-XNU diagnostic that claims to probe an endpoint: there is no exposed APSS PCI
-host or SDIO function, and no safe documented host register set to read. A
+XNU diagnostic that claims to probe a radio endpoint: recovery exposes no
+PCI/SDIO function, and XNU has no verified Adrastea SNOC CE map. A
 future diagnostic must report these items as `NOT EXPOSED` or `NOT PROBED`,
 not as a confirmed absent chip or measured-off rail. No Wi-Fi code, CI build,
 image build, or partition write was made. Recovery was selected on slot A;
