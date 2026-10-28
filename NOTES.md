@@ -1,3 +1,24 @@
+## >>> UPDATE 2026-10-28 (GENI FIFO sequence alignment candidate) <<<
+
+- The close-up after normal build `40719473240` showed both displayed I2C IRQ
+  history values as `0x00000000`; the packed SE/TX/RX row was too soft to read
+  exactly. Phone still reaches lockscreen with no touch.
+- Audited Xiaomi's `qcom-geni-se.c` and `i2c-qcom-geni.c`. The short GT9896
+  pointer/ID messages are FIFO transfers; Linux initializes RX watermark to
+  `tx_depth - 1` and RFR watermark to `tx_depth`, then starts the I2C_WRITE
+  command before arming TX watermark 1. XNU had RX watermark 0, RFR `depth - 1`,
+  and armed TX watermark before the command. This is a concrete FIFO-sequence
+  mismatch worth testing; it is not proof of the root cause.
+- Added patch 0148 to align those FIFO values/order. It keeps wrapper-level SE
+  IRQ routing masked because this implementation polls local status and has no
+  registered GENI interrupt handler. No GPIO, rail, reset, I2C address, HID, or
+  normal boot-argument behavior changed. `patch --dry-run` against the exact
+  40719473240 post-patch source, repository validation, Python compilation,
+  and `git diff --check` pass.
+- This candidate needs strict CI and exact wrapper verification. If both pass,
+  the user already authorized test images on `boot_b`; never write `boot_a`.
+  At this check, no phone is enumerating over Fastboot or ADB.
+
 ## >>> UPDATE 2026-10-28 (GUI touch result and transaction telemetry) <<<
 
 - The latest lock-screen photo shows the persistent status history after the
@@ -4608,3 +4629,36 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   before flashing. The phone remains on the previously verified normal build;
   no new image has been flashed. Only `boot_b` is authorized; never write
   `boot_a`.
+
+## >>> UPDATE 2026-10-28 (GENI transfer telemetry boot) <<<
+
+- CI run/build ID `40719473240` passed. Kernel SHA-256:
+  `c2330301ecf7a20d1b29ee574e95d0e74534fe387be9fe58ffaec07139cbd993`.
+- Packaged the normal RW wrapper at
+  `/home/nyra/veux-artifacts/40719473240/normal.img` using the CI kernel,
+  the embedded ADT from the previously verified normal wrapper, the known phone
+  DTB, and the manifest's complete normal boot arguments. The wrapper verifier
+  passed payload reconstruction, exact DTB, build/run ID, and variant checks.
+  Wrapper SHA-256:
+  `0b36b86ecf9c3d448431d1cde2e9efa9668c8ed3e5d11a4e55c82c645f7d6d9c`.
+- Rechecked Fastboot serial `4078cac030c8`, product `veux`, unlocked `yes`,
+  current slot `b`, and `boot_b` capacity `0x8000000`. Flashed only `boot_b`;
+  Fastboot reported `OKAY`, slot B remained active, and reboot returned `OKAY`.
+  `boot_a` and the root image were not written. Awaiting the screen/touch result
+  and, if visible, the `TOUCH: I2C IRQ bits` and `TOUCH: SE/tx/rx` values.
+
+## >>> UPDATE 2026-10-28 (40719473240 touch telemetry result) <<<
+
+- The user supplied a close-up after booting the verified 40719473240 normal
+  image. It reaches the lockscreen, but touch remains nonfunctional. The panel
+  reports no unique supported IC (`flags` appears zero). Both displayed I2C
+  IRQ fields read `0x00000000`; the packed SE/TX/RX rows look like no TX/RX
+  progress, but the photo does not make the full packed value sharp enough to
+  assert the SE status bits exactly.
+- This confirms the ID reads failed before a visible I2C IRQ/data response; it
+  does not prove the address was NACKed or that the rails are at voltage. Next
+  code investigation should focus on the GENI command/mode setup and compare it
+  against the exact Xiaomi/Linux SE8 sequence, then decide FIFO vs DMA from the
+  message length and DMA buffer constraints. Do not change HID/report parsing
+  until an ID read succeeds. Current lockscreen image remains booted; no
+  additional flash has been made.

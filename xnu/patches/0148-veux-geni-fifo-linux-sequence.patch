@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Match VEUX GENI FIFO setup to Linux
+
+Use Linux's RX watermarks and arm TX FIFO watermark after starting I2C_WRITE,
+which is when the Linux driver requests its FIFO service interrupt. Keep the
+wrapper IRQ route masked because XNU polls the local status and has no SE IRQ
+handler.
+
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -290,14 +290,18 @@
+ 	if (!touch_wait_clear(st.se, SE_STATUS, 1u)) {
+ 		st.dead = true; /* no other SE7 owner is supported */
+ 		return EBUSY;
+ 	}
+ 	touch_wr(st.se, SE_IRQ_CLR, 0xffffffffu);
+-	touch_wr(st.se, SE_TX_WM, nt ? 1u : 0u);
++	/* Linux arms TX FIFO watermark after issuing I2C_WRITE. */
++	touch_wr(st.se, SE_TX_WM, 0);
+ 	touch_wr(st.se, nr ? SE_RX_LEN : SE_TX_LEN, nr ? nr : nt);
+ 	touch_wr(st.se, SE_CMD, ((nr ? 2u : 1u) << 27) |
+ 	    ((uint32_t)addr << 9) | (stretch ? 4u : 0u));
++	if (nt) {
++		touch_wr(st.se, SE_TX_WM, 1u);
++	}
+ 	int err = ETIMEDOUT;
+ 	for (unsigned i = 0; i < 20000; ++i) {
+ 		uint32_t irq = touch_irq();
+ 		if (irq & SE_ERRORS) {
+ 			err = (irq & SE_NACK) ? ENXIO : EIO;
+@@ -615,12 +619,14 @@
+ 	touch_wr(st.se, 0x260, SE_PACK0);
+ 	touch_wr(st.se, 0x264, SE_PACK1);
+ 	touch_wr(st.se, 0x284, SE_PACK0);
+ 	touch_wr(st.se, 0x288, SE_PACK1);
+ 	touch_wr(st.se, SE_TX_WM, 0);
+-	touch_wr(st.se, 0x810, 0);
+-	touch_wr(st.se, 0x814, ((rx >> 16) & 0x3fu) - 1u);
++	/* Match geni_se_init(tx_depth - 1, tx_depth) for the FIFO. */
++	uint32_t tx_depth = (tx >> 16) & 0x3fu;
++	touch_wr(st.se, 0x810, tx_depth - 1u);
++	touch_wr(st.se, 0x814, tx_depth);
+ 	touch_wr(st.se, SE_IRQ_EN, SE_EVENTS);
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	printf("VEUX TOUCH SE8: register programming returned; checking FIFO packing\n");
+ #endif
+ 	printf("SWEET TOUCH: packing tx=%#x/%#x rx=%#x/%#x gran=%#x\n",

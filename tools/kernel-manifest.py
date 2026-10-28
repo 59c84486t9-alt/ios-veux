@@ -64,6 +64,7 @@ for patch in (
     "0145-veux-touch-use-regbase-adjusted-tlmm.patch",
     "0146-veux-touch-gui-status.patch",
     "0147-veux-touch-status-persistent-present.patch",
+    "0148-veux-geni-fifo-linux-sequence.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -195,6 +196,14 @@ source_checks["veux_active_touch_uses_regbase_adjusted_tlmm"] = (
     and "#define TOUCH_GPIO_SCL   20u" in touch_driver
     and "#define TOUCH_GPIO_RESET 21u" in touch_driver
     and "#define TOUCH_GPIO_IRQ   22u" in touch_driver
+)
+source_checks["veux_geni_fifo_sequence_matches_linux"] = (
+    "/* Linux arms TX FIFO watermark after issuing I2C_WRITE. */" in touch_driver
+    and touch_driver.index("touch_wr(st.se, SE_CMD", touch_driver.index("touch_msg_run(uint8_t addr"))
+        < touch_driver.index("touch_wr(st.se, SE_TX_WM, 1u);", touch_driver.index("touch_msg_run(uint8_t addr"))
+    and "touch_wr(st.se, 0x810, tx_depth - 1u);" in touch_driver
+    and "touch_wr(st.se, 0x814, tx_depth);" in touch_driver
+    and "touch_wr(st.se, 0xe1c, 0); /* mask external IRQ routing; poll local status */" in touch_driver
 )
 source_checks["veux_touch_status_survives_gui_presents_and_identifies_failures"] = (
     "veux_fb_touch_status_redraw(void)" in serial
