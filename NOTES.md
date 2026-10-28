@@ -1,3 +1,24 @@
+## >>> UPDATE 2026-10-28 (40727039463 FIFO alignment boot_b test) <<<
+
+- Added patch 0148 to align the SE8 FIFO transaction sequence with the exact
+  Xiaomi SM6375 Linux driver: RX watermark `tx_depth - 1`, RFR watermark
+  `tx_depth`, and TX watermark set to 1 after issuing I2C_WRITE. Kept external
+  wrapper IRQ routing masked because XNU polls local GENI status.
+- Strict CI [40727039463](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40727039463)
+  passed all phases (XNU build, diagnostics, feature manifest, artifact/package
+  checks). Patch 0148 is reported APPLIED. Kernel SHA-256:
+  `0db3372e2f425c13363f88aa36a97acaf368589509ab805484947bf085af07a3`.
+- Built `/home/nyra/veux-artifacts/40727039463/normal.img` with the prior
+  known-good shim and phone DTB, CI kernel, embedded ADT, and the exact normal
+  RW boot args. Wrapper verification passed; shim and DTB compare byte-for-byte
+  with the known-good 40719473240 template. Wrapper SHA-256:
+  `f967d4c3ecd6f66c6afb77bf3cee7d3dd6892f2bee4bba0f42f64141a05b8cef`.
+- Fastboot confirmed serial `4078cac030c8`, product `veux`, unlocked, current
+  slot B, and `boot_b` capacity `0x8000000`. Flashed the verified image to
+  `boot_b` only and rebooted; both operations returned `OKAY`. `boot_a`, the
+  root image, and other partitions were not touched. Awaiting the boot and swipe
+  result; do not treat the FIFO alignment as a confirmed touch fix.
+
 ## >>> UPDATE 2026-10-28 (GENI FIFO sequence alignment candidate) <<<
 
 - The close-up after normal build `40719473240` showed both displayed I2C IRQ
