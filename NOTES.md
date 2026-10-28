@@ -4753,3 +4753,18 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   wrapper verification. No image was written. Await Fastboot reconnect, then
   verify serial/product/unlocked/current slot/partition capacity and flash only
   `boot_b` as previously authorized; never write `boot_a`.
+
+### Held per-read TLMM probe flashed — 2026-10-28
+
+- After the user reconnected Fastboot, verified serial `4078cac030c8`, product
+  `veux`, unlocked `yes`, current slot B, and `boot_b` capacity `0x8000000`.
+  Re-ran `verify-veux-wrapper.py --variant held`; wrapper SHA-256 matched
+  `d40af20d8463b25515495e80db3f889d92430af8941b7167cb5c87f6a2a37aff`.
+- Flashed `/home/nyra/veux-artifacts/40733082776/held.img` to `boot_b` only.
+  Fastboot send/write both returned `OKAY`; current slot remained B; reboot
+  returned `OKAY`. `boot_a` was not touched.
+- As expected, held mode stops before root mount and does not expose ADB. ADB
+  and Fastboot are no longer enumerating after reboot. Runtime probe output is
+  pending a screen photo. Ask for a straight-on photo showing the checkpoint,
+  first six BEFORE/AFTER pairs, and the end of the scan (or the last checkpoint
+  if it stopped early). Do not infer a successful full scan from the reboot.
