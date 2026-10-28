@@ -51,6 +51,8 @@ ap.add_argument("--build-id", required=True)
 ap.add_argument("--run-id", required=True)
 ap.add_argument("--patch-status", required=True, type=Path)
 ap.add_argument("--manifest", type=Path)
+ap.add_argument("--variants-manifest", type=Path, help="kernel manifest containing both full boot-arg strings")
+ap.add_argument("--variant", choices=("normal", "held"))
 a = ap.parse_args()
 if a.build_id != a.run_id:
     raise SystemExit("build ID must equal the CI run ID")
@@ -72,6 +74,16 @@ _virt, _entry, adt_off, adt_size, _kend, _phys, _mem = struct.unpack_from("<7Q",
 payload_args = embedded_payload[0x48:0x48 + 608].split(b"\0", 1)[0].decode("utf-8", "replace")
 if payload_args != a.boot_args:
     raise SystemExit(f"payload boot args mismatch: expected {a.boot_args!r}, got {payload_args!r}")
+variant_manifest = None
+if a.variants_manifest:
+    variant_manifest = json.loads(a.variants_manifest.read_text())
+    variants = variant_manifest.get("variants", {})
+    if set(variants) != {"normal", "held"}:
+        raise SystemExit("variants manifest must contain both normal and held entries")
+    if not a.variant:
+        raise SystemExit("--variant is required with --variants-manifest")
+    if variants[a.variant].get("boot_args") != payload_args:
+        raise SystemExit(f"payload arguments do not match the {a.variant} boot-argument manifest")
 adt_blob = embedded_payload[adt_off:adt_off + adt_size]
 # Rebuild through the normal packer using the exact ADT carried by the payload.
 with tempfile.NamedTemporaryFile(prefix="veux-adt-", suffix=".tmp", dir=a.image.parent) as tmp:
@@ -93,6 +105,8 @@ manifest = {
     "wrapper_sha256": sha256(image),
     "dtb_sha256": sha256(dtb),
     "boot_args": payload_args,
+    "variant": a.variant,
+    "variants": variant_manifest.get("variants") if variant_manifest else None,
     "payload_matches_ci_kernel_and_embedded_adt": True,
     "wrapper_payload_matches_verified_payload": True,
     "wrapper_dtb_matches_phone_dtb": True,

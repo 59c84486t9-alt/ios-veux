@@ -20,8 +20,8 @@ on:
     paths:
       - "xnu/patches/**"
       - "tools/kernel-manifest.py"
-      - "tools/strictify-dxb.py"
       - "tools/verify-veux-wrapper.py"
+      - "tools/strictify-dxb.py"
       - ".github/workflows/xnu.yml"
 
 concurrency:
@@ -35,9 +35,10 @@ env:
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
   MACHINE_CONFIG: ${{ inputs.machine_config || 'VEUX' }}
   VEUX_BUILD_ID: ${{ github.run_id }}
-  # The root is intentionally RW only when both explicit args are present.
-  # Keep veuxlog disabled: its fixed userdata-tail range can overlap HFS+.
-  VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 rootrw=1 ufsrw=1 veuxfb=1 veuxfbconsole=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128 veux_spawn_driver=1 veux_gui=1 veux_gui_noconsole=1"
+  # Two runtime variants share one kernel. The HELD image omits both RW flags,
+  # persistent logging, all active touch flags, and normal GUI startup.
+  VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 rootrw=1 ufsrw=1 veuxsandbox=1 veuxiolog=backboardd,SpringBoard veuxgpipreflight=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128 veux_spawn_driver=1 veux_gui=1 veux_gui_noconsole=1 veuxvariant=normal"
+  VEUX_HELD_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 veuxfb=1 veuxfbconsole=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128 veuxtouchprobe=1 veuxtouchprobehold=1 veuxvariant=held"
 
 jobs:
   build:
@@ -51,13 +52,31 @@ jobs:
       - name: Repository and patch structure preflight
         run: |
           python3 tools/validate-repo.py
-          for required in debug=0xc serial=3 cpus=1 veuxfb=1 veuxfbconsole=1 rootrw=1 ufsrw=1 veux_spawn_driver=1 veux_gui=1 veux_gui_noconsole=1; do
+          for required in debug=0xc serial=3 cpus=1 rootrw=1 ufsrw=1 veuxvariant=normal veux_gui=1 veux_gui_noconsole=1; do
             case " $VEUX_BOOT_ARGS " in
               *" $required "*) ;;
-              *) echo "required diagnostic boot argument missing: $required" >&2; exit 1 ;;
+              *) echo "normal boot argument missing: $required" >&2; exit 1 ;;
             esac
           done
-          case " $VEUX_BOOT_ARGS " in
+          for required in veuxtouchprobe=1 veuxtouchprobehold=1 veuxvariant=held veuxfb=1 veuxfbconsole=1; do
+            case " $VEUX_HELD_BOOT_ARGS " in
+              *" $required "*) ;;
+              *) echo "held boot argument missing: $required" >&2; exit 1 ;;
+            esac
+          done
+          for forbidden in rootrw=1 ufsrw=1 veuxlog=1 veuxtouchprobeactive=1; do
+            case " $VEUX_HELD_BOOT_ARGS " in
+              *" $forbidden "*) echo "unsafe held boot argument: $forbidden" >&2; exit 1 ;;
+              *) ;;
+            esac
+          done
+          for forbidden in veuxfb=1 veuxfbconsole=1 veuxtouchprobe=1 veuxtouchprobehold=1; do
+            case " $VEUX_BOOT_ARGS " in
+              *" $forbidden "*) echo "diagnostic-only argument in normal variant: $forbidden" >&2; exit 1 ;;
+              *) ;;
+            esac
+          done
+          case " $VEUX_BOOT_ARGS $VEUX_HELD_BOOT_ARGS " in
             *" veuxlog=1 "*) echo "refusing the overlapping persistent tail logger" >&2; exit 1 ;;
           esac
 
@@ -319,8 +338,9 @@ jobs:
           assert "veux_pmsg_init()" not in startup, "VEUX pmsg mapping still runs in early kprintf startup"
           assert vm.index("early I/O page tables ready") < vm.index("PE_init_veux_pmsg();"), "VEUX pmsg must wait for early I/O page tables"
           assert "veux_fb_init();" in pmsg_init, "initialize the VEUX framebuffer after early I/O tables are ready"
-          assert 'PE_parse_boot_argn("veuxfb"' not in probe and 'PE_parse_boot_argn("veuxfbconsole"' not in probe, "early framebuffer must not depend on optional boot arguments"
-          assert "int write_marker = 1;" in probe and "int enable_console = 1;" in probe, "early framebuffer marker and console are unconditional"
+          assert 'PE_parse_boot_argn("veuxfb", &diagnostic' in probe and 'PE_parse_boot_argn("veuxfbconsole", &diagnostic' in probe, "diagnostic framebuffer must be gated by its variant boot args"
+          assert "if (!enable_console) veux_gui_console_muted = 1;" in probe, "normal variant must stop console drawing"
+          assert "veux_fb_normal_status_draw(void)" in serial and "veux_fb_normal_status_clear(void)" in serial, "normal status must be temporary"
           assert "VEUX_FB_BASE               0x85200000ULL" in region and "VEUX_FB_SIZE               0x00c00000u" in region, "use the supplied simple-framebuffer region"
           assert "VEUX_FB_WIDTH              1080u" in region and "VEUX_FB_HEIGHT             2400u" in region, "use the RGB-probe-validated geometry"
           assert "VEUX_FB_STRIDE             4320u" in region and "format=a8r8g8b8" in region, "use the supplied stride and pixel format"
@@ -352,7 +372,7 @@ jobs:
           assert "defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)" in Path("xnu/bsd/kern/kern_exit.c").read_text(), "record user-process crash details on VEUX"
           assert "veuxscan" in Path("xnu/osfmk/kern/exception.c").read_text(), "gate heap-string scans by a VEUX boot argument"
           PY
-            echo "Verified VEUX CPU, bounded userdata logging, unconditional direct simple-framebuffer console/build ID, AMFI, and opt-in userspace diagnostics"
+            echo "Verified VEUX CPU, bounded userdata logging, variant-gated framebuffer diagnostics, AMFI, and opt-in userspace diagnostics"
           fi
 
       - name: Host diagnostic bounds checks (synthetic memory only)
@@ -372,6 +392,7 @@ jobs:
             --patch-status patch-status.txt \
             --build-id "$VEUX_BUILD_ID" \
             --boot-args "$VEUX_BOOT_ARGS" \
+            --held-boot-args "$VEUX_HELD_BOOT_ARGS" \
             --source-root dxb/xnu \
             --output out/manifest.json
 

@@ -9,14 +9,22 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--kernel", required=True, type=Path)
 ap.add_argument("--patch-status", required=True, type=Path)
 ap.add_argument("--build-id", required=True)
-ap.add_argument("--boot-args", required=True)
+ap.add_argument("--boot-args", required=True, help="full normal-variant boot args")
+ap.add_argument("--held-boot-args", required=True, help="full held-probe boot args")
 ap.add_argument("--source-root", required=True, type=Path)
 ap.add_argument("--output", required=True, type=Path)
 a = ap.parse_args()
 
 boot_args = set(a.boot_args.split())
-if not {"rootrw=1", "ufsrw=1"}.issubset(boot_args):
-    raise SystemExit("VEUX build manifest requires the explicit rootrw=1 ufsrw=1 experiment args")
+held_boot_args = set(a.held_boot_args.split())
+if not {"rootrw=1", "ufsrw=1", "veuxvariant=normal"}.issubset(boot_args):
+    raise SystemExit("normal variant requires the explicit RW pair and veuxvariant=normal")
+if {"veuxtouchprobe=1", "veuxtouchprobehold=1", "veuxfb=1", "veuxfbconsole=1", "veuxvariant=held"} - held_boot_args:
+    raise SystemExit("held variant requires the held read-only probe and diagnostic display args")
+if {"rootrw=1", "ufsrw=1", "veuxtouchprobeactive=1", "veuxlog=1"} & held_boot_args:
+    raise SystemExit("held variant must not enable UFS writes or the active touch sequence")
+if "veuxtouchprobe=1" in boot_args or "veuxtouchprobehold=1" in boot_args or "veuxfb=1" in boot_args or "veuxfbconsole=1" in boot_args:
+    raise SystemExit("normal variant must not enable the held probe or full framebuffer console")
 if "veuxlog=1" in boot_args:
     raise SystemExit("VEUX build manifest refuses veuxlog=1 because its userdata-tail range may overlap HFS+")
 
@@ -50,6 +58,7 @@ for patch in (
     "0135-veux-start-gpi-summary-from-probe.patch",
     "0140-veux-touch-tlmm-physical-map-check.patch",
     "0141-veux-touch-nofault-tlmm-translation.patch",
+    "0142-veux-held-tlmm-ab-probe-and-normal-boot.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -73,13 +82,12 @@ needles = {
     "software_gui_userclient_base_fallback": b"VEUX GUI: IOMFB base start rejected; continuing software client",
     "software_gui_swap_trace": b"VEUX GUI: framebuffer swap %u mask=0x%x",
     "software_apple_keystore_service": b"SWEET AKS: AppleKeyStore registered (no passcode, unlocked)",
-    "veux_touch_probe_mapping": b"VEUX TLMM MAP %s pa=",
-    "veux_touch_probe_compact_dump": b"VEUX TLMM HEX rows:",
-    "veux_touch_probe_drive_restore": b"VEUX TLMM DRIVE %s pin=",
-    "veux_touch_probe_alt_readonly": b"ALT-READONLY",
-    "veux_touch_probe_hold": b"VEUX TOUCH PROBE: holding after TLMM diagnostic; hard reset to reboot",
-    "veux_touch_active_id_probe": b"VEUX TOUCH ACTIVE: id-read error=",
-    "veux_touch_tlmm_nofault_translation": b"VEUX TOUCH MAPCHECK: mode=nofault",
+    "veux_touch_probe_mapping": b"VEUX TLMM %s CFG DUMP BEGIN PA=",
+    "veux_touch_probe_compact_dump": b"VEUX TLMM %s CFG DUMP BEGIN",
+    "veux_touch_probe_alt_readonly": b"VEUX TLMM %s CFG DUMP BEGIN",
+    "veux_touch_probe_hold": b"held before root mount; no UFS writes or GPIO writes",
+    "veux_variant_held": b"variant=held",
+    "veux_variant_normal": b"variant=normal ID=",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
     "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",
@@ -132,76 +140,43 @@ touch_active = (a.source_root / "bsd/dev/veux_touch_active.c").read_text()
 early = (a.source_root / "osfmk/arm64/veux_early.c").read_text()
 fb_init = serial.split("veux_fb_init(void)", 1)[1].split("veux_fb_console_putc(char c)", 1)[0]
 stage_fn = early.split("veux_stage_mark_nb(unsigned int cell)", 1)[1].split("veux_stage_flush(void)", 1)[0]
-source_checks["framebuffer_console_and_marker_are_unconditional"] = (
-    'PE_parse_boot_argn("veuxfb"' not in fb_init
-    and 'PE_parse_boot_argn("veuxfbconsole"' not in fb_init
-    and "int write_marker = 1;" in fb_init
-    and "int enable_console = 1;" in fb_init
+source_checks["framebuffer_console_is_bootarg_gated_and_normal_status_is_temporary"] = (
+    'PE_parse_boot_argn("veuxfb", &diagnostic, sizeof(diagnostic))' in fb_init
+    and 'PE_parse_boot_argn("veuxfbconsole", &diagnostic, sizeof(diagnostic))' in fb_init
+    and "veux_fb_normal_status_draw(void)" in serial
+    and "veux_fb_normal_status_clear(void)" in serial
+    and "veux_fb_normal_status_clear();" in (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
+    and "variant=normal ID=" in serial
 )
-source_checks["veux_touch_tlmm_mapping_dump_and_drive_test_are_bounded"] = (
+source_checks["veux_touch_tlmm_ab_dump_is_read_only_and_held_before_mount"] = (
     'PE_parse_boot_argn("veuxtouchprobe", &enabled, sizeof(enabled))' in touch_probe
     and 'PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold))' in touch_probe
-    and "VEUX_TOUCH_SE_PA       0x04c88000u" in touch_probe
-    and "VEUX_TOUCH_GCC_PA      0x01400000u" in touch_probe
-    and "VEUX_TOUCH_GCC_SIZE    0x80000u" in touch_probe
     and "VEUX_TOUCH_TLMM_PA     0x00400000u" in touch_probe
     and "VEUX_TOUCH_TLMM_ALT_PA 0x00500000u" in touch_probe
-    and "((uint32_t)(pin) * 0x1000u)" in touch_probe
+    and "for (unsigned pin = 0; pin < VEUX_TOUCH_TLMM_PINS; ++pin)" in touch_probe
     and "volatile uint32_t" in touch_probe
-    and "pin < 64" in touch_probe
-    and "static const unsigned first_pins[] = {19, 20, 21, 22, 44, 51, 3, 7, 8, 9}" in touch_probe
-    and "VEUX TLMM ORDER: touch pins 19/20/21/22/44/51 first" in touch_probe
-    and "VEUX TLMM CHECK pin=%u cfgPA/VA=%#llx/%p ioPA/VA=%#llx/%p before-read" in touch_probe
-    and "VEUX TLMM READ32 pa=%#llx va=%p off=%#x width=32 value=" in touch_probe
-    and "ALT-READONLY" in touch_probe
-    and "if (!main_live)" in touch_probe
-    and "primary DT window all zero; alternate was read-only" in touch_probe
-    and "static const unsigned pins[] = {19, 20, 21, 22, 44, 51}" in touch_probe
-    and "old & ~(7u << 6)" in touch_probe
-    and "drive << 6" in touch_probe
-    and "*(volatile uint32_t *)addr = old;" in touch_probe
-    and "old=%#x set=%#x got=%#x restore=%#x" in touch_probe
-    and "VEUX TLMM HEX rows:" in touch_probe
-    and "cfgPA/VA=%#llx/%p" in touch_probe
-    and "ioPA/VA=%#llx/%p" in touch_probe
-    and "no UART/SPMI/UFS GPIO consumer reported" in touch_probe
-    and "VEUX TLMM CTRL pin=%u cfg/io=%08x/%08x" in touch_probe
-    and "pin == 21 || pin == 22 || pin == 44 || pin == 51" in touch_probe
-    and "control_cfg_nonzero=%u/8 (gpio3,7,8,9,21,22,44,51)" in touch_probe
-    and "VEUX TLMM PHOTO BEGIN" in touch_probe
-    and "VEUX TLMM HEX %02u:%08x/%08x" in touch_probe
-    and "VEUX TLMM PHOTO END" in touch_probe
-    and touch_probe.index('touch_probe_tlmm_compact_snapshot(active_tlmm, active_pa, "FINAL");')
-        < touch_probe.rindex("veux_fb_print_build_id();")
-    and "attr=Device-nGnRnE(VM_WIMG_IO)" in touch_probe
+    and 'touch_probe_tlmm_cfg_dump(tlmm, VEUX_TOUCH_TLMM_PA, "DT400000")' in touch_probe
+    and 'touch_probe_tlmm_cfg_dump(alt, VEUX_TOUCH_TLMM_ALT_PA, "REGBASE500000")' in touch_probe
+    and "PA=%#llx VA=%p CFG=%08x" in touch_probe
+    and "no UFS writes or GPIO writes" in touch_probe
+    and 'for (;;) __asm__ volatile("wfe"' in touch_probe
+    and "VEUX TOUCH PROBE: refusing non-held mode; this diagnostic is read-only" in touch_probe
     and 'veux_touch_probe_init();' in ufs
+    and ufs.index('veux_touch_probe_init();') < ufs.index('sweet_ufs_rootdev(')
 )
-source_checks["veux_touch_drive_check_brackets_active_power_reset"] = (
-    'veux_touch_tlmm_drive_check(active_tlmm, active_pa, "pre-power");' in touch_probe
-    and touch_active.count('veux_touch_tlmm_drive_check(tlmm, 0x00400000u, "post-power-reset");') == 2
-    and "cfg22=%#x io22=%#x" in touch_active
-    and touch_active.count('touch_active_gpio_snapshot(tlmm, "powered");') == 2
-    and touch_active.count("touch_active_rails_latched_on(tlmm)") == 2
-    and "expected_on=%u; voltage unmeasured" in touch_active
+source_checks["pmap_nofault_translation_probe_removed_from_touch_startup"] = (
+    "touch_tlmm_map_check" not in (a.source_root / "bsd/dev/sweet_touch.c").read_text()
+    and "pmap_find_phys_nofault" not in (a.source_root / "bsd/dev/sweet_touch.c").read_text()
 )
-source_checks["veux_gt9896_active_probe_is_opt_in_bounded_and_identity_only"] = (
-    'PE_parse_boot_argn("veuxtouchprobeactive", &active, sizeof(active))' in touch_probe
-    and "veux_touch_active_probe(se, gcc, active_tlmm);" in touch_probe
-    and "touch_active_read_reg(se, 0x5d, 0x4022, id, sizeof(id))" in touch_active
-    and touch_active.count("touch_active_read_reg(") == 2
-    and "if_disable = touch_active_rd(se, 0x64) & 1u" in touch_active
-    and "GENI FIFO disabled; using bounded GPIO I2C read" in touch_active
-    and "touch_active_gpio_read_reg(tlmm, 0x5d, 0x4022, id, sizeof(id), &gpio_phase)" in touch_active
-    and "phase=%s cfg19=%#x sda=%#x cfg20=%#x scl=%#x" in touch_active
-    and "touch_active_gpio_snapshot(tlmm, \"bus-gpio\")" in touch_active
-    and "touch_active_gpio_snapshot(tlmm, \"powered\")" in touch_active
-    and "touch_active_gpio_cfg(tlmm, 19, 0, 3, 0, false, false)" in touch_active
-    and "touch_active_bus_gpio(tlmm);" in touch_active
-    and "touch_active_gpio_cfg(tlmm, 51" in touch_active
-    and "touch_active_gpio_cfg(tlmm, 44" in touch_active
-    and "touch_active_gpio_cfg(tlmm, 21" in touch_active
-    and "for (unsigned i = 0; i < 20000; ++i)" in touch_active
-    and "sweet_hid_touch" not in touch_active
+source_checks["both_full_boot_variants_are_manifested_and_safe"] = (
+    {"rootrw=1", "ufsrw=1", "veuxvariant=normal"}.issubset(boot_args)
+    and {"veuxtouchprobe=1", "veuxtouchprobehold=1", "veuxvariant=held"}.issubset(held_boot_args)
+    and not ({"rootrw=1", "ufsrw=1", "veuxtouchprobeactive=1", "veuxlog=1"} & held_boot_args)
+)
+source_checks["active_touch_probe_remains_separate_from_read_only_held_path"] = (
+    "veux_touch_active_probe" not in touch_probe
+    and "0x4022" in touch_active
+    and "touch_active_gpio_cfg" in touch_active
 )
 source_checks["direct_framebuffer_build_id_print"] = (
     'veux_fb_print_build_id();' in fb_init
@@ -409,8 +384,13 @@ manifest = {
     "source_policy_checks": source_checks,
     "kernel_sha256": hashlib.sha256(kernel).hexdigest(),
     "kernel_path": str(a.kernel),
+    "variants": {
+        "normal": {"boot_args": a.boot_args, "root_mode_requested": "rw"},
+        "held": {"boot_args": a.held_boot_args, "root_mode_requested": "ro", "probe": "read-only dual TLMM map dump; WFE before root mount"},
+    },
     "boot_args": a.boot_args,
-    "root_mode_requested": "rw" if {"rootrw=1", "ufsrw=1"}.issubset(boot_args) else "ro",
+    "held_boot_args": a.held_boot_args,
+    "root_mode_requested": "rw",
     "wrapper": "assembled on host with the phone DTB; see adjacent wrapper manifest",
 }
 a.output.parent.mkdir(parents=True, exist_ok=True)

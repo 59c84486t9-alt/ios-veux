@@ -13,6 +13,8 @@ ci_run_id=
 build_id=
 boot_args=
 patch_status=
+variants_manifest=
+variant=
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--veux) mode=veux; shift ;;
@@ -23,6 +25,8 @@ while [ $# -gt 0 ]; do
 		--build-id) build_id=$2; shift 2 ;;
 		--boot-args) boot_args=$2; shift 2 ;;
 		--patch-status) patch_status=$2; shift 2 ;;
+		--variants-manifest) variants_manifest=$2; shift 2 ;;
+		--variant) variant=$2; shift 2 ;;
 		-*) echo "usage: $0 [--veux] [--dtb DTB] [--output IMAGE] [--ci-kernel KERNEL --ci-run-id ID --build-id ID --boot-args ARGS --patch-status FILE] [PAYLOAD]" >&2; exit 2 ;;
 		*) [ -z "$payload" ] || { echo "only one payload may be specified" >&2; exit 2; }; payload=$1; shift ;;
 	esac
@@ -63,8 +67,12 @@ if [ -n "$ci_kernel" ]; then
 		echo "wrapper verification requires payload, CI kernel, run/build IDs, boot args, and patch status" >&2
 		exit 2
 	}
+	verify_extra=()
+	if [ -n "$variants_manifest" ]; then verify_extra+=(--variants-manifest "$variants_manifest"); fi
+	if [ -n "$variant" ]; then verify_extra+=(--variant "$variant"); fi
 	python3 ../tools/verify-veux-wrapper.py \
 		--image "$output" --payload "$payload" --ci-kernel "$ci_kernel" \
 		--dtb "$dtb" --run-id "$ci_run_id" --build-id "$build_id" \
-		--boot-args "$boot_args" --patch-status "$patch_status"
+		--boot-args "$boot_args" --patch-status "$patch_status" \
+		"${verify_extra[@]}"
 fi

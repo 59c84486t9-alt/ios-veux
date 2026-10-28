@@ -1,0 +1,399 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Split VEUX read-only TLMM probe and normal boot display
+
+The held variant compares the Blair DT window and REG_BASE-adjusted window
+without changing pins, rails, reset, or storage. Normal boot has no diagnostic
+console; it gets a temporary corner label until the first GUI present. Remove
+the pmap no-fault translation experiment from touch startup.
+--- a/bsd/dev/veux_touch_probe.c
++++ b/bsd/dev/veux_touch_probe.c
+@@ -6,7 +6,6 @@
+ #include <pexpert/pexpert.h>
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+-extern void veux_touch_active_probe(vm_offset_t, vm_offset_t, vm_offset_t);
+ extern void veux_fb_print_build_id(void);
+ 
+ #define VEUX_TOUCH_SE_PA       0x04c88000u
+@@ -16,6 +15,7 @@
+ #define VEUX_TOUCH_SE_SIZE     0x4000u
+ #define VEUX_TOUCH_GCC_SIZE    0x80000u
+ #define VEUX_TOUCH_TLMM_SIZE   0x40000u
++#define VEUX_TOUCH_TLMM_PINS   64u
+ 
+ #define SE_STATUS              0x040u
+ #define SE_M_CLK               0x048u
+@@ -53,47 +53,6 @@
+ 	return value;
+ }
+ 
+-static bool
+-touch_probe_tlmm_dump(vm_offset_t va, vm_offset_t pa, const char *tag)
+-{
+-	static const unsigned first_pins[] = {19, 20, 21, 22, 44, 51, 3, 7, 8, 9};
+-	bool seen[64] = {false};
+-	bool any_nonzero = false;
+-	unsigned control_cfg_nonzero = 0;
+-	printf("VEUX TLMM MAP %s pa=%#llx va=%p size=%#x attr=Device-nGnRnE(VM_WIMG_IO) ADT-translation=none\n",
+-	    tag, (unsigned long long)pa, (void *)va, VEUX_TOUCH_TLMM_SIZE);
+-	printf("VEUX TLMM HEX rows: pin cfg/io; cfg PA/VA=base+pin*0x1000; IO PA/VA=CFG+4; 32-bit\n");
+-	printf("VEUX TLMM ORDER: touch pins 19/20/21/22/44/51 first; recovery controls 3/7/8/9 next; remaining pins last\n");
+-	for (unsigned pass = 0; pass < 2; ++pass) {
+-		unsigned count = pass == 0 ? sizeof(first_pins) / sizeof(first_pins[0]) : 64;
+-		for (unsigned i = 0; i < count; ++i) {
+-			unsigned pin = pass == 0 ? first_pins[i] : i;
+-			if (seen[pin]) continue;
+-			seen[pin] = true;
+-			uint32_t off = TLMM_GPIO_CFG(pin);
+-			vm_offset_t cfg_va = va + (vm_offset_t)off;
+-			vm_offset_t io_va = cfg_va + 4u;
+-			vm_offset_t cfg_pa = pa + (vm_offset_t)off;
+-			vm_offset_t io_pa = cfg_pa + 4u;
+-			printf("VEUX TLMM CHECK pin=%u cfgPA/VA=%#llx/%p ioPA/VA=%#llx/%p before-read\n",
+-			    pin, (unsigned long long)cfg_pa, (void *)cfg_va,
+-			    (unsigned long long)io_pa, (void *)io_va);
+-			uint32_t cfg = touch_probe_tlmm_rd(va, pa, off);
+-			uint32_t io = touch_probe_tlmm_rd(va, pa, off + 4u);
+-			any_nonzero |= cfg != 0 || io != 0;
+-			if (pin == 3 || (pin >= 7 && pin <= 9) || pin == 21 || pin == 22 || pin == 44 || pin == 51) {
+-				control_cfg_nonzero += cfg != 0;
+-				printf("VEUX TLMM CTRL pin=%u cfg/io=%08x/%08x\n", pin, cfg, io);
+-			}
+-			printf("VEUX TLMM %02u cfg/io=%08x/%08x cfgPA/VA=%#llx/%p ioPA/VA=%#llx/%p\n",
+-			    pin, cfg, io, (unsigned long long)cfg_pa, (void *)cfg_va,
+-			    (unsigned long long)io_pa, (void *)io_va);
+-		}
+-	}
+-	printf("VEUX TLMM %s summary nonzero=%u control_cfg_nonzero=%u/8 (gpio3,7,8,9,21,22,44,51)\n",
+-	    tag, (unsigned)any_nonzero, control_cfg_nonzero);
+-	return any_nonzero;
+-}
+ 
+ void
+ veux_touch_tlmm_drive_check(vm_offset_t tlmm, vm_offset_t pa, const char *stage)
+@@ -121,40 +80,24 @@
+ 	}
+ }
+ 
+-static void
+-touch_probe_tlmm_compact_snapshot(vm_offset_t va, vm_offset_t pa, const char *tag)
++static bool
++touch_probe_tlmm_cfg_dump(vm_offset_t va, vm_offset_t pa, const char *tag)
+ {
+-	uint32_t cfg[64], io[64];
+-	unsigned control_cfg_nonzero = 0;
+-	printf("VEUX TLMM PHOTO BEGIN %s PA=%#llx VA=%p; pins 0-63, pin:cfg/io (hex)\n",
++	bool any_nonzero = false;
++	printf("VEUX TLMM %s CFG DUMP BEGIN PA=%#llx VA=%p bytes=0x40000; CFG32 at PA/VA+pin*0x1000\n",
+ 	    tag, (unsigned long long)pa, (void *)va);
+-	for (unsigned pin = 0; pin < 64; ++pin) {
++	for (unsigned pin = 0; pin < VEUX_TOUCH_TLMM_PINS; ++pin) {
+ 		uint32_t off = TLMM_GPIO_CFG(pin);
+-		cfg[pin] = touch_probe_tlmm_rd(va, pa, off);
+-		io[pin] = touch_probe_tlmm_rd(va, pa, off + 4u);
+-		if ((pin == 3 || (pin >= 7 && pin <= 9) || pin == 21 || pin == 22 || pin == 44 || pin == 51) && cfg[pin] != 0) {
+-			++control_cfg_nonzero;
+-		}
+-	}
+-	for (unsigned row = 0; row < 16; ++row) {
+-		printf("VEUX TLMM HEX %02u:%08x/%08x %02u:%08x/%08x %02u:%08x/%08x %02u:%08x/%08x\n",
+-		    row * 4, cfg[row * 4], io[row * 4], row * 4 + 1, cfg[row * 4 + 1], io[row * 4 + 1],
+-		    row * 4 + 2, cfg[row * 4 + 2], io[row * 4 + 2], row * 4 + 3, cfg[row * 4 + 3], io[row * 4 + 3]);
++		vm_offset_t addr = va + (vm_offset_t)off;
++		uint32_t cfg = touch_probe_tlmm_rd(va, pa, off);
++		any_nonzero |= cfg != 0;
++		printf("VEUX TLMM %s p=%02u PA=%#llx VA=%p CFG=%08x\n", tag, pin,
++		    (unsigned long long)(pa + off), (void *)addr, cfg);
+ 	}
+-	printf("VEUX TLMM PHOTO CTRL cfg/io 03=%08x/%08x 07=%08x/%08x 08=%08x/%08x 09=%08x/%08x\n",
+-	    cfg[3], io[3], cfg[7], io[7], cfg[8], io[8], cfg[9], io[9]);
+-	printf("VEUX TLMM PHOTO CTRL cfg/io 21=%08x/%08x 22=%08x/%08x 44=%08x/%08x 51=%08x/%08x nonzero_cfg=%u/8\n",
+-	    cfg[21], io[21], cfg[22], io[22], cfg[44], io[44], cfg[51], io[51], control_cfg_nonzero);
+-	printf("VEUX TLMM PHOTO END %s; addresses use PA/VA base+pin*0x1000, IO+4; read width 32-bit\n", tag);
++	printf("VEUX TLMM %s CFG DUMP END nonzero=%u\n", tag, (unsigned)any_nonzero);
++	return any_nonzero;
+ }
+ 
+-static void
+-touch_probe_gpio(vm_offset_t tlmm, vm_offset_t pa, unsigned pin, const char *label)
+-{
+-	uint32_t cfg = touch_probe_tlmm_rd(tlmm, pa, TLMM_GPIO_CFG(pin));
+-	uint32_t io = touch_probe_tlmm_rd(tlmm, pa, TLMM_GPIO_INOUT(pin));
+-	printf("VEUX TOUCH PROBE: gpio%u %s cfg=%#x io=%#x\n", pin, label, cfg, io);
+-}
+ 
+ void
+ veux_touch_probe_init(void)
+@@ -181,45 +124,26 @@
+ 	    touch_probe_rd(gcc, GCC_QUP1_S2_BRANCH), touch_probe_rd(gcc, GCC_QUP1_M_AHB_BRANCH),
+ 	    touch_probe_rd(gcc, GCC_QUP1_S_AHB_BRANCH), touch_probe_rd(gcc, GCC_BRANCH_VOTE));
+ 
+-	printf("VEUX TLMM recovery line-info controls: gpio3=aw8624_int gpio7/8/9=NFC gpio21/22/44/51=Goodix; no UART/SPMI/UFS GPIO consumer reported\n");
+-	bool main_live = touch_probe_tlmm_dump(tlmm, VEUX_TOUCH_TLMM_PA, "DT");
+-	if (!main_live) {
+-		vm_offset_t alt = ml_io_map(VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
+-		if (alt) (void)touch_probe_tlmm_dump(alt, VEUX_TOUCH_TLMM_ALT_PA, "ALT-READONLY");
+-		printf("VEUX TLMM: primary DT window all zero; alternate was read-only; pin writes and active probe skipped\n");
+-		if (alt) touch_probe_tlmm_compact_snapshot(alt, VEUX_TOUCH_TLMM_ALT_PA, "ALT-READONLY");
+-		else touch_probe_tlmm_compact_snapshot(tlmm, VEUX_TOUCH_TLMM_PA, "DT-ZERO");
+-		veux_fb_print_build_id();
++	int hold = 0;
++	bool should_hold = PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold)) && hold == 1;
++	if (!should_hold) {
++		printf("VEUX TOUCH PROBE: refusing non-held mode; this diagnostic is read-only\n");
+ 		return;
+ 	}
+-	vm_offset_t active_tlmm = tlmm;
+-	vm_offset_t active_pa = VEUX_TOUCH_TLMM_PA;
+-	printf("VEUX TLMM: active diagnostic PA=%#llx (ADT translation=none)\n",
+-	    (unsigned long long)active_pa);
+-	veux_touch_tlmm_drive_check(active_tlmm, active_pa, "pre-power");
+-	printf("VEUX TLMM MAP ALIAS: one explicit TLMM ml_io_map in this probe; other-map check is source/DT inventory only\n");
+-	printf("VEUX TOUCH PROBE: read-only SE8/GCC snapshot complete\n");
+-
+-	int active = 0;
+-	if (PE_parse_boot_argn("veuxtouchprobeactive", &active, sizeof(active)) && active == 1) {
+-		if (active_pa != VEUX_TOUCH_TLMM_PA) {
+-			printf("VEUX TOUCH ACTIVE: skipped; active power/reset path requires DT TLMM PA\n");
+-		} else {
+-			printf("VEUX TOUCH ACTIVE: bounded power/reset and GT9896 ID read starting\n");
+-			veux_touch_active_probe(se, gcc, active_tlmm);
+-		}
++	printf("VEUX BOOT: variant=held\n");
++	veux_fb_print_build_id();
++	printf("VEUX TLMM: Linux recovery line-info controls gpio3,7,8,9 and Goodix 21,22,44,51; UFS/UART/SPMI controls are from live chardev inventory\n");
++	vm_offset_t alt = ml_io_map(VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
++	if (!alt) {
++		printf("VEUX TLMM MAP ALT failed PA=%#llx size=%#x\n",
++		    (unsigned long long)VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
++		return;
+ 	}
+-	touch_probe_gpio(active_tlmm, active_pa, 19, "SE8-SDA");
+-	touch_probe_gpio(active_tlmm, active_pa, 20, "SE8-SCL");
+-	touch_probe_gpio(active_tlmm, active_pa, 21, "reset");
+-	touch_probe_gpio(active_tlmm, active_pa, 22, "irq");
+-	touch_probe_gpio(active_tlmm, active_pa, 44, "dvdd");
+-	touch_probe_gpio(active_tlmm, active_pa, 51, "avdd");
+-	int hold = 0;
+-	bool should_hold = PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold)) && hold == 1;
+-	if (should_hold) printf("VEUX TOUCH PROBE: holding after TLMM diagnostic; hard reset to reboot\n");
+-	touch_probe_tlmm_compact_snapshot(active_tlmm, active_pa, "FINAL");
++	/* Read-only A/B comparison: no TLMM writes, touch rails, reset, or I2C. */
++	(void)touch_probe_tlmm_cfg_dump(tlmm, VEUX_TOUCH_TLMM_PA, "DT400000");
++	(void)touch_probe_tlmm_cfg_dump(alt, VEUX_TOUCH_TLMM_ALT_PA, "REGBASE500000");
++	printf("VEUX TOUCH PROBE: held before root mount; no UFS writes or GPIO writes; hard reset to reboot\n");
+ 	veux_fb_print_build_id();
+-	if (should_hold) for (;;) __asm__ volatile("wfe" ::: "memory");
++	for (;;) __asm__ volatile("wfe" ::: "memory");
+ }
+ #endif
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -10,7 +10,6 @@
+ #include <sys/systm.h>
+ #include <sys/errno.h>
+ #include <kern/clock.h>
+-#include <vm/pmap.h>
+ #include <kern/thread.h>
+ #include <kern/sched_prim.h>
+ #include <machine/machine_routines.h>
+@@ -22,7 +21,6 @@
+ extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
+ void sweet_touch_init(void);
+-extern ppnum_t pmap_find_phys_nofault(pmap_t pmap, addr64_t va);
+ 
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ #define TOUCH_SE_PA      0x00a84000u
+@@ -142,30 +140,7 @@
+ 	return false;
+ }
+ 
+-#if defined(ARM64_BOARD_CONFIG_VEUX)
+-static void
+-touch_tlmm_map_check(void)
+-{
+-	static const unsigned pins[] = {3, 19, 20, 21, 22, 44, 51};
+-	printf("VEUX TOUCH MAPCHECK: mode=nofault kernel_pmap=%p TLMM va=%#llx pa=%#x page_shift=%u\n",
+-	    pmap_kernel(), (unsigned long long)st.gpio, TOUCH_NORTH_PA, PAGE_SHIFT);
+-	for (unsigned i = 0; i < sizeof(pins) / sizeof(pins[0]); ++i) {
+-		unsigned pin = pins[i];
+-		vm_offset_t off = TOUCH_GPIO_CFG(pin);
+-		vm_offset_t va = st.gpio + off;
+-		uint64_t pa = (uint64_t)TOUCH_NORTH_PA + off;
+-		printf("VEUX TOUCH MAPCHECK: translating pin=%u va=%#llx\n",
+-		    pin, (unsigned long long)va);
+-		ppnum_t actual = pmap_find_phys_nofault(pmap_kernel(), (addr64_t)va);
+-		uint64_t expected = pa >> PAGE_SHIFT;
+-		printf("VEUX TOUCH MAPCHECK: pin=%u cfg pa=%#llx va=%#llx actual_ppn=%#llx expected_ppn=%#llx match=%u cfg=%#x io=%#x\n",
+-		    pin, (unsigned long long)pa, (unsigned long long)va,
+-		    (unsigned long long)actual, (unsigned long long)expected,
+-		    (uint64_t)actual == expected, touch_rd(st.gpio, off),
+-		    touch_rd(st.gpio, off + 4u));
+-	}
+-}
+-#endif
++
+ 
+ static bool
+ touch_gpio(unsigned pin, unsigned mux, unsigned pull, unsigned drive, bool out, bool high)
+@@ -699,7 +674,6 @@
+ 	}
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	/* One run of read-only map/register diagnostics; do not alter clocks or GPIOs. */
+-	touch_tlmm_map_check();
+ 	printf("VEUX TOUCH DIAG: before GCC vote read pa=%#x\n", TOUCH_GCC_PA + TOUCH_GCC_VOTE);
+ 	uint32_t vote = touch_rd(st.gcc, TOUCH_GCC_VOTE);
+ 	printf("VEUX TOUCH DIAG: GCC vote=%#x\n", vote);
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1433,7 +1433,7 @@
+ #define VEUX_FB_HEIGHT             2400u
+ #define VEUX_FB_STRIDE             4320u
+ #define VEUX_FB_MARKER_EDGE        32u
+-#define VEUX_FB_CONSOLE_SCALE      2u
++#define VEUX_FB_CONSOLE_SCALE      1u
+ #define VEUX_FB_CONSOLE_TOP        64u
+ #define VEUX_FB_CONSOLE_FG         0xffffffffu
+ 
+@@ -1462,6 +1462,7 @@
+ static uint32_t veux_fb_console_stride;
+ static uint32_t veux_fb_console_col, veux_fb_console_row;
+ static bool veux_fb_console_ready;
++static bool veux_fb_status_active;
+ /* Explicit first-present handoff: log capture continues while GUI owns pixels. */
+ int veux_gui_console_muted;
+ void
+@@ -1483,8 +1484,9 @@
+ void
+ veux_fb_init(void)
+ {
+-	int write_marker = 1;
+-	int enable_console = 1;
++	int diagnostic = 0;
++	int write_marker = PE_parse_boot_argn("veuxfb", &diagnostic, sizeof(diagnostic)) && diagnostic == 1;
++	int enable_console = PE_parse_boot_argn("veuxfbconsole", &diagnostic, sizeof(diagnostic)) && diagnostic == 1;
+ 
+ 	/* The firmware simple-framebuffer node supplies address, size and format. */
+ 	vm_offset_t fb_vaddr = ml_io_map_wcomb((vm_offset_t)VEUX_FB_BASE, VEUX_FB_SIZE);
+@@ -1494,8 +1496,9 @@
+ 	}
+ 
+ 	volatile uint32_t *fb = (volatile uint32_t *)fb_vaddr;
++	veux_fb_console_base = fb;
++	veux_fb_console_stride = VEUX_FB_STRIDE;
+ 	if (enable_console != 0) {
+-		veux_fb_console_base = fb;
+ 		veux_fb_console_stride = VEUX_FB_STRIDE;
+ 		veux_fb_console_col = veux_fb_console_row = 0;
+ 		/* Erase stale shim/previous console glyphs only inside the console box. */
+@@ -1505,6 +1508,7 @@
+ 		veux_fb_log("VEUX simplefb console 1080x2400 stride=4320 format=a8r8g8b8\n");
+ 	}
+ 	veux_fb_print_build_id();
++	if (!enable_console) veux_gui_console_muted = 1;
+ 	if (write_marker != 0) {
+ 		for (uint32_t y = 16; y < 16 + VEUX_FB_MARKER_EDGE; y++) {
+ 			volatile uint32_t *row = fb + y * (VEUX_FB_STRIDE / sizeof(uint32_t));
+@@ -1527,6 +1531,7 @@
+ 	}
+ }
+ 
++
+ void
+ veux_fb_console_putc(char c)
+ {
+@@ -1649,4 +1654,50 @@
+ 		veux_fb_panic_putc('\n');
+ 	}
+ }
++void
++veux_fb_normal_status_draw(void)
++{
++	if (!veux_fb_console_base || veux_fb_console_ready) return;
++	static const char text[] = "variant=normal ID=";
++	const char *id = build_id_line;
++	while (*id && *id != '=') ++id;
++	if (*id == '=') ++id;
++	const char *id_end = id;
++	while (*id_end && *id_end != '\n') ++id_end;
++	volatile uint32_t *fb = veux_fb_console_base;
++	const uint32_t x0 = 12, y0 = 12, pad = 4;
++	const uint32_t width = (uint32_t)(sizeof(text) - 1 + (id_end - id)) * 8u + pad * 2;
++	for (uint32_t y = y0; y < y0 + 16 + pad * 2; ++y)
++		for (uint32_t x = x0; x < x0 + width; ++x) fb[y * VEUX_FB_WIDTH + x] = 0xff000000u;
++	uint32_t x = x0 + pad;
++	for (const unsigned char *c = (const unsigned char *)text; *c; ++c, x += 8) {
++		for (unsigned y = 0; y < 16; ++y) {
++			unsigned char bits = iso_font[(unsigned)*c * 16 + y];
++			for (unsigned b = 0; b < 8; ++b) if (bits & (0x80u >> b))
++				fb[(y0 + pad + y) * VEUX_FB_WIDTH + x + b] = 0xffffffffu;
++		}
++	}
++	for (const unsigned char *c = (const unsigned char *)id; c < (const unsigned char *)id_end; ++c, x += 8) {
++			for (unsigned y = 0; y < 16; ++y) {
++				unsigned char bits = iso_font[(unsigned)*c * 16 + y];
++				for (unsigned b = 0; b < 8; ++b) if (bits & (0x80u >> b))
++					fb[(y0 + pad + y) * VEUX_FB_WIDTH + x + b] = 0xffffffffu;
++			}
++	}
++	veux_fb_status_active = true;
++	__asm__ volatile("dsb sy" ::: "memory");
++}
++
++void
++veux_fb_normal_status_clear(void)
++{
++	if (!veux_fb_status_active || !veux_fb_console_base) return;
++	volatile uint32_t *fb = veux_fb_console_base;
++	const uint32_t x0 = 12, y0 = 12, width = 240, height = 24;
++	for (uint32_t y = y0; y < y0 + height; ++y)
++		for (uint32_t x = x0; x < x0 + width; ++x) fb[y * VEUX_FB_WIDTH + x] = 0xff000000u;
++	veux_fb_status_active = false;
++	__asm__ volatile("dsb sy" ::: "memory");
++}
++
+ #endif /* ARM64_BOARD_CONFIG_VEUX */
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -37,6 +37,8 @@
+ #include "SweetSurface.h"
+ 
+ extern "C" void veux_fb_gui_handoff(void);
++extern "C" void veux_fb_normal_status_draw(void);
++extern "C" void veux_fb_normal_status_clear(void);
+ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+ 
+ #if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
+@@ -55,6 +57,7 @@
+ #include <kern/debug.h>
+ #endif
+ #include <sys/proc.h>
++#include <libkern/libkern.h>
+ 
+ enum {
+ 	kSweetFBGetLayerDefaultSurface  = 3,
+@@ -559,6 +562,7 @@
+ 				fConsolePaused = true;
+ 				veux_gui_first_present = 1;
+ 				IOLog("VEUX GUI: first valid software display present\n");
++				veux_fb_normal_status_clear();
+ 				uint32_t quiet = 0;
+ 				if (PE_parse_boot_argn("veux_gui_noconsole", &quiet, sizeof(quiet)) && quiet == 1) {
+ 					veux_fb_gui_handoff();
+@@ -588,6 +592,13 @@
+ 	veux_gui_client_type = type;
+ 	veux_gui_save_process_name(veux_gui_init_process);
+ 	IOLog("VEUX GUI: IOMFB client initialized process=%s type=%u\n", name, type);
++	int diagnostic_console = 0;
++	if (strcmp(name, "backboardd") == 0 || strcmp(name, "SpringBoard") == 0) {
++		if (!PE_parse_boot_argn("veuxfbconsole", &diagnostic_console, sizeof(diagnostic_console)) || diagnostic_console != 1) {
++			IOLog("VEUX BOOT: variant=normal status=temporary\n");
++			veux_fb_normal_status_draw();
++		}
++	}
+ #endif
+ 	return true;
+ }
+-- 
+2.39.5

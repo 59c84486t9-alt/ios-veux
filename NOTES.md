@@ -4079,6 +4079,68 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   now starts or that the AppleKeyStore lookup succeeded. The next diagnostic
   needs the current screen/photo; if it falls back to Fastboot, read the new
   boot state from recovery before changing another component.
+
+### IMG_0832 and 405907 GUI regression — 2026-10-27
+
+- Reviewed the user's 83-second Drive clip `IMG_0832.MOV`, recorded after the
+  40590767320 no-fault TLMM translation wrapper was flashed. The console shows
+  SpringBoard repeatedly exiting with signal 5 (SIGTRAP); the visible GUI
+  summary is `registered=1 fdr=0x3 list=0x7 init=0/0:none ready=0:none ...
+  selectors=0x0 swaps=0 present=0`. AppleCLCD is registered, but no window-
+  server user client becomes ready and no frame is presented. This explains
+  the absent GUI; it is a userspace SpringBoard crash loop, not evidence of a
+  kernel panic. The clip does not make the no-fault TLMM mapcheck result
+  readable, so it does not resolve the GPIO mapping issue.
+- The frame also logs `SWEET AKS: keybag ...`, indicating the process got past
+  the earlier missing-AppleKeyStore crash. The current 405907 wrapper omitted
+  `veuxsandbox=1` and `veuxiolog=backboardd,SpringBoard`, both present in the
+  known lock-screen wrapper 40579251639. The sandbox flag is the strongest
+  configuration difference associated with the previously working GUI; the
+  video alone cannot prove it is the sole cause.
+- Prepared a retest using the unchanged 40590767320 CI kernel and exact phone
+  DTB, restoring the known-good 405792 boot arguments (including sandbox and
+  iolog). The extracted ADT exactly reproduced the CI payload hash before
+  repacking. Strict wrapper verification passed; image SHA-256 is
+  `d5f0ceed00e5c92f9eb1ef773eb4265353f3eee2349f91f2739e52527794e926` at
+  `/tmp/veux-touch-nofault-40590767320/shim-boot-veux-xnu-40590767320-lockscreen-args.img`.
+  No CI rebuild was needed because the kernel is unchanged. The host currently
+  sees Qualcomm USB `05c6:900e` (QUSB_BULK), not Fastboot, so this image has not
+  been flashed. Keep `boot_a` untouched; after Fastboot reconnects, the
+  authorized test target remains `boot_b` only.
+- The user returned the phone to Fastboot. Verified serial `4078cac030c8`,
+  product `veux`, unlocked state, current slot B, and 128 MiB `boot_b`. The
+  prepared wrapper hash matched; flashed it to `boot_b` only, confirmed slot B
+  remained active, then rebooted. Fastboot send/write/reboot returned OKAY;
+  `boot_a` was not written. Await the screen result and touch response.
+
+### IMG_0833 result — 2026-10-28
+
+- Reviewed the 79-second `IMG_0833.MOV` after the 40590767320 wrapper with the
+  405792 GUI boot arguments. Early logs show AppleCLCD's user client becomes
+  ready only for `IOMFB_FDR_Loader`; backboardd opens `SweetHIDTouch`, but the
+  clip does not show backboardd's display client becoming ready, a first
+  present, or a lock screen. No explicit SpringBoard crash is legible in this
+  clip, unlike IMG_0832.
+- The console shows `VEUX TOUCH MAPCHECK: mode=nofault ...` followed by
+  `translating pin=3 ...`, but no matching `pin=3 ... actual_ppn=...` result
+  or later per-pin mapcheck line is visible. The large hex table is the
+  scheduler's thread/wait-state diagnostic (`vw_show`), not a TLMM register
+  dump; it provides no evidence that GPIO registers read nonzero. Thus the
+  TLMM read/write question remains unresolved, and the no-fault translation
+  diagnostic may be stalling or otherwise disrupting this path.
+- The verified 40579251639 and 40590767320 kernels have identical boot args
+  and all applied patches in common except 405907 adds only
+  `0140-veux-touch-tlmm-physical-map-check.patch` and
+  `0141-veux-touch-nofault-tlmm-translation.patch`. 405792 is the last
+  user-confirmed lock-screen build. After the user returned the phone to
+  Fastboot, verified serial `4078cac030c8`, product `veux`, unlocked state,
+  current slot B, and `boot_b` capacity `0x8000000`. Restored the verified
+  40579251639 wrapper to `boot_b` only (SHA-256
+  `62358aed882066b5bb3f6b99e262cf1f137866675b120207e2089a35711aec6d`),
+  confirmed B active, and reboot returned OKAY. `boot_a` was not written.
+  The host currently sees neither Fastboot nor ADB, so the restored build's
+  screen result is pending. Continue touch work without the two mapcheck
+  patches; do not infer that the incomplete mapcheck proves TLMM is unmapped.
 - The linked Drive file `VID_20261026_220608.mp4` (90.69 seconds) is useful:
   it shows the XNU diagnostic screen, repeated backboardd IOKit matching
   queries for `IOAcceleratorES` returning `0 found`, and the Apple logo at
@@ -4368,3 +4430,41 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `VEUX GPI SUMMARY`, or `VEUX SMMU SUMMARY`; this clip therefore does not
   confirm the new summary worker's output. It ends at the Apple logo and does
   not confirm lock-screen arrival or touch response.
+
+### VEUX two-variant TLMM test preparation — 2026-10-28
+
+- Confirmed the downstream Xiaomi Blair pinctrl math in
+  `research/kernel_xiaomi_sm6375`: `REG_BASE=0x100000`, GPIO config offset
+  `REG_BASE + pin*0x1000`, IO offset `+4`, interrupt config/status `+8/+0xc`.
+  The phone DT resource starts at `0x400000`, so Linux's effective GPIO19 CFG
+  address is `0x513000`. This is source-grounded; XNU still needs the live
+  read-only comparison to establish which mapping returns active register
+  values.
+- Added patch 0142 for a read-only held probe of both `0x400000..0x440000` and
+  `0x500000..0x540000`, pins 0-63, with CFG byte PA/VA and 32-bit values. The
+  held argument set omits `rootrw`, `ufsrw`, `veuxlog`, and active-touch flags;
+  the probe runs in `sweet_ufs_init()` before `sweet_ufs_rootdev()` returns to
+  root mount and then parks in WFE. It performs no UFS writes, GPIO writes,
+  rail operations, reset, or I2C.
+- Removed the no-fault `pmap_find_phys` map-check call from the normal
+  `sweet_touch_init()` path. This diagnostic was visible in the recent
+  no-lockscreen boot clip and is not needed for the direct TLMM A/B reads.
+- Added a normal variant with the explicit `rootrw=1 ufsrw=1` pair, no hold,
+  no probe/full framebuffer console, and a temporary corner build-ID label
+  cleared on the first valid GUI present. The original user correction stands:
+  do not reflash the pristine root image by default; use the existing root
+  contents unless a diagnosed issue requires replacing them.
+- Updated the CI kernel manifest to include the complete boot-argument strings
+  for both variants and enforce the safety gates. Wrapper verification can now
+  bind a wrapper to one variant and embed both full strings in its manifest.
+- Local patch dry-run, repository validation, Python syntax checks, shell
+  syntax check, and `git diff --check` pass. Patch 0142 has not yet been built
+  by CI; no wrapper has been produced or flashed in this update. Next: review
+  the final diff, commit and push only the intended files, dispatch strict XNU
+  CI on `veux-xnu-build`, and only after CI passes package the held wrapper
+  from the existing root/ADT and verify `boot_b` before any write. Never flash
+  `boot_a`.
+- Push attempt for commit 8298834 was rejected by GitHub: the connected OAuth
+  token lacks the `workflow` scope needed to update `.github/workflows/xnu.yml`.
+  No CI run could be dispatched from this unpushed commit. The commit remains
+  local on `veux-xnu-build`; no device or root-image write was made.
