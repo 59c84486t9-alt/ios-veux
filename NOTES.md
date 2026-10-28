@@ -21,6 +21,11 @@
   and exact wrapper verification are still required before considering a
   boot_b-only test. Keep the currently bootable image until the candidate is
   verified; never write boot_a.
+- First CI dispatch [40713650255](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40713650255)
+  correctly rejected the 0147 patch because its new hunk used pre-port line
+  numbers after prior touch patches had shifted `sweet_touch.c`. No kernel was
+  built and no image was produced or flashed. The hunk is repositioned using
+  the cumulative patch offset; rerun strict CI before staging any image.
 
 ## >>> UPDATE 2026-10-27 (VEUX SE8 FIFO GT9896 driver CI and boot_b test) <<<
 
