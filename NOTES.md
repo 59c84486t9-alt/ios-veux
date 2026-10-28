@@ -4683,3 +4683,35 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   message length and DMA buffer constraints. Do not change HID/report parsing
   until an ID read succeeds. Current lockscreen image remains booted; no
   additional flash has been made.
+
+## >>> UPDATE 2026-10-28 (per-read TLMM checkpoint candidate) <<<
+
+- The user reports boot succeeds but touch still does not work. The latest
+  lockscreen photo shows the touch diagnostics reversed, but the weekday and
+  clock text are reversed too; this is consistent with the photo itself being
+  horizontally mirrored. The XNU glyph blitter uses increasing x positions and
+  high-bit-first glyph pixels, so I am preserving its normal left-to-right
+  rendering rather than reversing only the overlay.
+- Recovery GPIO line-info gives Linux consumers/flags, not TrustZone ownership.
+  The downstream `blair-pinctrl.dtsi` defines the TLMM reg at `0x400000` and
+  the touch overlay defines GPIO19/20/21/22/44/51, but there are no
+  `qcom,gpios-reserved`, reserved GPIO ranges, or TZ-owned GPIO ranges in those
+  DTS files. Do not infer that consumer-owned lines are secure.
+- Added patch 0149 to compare candidate `0x500000` and primary `0x400000`
+  CFG windows with 32-bit one-pin reads. It first tests pins 19,20,21,22,44,51,
+  then reads pins 4-63 sequentially (excluding duplicates); pins 0-3 are
+  skipped. Every access logs BEFORE/AFTER with sequence, pin, PA, VA and value;
+  a bottom-left framebuffer checkpoint is drawn and flushed before the load.
+  This path performs no GPIO, rail, reset, I2C or UFS writes and remains held
+  before root mount. XNU's abort annotation reports a synchronous fault, but a
+  true interconnect stall cannot be recovered by a software checkpoint; its
+  last displayed pin is the diagnosable stopping point.
+- The status overlay is moved to the bottom-left, labeled `unsupported IC
+  flags=0x...`, `I2C IRQ bits=0x...`, and `SE/TX/RX=0x...`, and cleared on the
+  first GUI present. Subsequent GUI frames no longer redraw stale history;
+  later touch status updates still render their current history. This change
+  improves diagnostics and is not itself a touch fix.
+- A dry-run of patch 0149 against exact CI buildtree 40727039463 passed, as did
+  `tools/validate-repo.py`, Python syntax checks, and `git diff --check`. Strict
+  CI, wrapper verification and device boot are still pending. Do not alter
+  `boot_a`; only a held wrapper to `boot_b` is in scope after verification.

@@ -65,6 +65,7 @@ for patch in (
     "0146-veux-touch-gui-status.patch",
     "0147-veux-touch-status-persistent-present.patch",
     "0148-veux-geni-fifo-linux-sequence.patch",
+    "0149-veux-tlmm-per-read-checkpoints-and-touch-overlay.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -88,16 +89,16 @@ needles = {
     "software_gui_userclient_base_fallback": b"VEUX GUI: IOMFB base start rejected; continuing software client",
     "software_gui_swap_trace": b"VEUX GUI: framebuffer swap %u mask=0x%x",
     "software_apple_keystore_service": b"SWEET AKS: AppleKeyStore registered (no passcode, unlocked)",
-    "veux_touch_probe_before": b"VEUX TLMM BEFORE pin=%u CFG PA=",
+    "veux_touch_probe_before": b"VEUX TLMM BEFORE #%u pin=%u CFG PA=",
     "veux_touch_probe_after": b"VEUX TLMM AFTER pin=%u CFG PA=",
     "veux_touch_probe_fault": b"VEUX TLMM FAULT pin=%u PA=",
-    "veux_touch_probe_hold": b"held before root mount; exactly two read-only TLMM CFG reads; no UFS/GPIO writes",
+    "veux_touch_probe_hold": b"held before root mount; read-only per-pin CFG comparison complete; GPIO0-3 skipped; no UFS/GPIO writes",
     "veux_variant_held": b"variant=held",
     "veux_variant_normal": b"variant=normal ID=",
     "veux_touch_gui_status": b"TOUCH: GT9896 ID read FAILED",
     "veux_touch_gui_status_repaint": b"TOUCH: report read FAILED err=",
-    "veux_touch_gui_i2c_irq": b"TOUCH: I2C IRQ bits",
-    "veux_touch_gui_i2c_state": b"TOUCH: SE/tx/rx",
+    "veux_touch_gui_i2c_irq": b"TOUCH: I2C IRQ bits=",
+    "veux_touch_gui_i2c_state": b"TOUCH: SE/TX/RX=",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
     "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",
@@ -163,19 +164,24 @@ source_checks["veux_touch_tlmm_ab_dump_is_read_only_and_held_before_mount"] = (
     'PE_parse_boot_argn("veuxtouchprobe", &enabled, sizeof(enabled))' in touch_probe
     and 'PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold))' in touch_probe
     and "VEUX_TOUCH_TLMM_ALT_PA 0x00500000u" in touch_probe
+    and "VEUX_TOUCH_TLMM_PA     0x00400000u" in touch_probe
     and "volatile uint32_t" in touch_probe
-    and "touch_probe_tlmm_cfg_once(tlmm, VEUX_TOUCH_TLMM_ALT_PA, 3)" in touch_probe
-    and "touch_probe_tlmm_cfg_once(tlmm, VEUX_TOUCH_TLMM_ALT_PA, 19)" in touch_probe
-    and "VEUX TLMM BEFORE pin=%u CFG PA=" in touch_probe
+    and "touch_probe_tlmm_cfg_once(alt, VEUX_TOUCH_TLMM_ALT_PA, pin, seq)" in touch_probe
+    and "touch_probe_tlmm_cfg_once(primary, VEUX_TOUCH_TLMM_PA, pin, seq)" in touch_probe
+    and "static const unsigned touch_pins[] = {19, 20, 21, 22, 44, 51}" in touch_probe
+    and "for (unsigned pin = 4; pin < 64; ++pin)" in touch_probe
+    and "VEUX TLMM BEFORE #%u pin=%u CFG PA=" in touch_probe
     and "VEUX TLMM AFTER pin=%u CFG PA=" in touch_probe
     and "VEUX TLMM FAULT pin=%u PA=" in touch_probe
-    and "exactly two read-only TLMM CFG reads" in touch_probe
+    and "veux_fb_touch_probe_checkpoint(seq, pin," in touch_probe
+    and "read-only per-pin CFG comparison complete; GPIO0-3 skipped; no UFS/GPIO writes" in touch_probe
     and "veux_touch_probe_fault_note(esr, far, get_saved_state_pc(&context->ss))" in (a.source_root / "osfmk/arm64/sleh.c").read_text()
     and 'for (;;) __asm__ volatile("wfe"' in touch_probe
     and "VEUX TOUCH PROBE: refusing non-held mode; this diagnostic is read-only" in touch_probe
     and 'veux_touch_probe_init();' in ufs
     and ufs.index('veux_touch_probe_init();') < ufs.index('sweet_ufs_rootdev(')
 )
+
 source_checks["pmap_nofault_translation_probe_removed_from_touch_startup"] = (
     "touch_tlmm_map_check" not in (a.source_root / "bsd/dev/sweet_touch.c").read_text()
     and "pmap_find_phys_nofault" not in (a.source_root / "bsd/dev/sweet_touch.c").read_text()
@@ -205,14 +211,20 @@ source_checks["veux_geni_fifo_sequence_matches_linux"] = (
     and "touch_wr(st.se, 0x814, tx_depth);" in touch_driver
     and "touch_wr(st.se, 0xe1c, 0); /* mask external IRQ routing; poll local status */" in touch_driver
 )
-source_checks["veux_touch_status_survives_gui_presents_and_identifies_failures"] = (
+source_checks["veux_touch_status_is_labeled_bottom_left_and_cleared_on_gui_present"] = (
     "veux_fb_touch_status_redraw(void)" in serial
-    and "veux_fb_touch_status_redraw();" in (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
-    and "const uint32_t x0 = 12, y0 = 160" in serial
+    and "veux_fb_touch_status_clear(void)" in serial
+    and "veux_fb_touch_status_clear();" in (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
+    and "veux_fb_touch_status_redraw();" not in (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
+    and "VEUX_FB_HEIGHT - 300u + row * 32u" in serial
+    and 'state == 14 ? "TOUCH: unsupported IC flags="' in serial
+    and 'state == 15 ? "TOUCH: I2C IRQ bits="' in serial
+    and 'state == 16 ? "TOUCH: SE/TX/RX="' in serial
     and "veux_fb_touch_status(7, pin)" in touch_driver
     and "veux_fb_touch_status(ge == 0 ? 5u : 6u" in touch_driver
     and "TOUCH: GPIO write/readback FAILED pin=" in serial
 )
+
 source_checks["direct_framebuffer_build_id_print"] = (
     'veux_fb_print_build_id();' in fb_init
     and 'VEUX BUILD: ID=' in serial
