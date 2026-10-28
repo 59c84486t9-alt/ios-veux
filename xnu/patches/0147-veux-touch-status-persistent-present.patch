@@ -1,8 +1,8 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 Subject: [PATCH] Keep VEUX touch diagnostics visible over GUI
 
-Move the touch status below the notch area, redraw it after each successful
-GUI framebuffer present, and report the stage and pin/error for early exits.
+Keep a five-entry touch-stage history below the notch, redraw it after each
+successful GUI framebuffer present, and report stage plus pin/error for exits.
 
 diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
 --- a/bsd/dev/sweet_touch.c
@@ -77,21 +77,24 @@ diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
 diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -1700,8 +1700,11 @@
+@@ -1700,8 +1700,14 @@
  	__asm__ volatile("dsb sy" ::: "memory");
  }
  
 -void
 -veux_fb_touch_status(unsigned int state, unsigned int detail)
-+static volatile unsigned int veux_fb_touch_state = 0xffffffffu;
-+static volatile unsigned int veux_fb_touch_detail;
++#define VEUX_TOUCH_STATUS_HISTORY 5u
++static volatile unsigned int veux_fb_touch_state[VEUX_TOUCH_STATUS_HISTORY] = {
++	0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu, 0xffffffffu
++};
++static volatile unsigned int veux_fb_touch_detail[VEUX_TOUCH_STATUS_HISTORY];
 +
 +static void
-+veux_fb_touch_status_draw(unsigned int state, unsigned int detail)
++veux_fb_touch_status_draw(unsigned int state, unsigned int detail, unsigned int row)
  {
  	if (!veux_fb_console_base) return;
  	const char *message = state == 0 ? "TOUCH: worker started" :
-@@ -1709,29 +1712,40 @@
+@@ -1709,29 +1715,40 @@
  	    state == 2 ? "TOUCH: GCC and SE8 setup" :
  	    state == 3 ? "TOUCH: GPIO and power setup" :
  	    state == 4 ? "TOUCH: reading GT9896 ID" :
@@ -109,7 +112,7 @@ diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
  	volatile uint32_t *fb = veux_fb_console_base;
 -	const uint32_t x0 = 12, y0 = 44, pad = 6;
 +	const uint32_t stride = veux_fb_console_stride / 4u;
-+	const uint32_t x0 = 12, y0 = 160, pad = 6;
++	const uint32_t x0 = 12, y0 = 160u + row * 32u, pad = 6;
  	uint32_t msg_len = 0;
  	while (message[msg_len]) ++msg_len;
 -	const uint32_t width = (msg_len + 17u) * 8u + pad * 2u;
@@ -139,7 +142,7 @@ diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
  		}
  	}
  	for (int shift = 28; shift >= 0; shift -= 4, x += 8u) {
-@@ -1739,10 +1753,26 @@
+@@ -1739,10 +1756,33 @@
  		for (unsigned y = 0; y < 16; ++y) {
  			unsigned char bits = iso_font[(unsigned)c * 16u + y];
  			for (unsigned b = 0; b < 8; ++b) if (bits & (0x80u >> b))
@@ -150,20 +153,27 @@ diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
  	__asm__ volatile("dsb sy" ::: "memory");
  }
  
++void veux_fb_touch_status_redraw(void);
++
 +void
 +veux_fb_touch_status(unsigned int state, unsigned int detail)
 +{
-+	veux_fb_touch_detail = detail;
-+	veux_fb_touch_state = state;
-+	veux_fb_touch_status_draw(state, detail);
++	for (unsigned int i = VEUX_TOUCH_STATUS_HISTORY - 1u; i > 0; --i) {
++		veux_fb_touch_state[i] = veux_fb_touch_state[i - 1u];
++		veux_fb_touch_detail[i] = veux_fb_touch_detail[i - 1u];
++	}
++	veux_fb_touch_detail[0] = detail;
++	veux_fb_touch_state[0] = state;
++	veux_fb_touch_status_redraw();
 +}
-+
 +void
 +veux_fb_touch_status_redraw(void)
 +{
-+	unsigned int state = veux_fb_touch_state;
-+	if (state != 0xffffffffu)
-+		veux_fb_touch_status_draw(state, veux_fb_touch_detail);
++	for (unsigned int row = 0; row < VEUX_TOUCH_STATUS_HISTORY; ++row) {
++		unsigned int state = veux_fb_touch_state[row];
++		if (state != 0xffffffffu)
++			veux_fb_touch_status_draw(state, veux_fb_touch_detail[row], row);
++	}
 +}
 +
  #endif /* ARM64_BOARD_CONFIG_VEUX */
@@ -178,7 +188,7 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
  extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
  
  #if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
-@@ -568,6 +569,7 @@
+@@ -568,7 +569,7 @@
  					veux_fb_gui_handoff();
  				}
  			}

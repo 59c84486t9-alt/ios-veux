@@ -4546,11 +4546,11 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   a later GUI framebuffer present could overwrite it, and the line sat in the
   top notch/status area. Early `goto out` paths also left only a broad stage
   marker instead of a failure reason.
-- Added patch 0147 to redraw the retained touch status after every valid GUI
-  framebuffer present, move it below the notch to y=160, and distinguish
-  MMIO-map, GCC-clock, SE8, GPIO readback, GT9896 ID, unsupported-IC, and
-  report-read failures. The status reports the failing GPIO or error value.
-  It does not alter boot arguments or touch-register sequencing.
+- Patch 0147 now retains the last five touch-probe stages in a compact status
+  panel below the notch, redraws them after each valid GUI framebuffer present,
+  and distinguishes MMIO-map, GCC-clock, SE8, GPIO readback, GT9896 ID,
+  unsupported-IC, and report-read failures. It does not alter boot arguments
+  or touch-register sequencing, and does not by itself enable touch.
 - Exact CI 40695833403 build-tree patch dry-run passed; repo validation and
   Python syntax checks pass. New strict CI and wrapper verification are needed
   before flashing. The phone remains on the previously verified normal build;
