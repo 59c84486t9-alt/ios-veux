@@ -20,7 +20,7 @@ pre=r'''
 #include <assert.h>
 #include <stdio.h>
 #define VEUX_FB_WIDTH 1080u
-#define VEUX_FB_CONSOLE_SCALE 2u
+#define VEUX_FB_CONSOLE_SCALE 1u
 #define VEUX_FB_CONSOLE_TOP 64u
 #define VEUX_FB_CONSOLE_FG 0xffffffffu
 static uint32_t memory[1080*850];
@@ -29,15 +29,17 @@ static unsigned veux_fb_console_stride=4320,veux_fb_console_col,veux_fb_console_
 static bool veux_fb_console_ready=true;
 static unsigned char iso_font[128*16];
 static int veux_gui_console_muted;
+static bool veux_fb_status_active;
+static const char build_id_line[]="VEUX BUILD ID=host-test\n";
 static bool panic_active(void) { return false; }
 '''
 post=r'''
 int main(void) {
  for (unsigned i=0;i<1080*850;i++) memory[i]=0x12345678;
- unsigned rows=(800-64)/32;
+ unsigned rows=(800-64)/(16*VEUX_FB_CONSOLE_SCALE);
  for(unsigned i=0;i<rows;i++) veux_fb_console_putc('\n');
  assert(veux_fb_console_row==0);
- for(unsigned y=64;y<64+rows*32;y++)
+ for(unsigned y=64;y<64+rows*16*VEUX_FB_CONSOLE_SCALE;y++)
   for(unsigned x=0;x<1080;x++) assert(memory[y*1080+x]==0xff000000);
  for(unsigned y=800;y<850;y++) assert(memory[y*1080]==0x12345678);
  for(unsigned y=0;y<64;y++) assert(memory[y*1080]==0x12345678);
