@@ -20,6 +20,7 @@ pre=r'''
 #include <assert.h>
 #include <stdio.h>
 #define VEUX_FB_WIDTH 1080u
+#define VEUX_FB_HEIGHT 2400u
 #define VEUX_FB_CONSOLE_SCALE 1u
 #define VEUX_FB_CONSOLE_TOP 64u
 #define VEUX_FB_CONSOLE_FG 0xffffffffu
