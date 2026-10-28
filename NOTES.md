@@ -5,9 +5,12 @@
   hooks inert; the Goodix startup, GPIO/I2C transactions, status logging and
   touch driver remain enabled. The normal GUI and build ID boot arguments are
   unchanged.
-- The strict kernel manifest now requires 0151 and checks that the visual hook
-  is disabled while the VEUX touch driver remains present. Repository patch,
-  Python and shell validation pass. Commit and strict CI build are pending.
+- The strict kernel manifest now requires 0151 and checks that the draw/clear
+  hooks are disabled while the VEUX touch driver remains present. Repository
+  patch, Python and shell validation pass. CI 40781581552 stopped at patch
+  preflight due to the initial hunk location; CI 40782464057 applied the patch
+  and compiled XNU but the manifest still expected GUI overlay strings. Those
+  stale binary-string expectations are now removed; strict CI is pending.
 - No device flash is part of this build request.
 
 ## >>> UPDATE 2026-10-28 (40727039463 FIFO alignment boot_b test) <<<
