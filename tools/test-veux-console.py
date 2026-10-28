@@ -43,7 +43,7 @@ int main(void) {
   for(unsigned x=0;x<1080;x++) assert(memory[y*1080+x]==0xff000000);
  for(unsigned y=800;y<850;y++) assert(memory[y*1080]==0x12345678);
  for(unsigned y=0;y<64;y++) assert(memory[y*1080]==0x12345678);
- veux_fb_console_col=67;veux_fb_console_putc('A');assert(veux_fb_console_col==1&&veux_fb_console_row==1);
+ veux_fb_console_col=VEUX_FB_WIDTH/(8*VEUX_FB_CONSOLE_SCALE);veux_fb_console_putc('A');assert(veux_fb_console_col==1&&veux_fb_console_row==1);
  veux_fb_console_putc('\r');assert(veux_fb_console_col==0);
  puts("PASS: actual console wraps with cleared lines, CR resets column, writes stay in console region. RAM only, no hardware ordering/scanout coverage.");
 }
