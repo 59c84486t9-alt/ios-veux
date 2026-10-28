@@ -1,17 +1,22 @@
-## >>> UPDATE 2026-10-28 (touch status overlay disabled build pending) <<<
+## >>> UPDATE 2026-10-29 (touch lockscreen overlay disabled build) <<<
 
-- The user reports VEUX touch now works and asked for a build without the touch
-  lockscreen overlay. Patch 0151 makes only the framebuffer status and clear
-  hooks inert; the Goodix startup, GPIO/I2C transactions, status logging and
-  touch driver remain enabled. The normal GUI and build ID boot arguments are
-  unchanged.
-- The strict kernel manifest now requires 0151 and checks that the draw/clear
-  hooks are disabled while the VEUX touch driver remains present. Repository
-  patch, Python and shell validation pass. CI 40781581552 stopped at patch
-  preflight due to the initial hunk location; CI 40782464057 applied the patch
-  and compiled XNU but the manifest still expected GUI overlay strings. Those
-  stale binary-string expectations are now removed; strict CI is pending.
-- No device flash is part of this build request.
+- Patch 0151 makes the framebuffer touch status renderer and handoff clear hook
+  inert. The VEUX Goodix startup and GPIO/I2C input path remain active. The GUI
+  touch-overlay-only kernel string checks were removed; source checks still
+  require the overlay hooks to be inert and the touch driver to be present.
+- Strict CI [40784264836](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40784264836)
+  passed patch application, XNU compilation, host diagnostics, feature manifest,
+  build-tree packaging and KDK inspection. Patch 0151 is APPLIED and
+  `veux_touch_overlay_disabled_with_touch_driver_enabled` is true. Kernel
+  SHA-256: `2e6faaa2abb602068423d7528c0a16bab439962465c20509b525c54e41e53392`.
+- Built `/home/nyra/veux-artifacts/40784264836/normal.img` using the CI kernel,
+  the verified VEUX boot-v2 shim/header, phone DTB and established normal boot
+  arguments. `verify-veux-wrapper.py --variant normal` passed payload
+  reconstruction, run/build ID, exact DTB, boot arguments and patch-status
+  checks. Wrapper SHA-256:
+  `7d42d87e8072ec3c4c51d43b416003c8bc02fad3edb9ede7e9b3e6aef4aa53f9`.
+  Build ID `40784264836` remains printed on screen. No device flash was made;
+  the wrapper is ready for a boot_b-only test when requested.
 
 ## >>> UPDATE 2026-10-28 (40727039463 FIFO alignment boot_b test) <<<
 
