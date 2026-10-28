@@ -155,9 +155,10 @@ source_checks["veux_touch_tlmm_ab_dump_is_read_only_and_held_before_mount"] = (
     and "VEUX_TOUCH_TLMM_ALT_PA 0x00500000u" in touch_probe
     and "for (unsigned pin = 0; pin < VEUX_TOUCH_TLMM_PINS; ++pin)" in touch_probe
     and "volatile uint32_t" in touch_probe
-    and 'touch_probe_tlmm_cfg_dump(tlmm, VEUX_TOUCH_TLMM_PA, "DT400000")' in touch_probe
-    and 'touch_probe_tlmm_cfg_dump(alt, VEUX_TOUCH_TLMM_ALT_PA, "REGBASE500000")' in touch_probe
-    and "PA=%#llx VA=%p CFG=%08x" in touch_probe
+    and 'touch_probe_tlmm_cfg_dump(tlmm, VEUX_TOUCH_TLMM_ALT_PA, "REGBASE500000")' in touch_probe
+    and "stride=0x1000 width=32; rows show PA/VA offsets" in touch_probe
+    and "%02u:%08x@+%05x" in touch_probe
+    and "prior capture stopped during PA=0x401000 read" in touch_probe
     and "no UFS writes or GPIO writes" in touch_probe
     and 'for (;;) __asm__ volatile("wfe"' in touch_probe
     and "VEUX TOUCH PROBE: refusing non-held mode; this diagnostic is read-only" in touch_probe
@@ -386,7 +387,7 @@ manifest = {
     "kernel_path": str(a.kernel),
     "variants": {
         "normal": {"boot_args": a.boot_args, "root_mode_requested": "rw"},
-        "held": {"boot_args": a.held_boot_args, "root_mode_requested": "ro", "probe": "read-only dual TLMM map dump; WFE before root mount"},
+        "held": {"boot_args": a.held_boot_args, "root_mode_requested": "ro", "probe": "read-only 0x500000 TLMM dump; WFE before root mount"},
     },
     "boot_args": a.boot_args,
     "held_boot_args": a.held_boot_args,

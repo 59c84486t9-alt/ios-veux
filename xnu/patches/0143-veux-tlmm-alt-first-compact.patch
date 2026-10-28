@@ -1,0 +1,66 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Probe VEUX TLMM adjusted window before the stalled DT window
+
+The last held image stopped during the 0x401000 read. Test the downstream
+REG_BASE-adjusted window first and print compact rows before any risky access.
+--- a/bsd/dev/veux_touch_probe.c
++++ b/bsd/dev/veux_touch_probe.c
+@@ -83,16 +83,23 @@
+ static bool
+ touch_probe_tlmm_cfg_dump(vm_offset_t va, vm_offset_t pa, const char *tag)
+ {
++	uint32_t cfg[VEUX_TOUCH_TLMM_PINS];
+ 	bool any_nonzero = false;
+-	printf("VEUX TLMM %s CFG DUMP BEGIN PA=%#llx VA=%p bytes=0x40000; CFG32 at PA/VA+pin*0x1000\n",
++	printf("VEUX TLMM %s CFG DUMP BEGIN PA=%#llx VA=%p stride=0x1000 width=32; rows show PA/VA offsets\n",
+ 	    tag, (unsigned long long)pa, (void *)va);
+ 	for (unsigned pin = 0; pin < VEUX_TOUCH_TLMM_PINS; ++pin) {
+ 		uint32_t off = TLMM_GPIO_CFG(pin);
+-		vm_offset_t addr = va + (vm_offset_t)off;
+-		uint32_t cfg = touch_probe_tlmm_rd(va, pa, off);
+-		any_nonzero |= cfg != 0;
+-		printf("VEUX TLMM %s p=%02u PA=%#llx VA=%p CFG=%08x\n", tag, pin,
+-		    (unsigned long long)(pa + off), (void *)addr, cfg);
++		cfg[pin] = *(volatile uint32_t *)(va + (vm_offset_t)off);
++		__asm__ volatile("dmb oshld" ::: "memory");
++		any_nonzero |= cfg[pin] != 0;
++	}
++	for (unsigned row = 0; row < VEUX_TOUCH_TLMM_PINS; row += 4) {
++		printf("VEUX TLMM %s %02u:%08x@+%05x %02u:%08x@+%05x %02u:%08x@+%05x %02u:%08x@+%05x\n",
++		    tag,
++		    row, cfg[row], TLMM_GPIO_CFG(row),
++		    row + 1, cfg[row + 1], TLMM_GPIO_CFG(row + 1),
++		    row + 2, cfg[row + 2], TLMM_GPIO_CFG(row + 2),
++		    row + 3, cfg[row + 3], TLMM_GPIO_CFG(row + 3));
+ 	}
+ 	printf("VEUX TLMM %s CFG DUMP END nonzero=%u\n", tag, (unsigned)any_nonzero);
+ 	return any_nonzero;
+@@ -107,7 +114,8 @@
+ 
+ 	vm_offset_t se = ml_io_map(VEUX_TOUCH_SE_PA, VEUX_TOUCH_SE_SIZE);
+ 	vm_offset_t gcc = ml_io_map(VEUX_TOUCH_GCC_PA, VEUX_TOUCH_GCC_SIZE);
+-	vm_offset_t tlmm = ml_io_map(VEUX_TOUCH_TLMM_PA, VEUX_TOUCH_TLMM_SIZE);
++	/* The 0x400000 candidate stalled on the pin-1 read in build 40612700352. */
++	vm_offset_t tlmm = ml_io_map(VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
+ 	if (!se || !gcc || !tlmm) {
+ 		printf("VEUX TOUCH PROBE: mapping failed se=%u gcc=%u tlmm=%u\n",
+ 		    se != 0, gcc != 0, tlmm != 0);
+@@ -133,15 +141,9 @@
+ 	printf("VEUX BOOT: variant=held\n");
+ 	veux_fb_print_build_id();
+ 	printf("VEUX TLMM: Linux recovery line-info controls gpio3,7,8,9 and Goodix 21,22,44,51; UFS/UART/SPMI controls are from live chardev inventory\n");
+-	vm_offset_t alt = ml_io_map(VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
+-	if (!alt) {
+-		printf("VEUX TLMM MAP ALT failed PA=%#llx size=%#x\n",
+-		    (unsigned long long)VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
+-		return;
+-	}
+-	/* Read-only A/B comparison: no TLMM writes, touch rails, reset, or I2C. */
+-	(void)touch_probe_tlmm_cfg_dump(tlmm, VEUX_TOUCH_TLMM_PA, "DT400000");
+-	(void)touch_probe_tlmm_cfg_dump(alt, VEUX_TOUCH_TLMM_ALT_PA, "REGBASE500000");
++	/* Read only the REG_BASE-adjusted candidate first; avoid the stalled 0x401000 read. */
++	printf("VEUX TLMM: skipping 0x400000 full scan; prior capture stopped during PA=0x401000 read\n");
++	(void)touch_probe_tlmm_cfg_dump(tlmm, VEUX_TOUCH_TLMM_ALT_PA, "REGBASE500000");
+ 	printf("VEUX TOUCH PROBE: held before root mount; no UFS writes or GPIO writes; hard reset to reboot\n");
+ 	veux_fb_print_build_id();
+ 	for (;;) __asm__ volatile("wfe" ::: "memory");
