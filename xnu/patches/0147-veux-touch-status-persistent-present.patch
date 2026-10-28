@@ -30,6 +30,65 @@ index 601760d..2312c80 100644
  	return err;
  }
  
+@@ -676,6 +684,9 @@
+ 	printf("VEUX TOUCH DIAG: SE8 va=%#llx\n", (unsigned long long)st.se);
+ #endif
+ 	if (!st.gcc || !st.gpio || !st.se) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_fb_touch_status(9, (!st.gcc ? 1u : 0u) | (!st.gpio ? 2u : 0u) | (!st.se ? 4u : 0u));
++#endif
+ 		printf("SWEET TOUCH: MMIO mapping failed\n");
+ 		goto out;
+ 	}
+@@ -700,12 +711,18 @@
+ 	printf("VEUX TOUCH: entering GCC clock setup\n");
+ #endif
+ 	if (!touch_clocks()) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_fb_touch_status(8, 0);
++#endif
+ 		goto out;
+ 	}
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	printf("VEUX TOUCH: GCC setup returned; entering SE8 setup\n");
+ #endif
+ 	if (!touch_se_init()) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_fb_touch_status(10, 0);
++#endif
+ 		goto out;
+ 	}
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+@@ -786,6 +803,9 @@
+ 	bool goodix = !ge && gid[0] == '9' && gid[1] == '8' && gid[2] == '9' && gid[3] == '6';
+ 	bool fts = !fe1 && !fe2 && fid1 == 0x54 && fid2 == 0x52;
+ 	if (st.dead || goodix == fts) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++		veux_fb_touch_status(14, (goodix ? 1u : 0u) | (fts ? 2u : 0u) | (st.dead ? 4u : 0u));
++#endif
+ 		printf("SWEET TOUCH: no unique supported IC (goodix=%d fts=%d dead=%d); stopping\n",
+ 		    goodix, fts, st.dead);
+ 		goto out;
+@@ -793,6 +813,9 @@
+ 	st.kind = goodix ? TOUCH_GOODIX : TOUCH_FTS;
+ 	printf("SWEET TOUCH: selected %s, 1080x2400, poll=10ms irq-hint=%d\n",
+ 	    goodix ? "GT9896 Yellowstone" : "Focaltech 54:52", st.irq_hint);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_fb_touch_status(13, 0);
++#endif
+ 	unsigned errors = 0, ticks = 0;
+ 	while (!st.dead) {
+ 		/* Optional IRQ hint still reads every 100ms, and always while down. */
+@@ -801,6 +824,9 @@
+ 			int err = st.kind == TOUCH_GOODIX ? touch_goodix() : touch_focaltech();
+ 			if (err) {
+ 				if ((errors++ % 100u) == 0) {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++					veux_fb_touch_status(11, (unsigned int)err);
++#endif
+ 					printf("SWEET TOUCH: report err=%d irq=%#x\n", err, st.irq_status);
+ 				}
+ 				if (errors == 10) {
 diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
