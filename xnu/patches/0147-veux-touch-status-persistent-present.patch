@@ -188,7 +188,7 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
  extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
  
  #if defined(SWEET) || defined(ARM64_BOARD_CONFIG_VEUX)
-@@ -568,7 +569,7 @@
+@@ -568,6 +569,7 @@
  					veux_fb_gui_handoff();
  				}
  			}
