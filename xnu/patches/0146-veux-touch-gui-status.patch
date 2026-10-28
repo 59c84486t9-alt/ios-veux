@@ -2,46 +2,54 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 Subject: [PATCH] Show the VEUX touch probe result over the GUI
 
 The normal build mutes the framebuffer console when the GUI takes over, hiding
-the delayed GT9896 probe result. Draw a compact status line for each major
-worker stage and the final ID read; keep GUI boot and boot arguments unchanged.
+the delayed GT9896 probe result. Draw compact stage and final-result status on
+the GUI; keep normal boot behavior and arguments unchanged.
 
 diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
 --- a/bsd/dev/sweet_touch.c
 +++ b/bsd/dev/sweet_touch.c
-@@ -24,5 +24,6 @@
+@@ -20,6 +20,7 @@
+ extern kern_return_t thread_terminate(thread_t);
  extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
  extern void sweet_hid_touch(int finger, int down, int x, int y);
 +extern void veux_fb_touch_status(unsigned int state, unsigned int detail);
  void sweet_touch_init(void);
  
  #if defined(ARM64_BOARD_CONFIG_SWEET)
-@@ -617,3 +617,6 @@ touch_thread(void *arg, wait_result_t result)
+@@ -649,7 +650,13 @@
+ #endif
  	printf("TOUCH: starting in %u s\n", delay_s);
  	touch_wait(delay_s * 1000u);
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +	veux_fb_touch_status(0, 0);
 +#endif
  	printf("TOUCH: mapping GCC/TLMM/GENI\n");
-@@ -621,1 +624,4 @@
- 	printf("TOUCH: mapping GCC/TLMM/GENI\n");
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +	veux_fb_touch_status(1, 0);
 +#endif
-@@ -668,5 +672,6 @@
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	st.gcc = ml_io_map(TOUCH_GCC_PA, 0x60000);
+ 	st.gpio = ml_io_map(TOUCH_NORTH_PA, 0x5b000);
+@@ -689,6 +696,7 @@
+ 	printf("VEUX TOUCH DIAG: read-only preflight passed; continuing to clock setup\n");
  #endif
  #if defined(ARM64_BOARD_CONFIG_VEUX)
 +	veux_fb_touch_status(2, 0);
  	printf("VEUX TOUCH: entering GCC clock setup\n");
  #endif
  	if (!touch_clocks()) {
-@@ -704,3 +709,6 @@
+@@ -702,6 +710,9 @@
+ 	}
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
  	printf("VEUX TOUCH: clock and SE8 setup passed; entering GPIO/rail sequence\n");
- #endif
++#endif
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +	veux_fb_touch_status(3, 0);
-+#endif
+ #endif
  #if defined(ARM64_BOARD_CONFIG_SWEET)
-@@ -744,5 +752,11 @@
+ 	printf("SWEET TOUCH: TLMM reset=%#x irq=%#x vdd90=%#x; voting L11C through RPMh\n",
+@@ -757,7 +768,13 @@
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
  	printf("VEUX TOUCH: rails/reset settled; starting GT9896 PID read on SE8\n");
  #endif
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
@@ -53,13 +61,14 @@ diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
 +#endif
  	printf("SWEET TOUCH: probe 0x5d err=%d pid=%02x%02x%02x%02x fw=%02x.%02x.%02x.%02x irq=%#x\n",
  	    ge, gid[0], gid[1], gid[2], gid[3], gid[8], gid[9], gid[10], gid[11], st.irq_status);
+ 	(void)touch_probe_info(0x8240, legacy);
 diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -1704,3 +1704,48 @@
+@@ -1700,4 +1700,49 @@
  	__asm__ volatile("dsb sy" ::: "memory");
  }
-+
+ 
 +void
 +veux_fb_touch_status(unsigned int state, unsigned int detail)
 +{
@@ -104,6 +113,7 @@ diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 +	}
 +	__asm__ volatile("dsb sy" ::: "memory");
 +}
++
  #endif /* ARM64_BOARD_CONFIG_VEUX */
 -- 
 2.39.5
