@@ -1,3 +1,39 @@
+## >>> UPDATE 2026-10-29 (Adrastea firmware/WPSS source audit) <<<
+
+- Recovery is attached as root ADB on the known VEUX device. All commands in
+  this audit were read-only. No `wpss_boot` write, mount, image build, flash,
+  or partition write was performed; preserve the boot_a recovery rule.
+- Compared the live ICNSS DT node with the newer public Android
+  `kernel/msm-modules/wlan-platform` ICNSS2 source. Live DT has neither
+  `qcom,rproc-handle`, `wpss-support-enable`, nor `qcom,fw-prefix`; no WPSS or
+  remoteproc node is present. Recovery exposes no `/sys/class/remoteproc`.
+  Newer ICNSS2 enables its Adrastea rproc loader only with the support flag,
+  then resolves literal `qcom,rproc-handle` via `rproc_get_by_phandle()` and
+  calls `rproc_boot()`. Its sysfs loader is user-triggered; it was not
+  triggered.
+- ICNSS2's `adrastea/` path prefix is conditional on `qcom,fw-prefix` and
+  applies to firmware requests such as BDF/QDSS, not the WPSS executable.
+  ICNSS2 does not directly construct a `wpss.mdt` or `wlanmdsp.mbn` request in
+  this flow. The vendor_a logical partition is not mounted in recovery and
+  was not extracted, so the Adrastea directory and actual image filenames
+  remain unconfirmed. Read-only `modem_a` inspection still shows
+  `/firmware/image/wlanmdsp.mbn` and `bdwlan.*`, but no `adrastea/` or
+  `wpss.mdt`.
+- Source-derived WLFW details: service `0x45`, MSA_INFO request `0x2d` with
+  TLVs (`0x01`: 64-bit MSA address; `0x02`: 32-bit size), MSA_READY request
+  `0x2e` with an empty body. Topaz implements both messages, but its sequence
+  includes `host_cap`; Adrastea skips `host_cap` after indication
+  registration. Its MSA memory and secure assignment remain target-specific.
+- Downstream QCA host-CMN source confirms Adrastea CE0 at ICNSS `membase +
+  0x240000`, 12 engines at 4 KiB strides, and four-dword QCA_WIFI_3_0 ring
+  descriptors. Topaz uses the same aperture size/stride but its packed
+  descriptor format is not binary-compatible without checking/adapting field
+  layout. VEUX DT confirms the 12 GIC interrupt specifiers `0x166..0x171`.
+- `docs/VEUX-WIFI-DISCOVERY.md` now records these results and clearly marks
+  source-derived versus recovery-confirmed findings. No diagnostic kernel
+  build was attempted because this follow-up requested source/runtime
+  resolution before implementation.
+
 ## >>> UPDATE 2026-10-29 (40784264836 overlay-free boot_b flash) <<<
 
 - User asked to flash the verified overlay-free wrapper. Reverified build/run ID
