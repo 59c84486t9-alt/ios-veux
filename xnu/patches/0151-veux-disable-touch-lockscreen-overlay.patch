@@ -1,0 +1,23 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Disable VEUX touch lockscreen overlay
+
+Keep the VEUX Goodix touch driver and its status bookkeeping active, but make
+the framebuffer status and clear hooks inert so the touch lockscreen overlay
+does not draw over the GUI.
+
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1797,2 +1797,7 @@
+ veux_fb_touch_status(unsigned int state, unsigned int detail)
+ {
++	/* Touch works; keep the diagnostic lockscreen overlay disabled. */
++	(void)state;
++	(void)detail;
++	return;
++
+@@ -1810,2 +1815,5 @@
+ veux_fb_touch_status_clear(void)
+ {
++	/* Do not clear the overlay area on GUI handoff. */
++	return;
++

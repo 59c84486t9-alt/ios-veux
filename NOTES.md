@@ -1,3 +1,15 @@
+## >>> UPDATE 2026-10-28 (touch status overlay disabled build pending) <<<
+
+- The user reports VEUX touch now works and asked for a build without the touch
+  lockscreen overlay. Patch 0151 makes only the framebuffer status and clear
+  hooks inert; the Goodix startup, GPIO/I2C transactions, status logging and
+  touch driver remain enabled. The normal GUI and build ID boot arguments are
+  unchanged.
+- The strict kernel manifest now requires 0151 and checks that the visual hook
+  is disabled while the VEUX touch driver remains present. Repository patch,
+  Python and shell validation pass. Commit and strict CI build are pending.
+- No device flash is part of this build request.
+
 ## >>> UPDATE 2026-10-28 (40727039463 FIFO alignment boot_b test) <<<
 
 - Added patch 0148 to align the SE8 FIFO transaction sequence with the exact

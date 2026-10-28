@@ -67,6 +67,7 @@ for patch in (
     "0148-veux-geni-fifo-linux-sequence.patch",
     "0149-veux-tlmm-per-read-checkpoints-and-touch-overlay.patch",
     "0150-veux-touch-gpio-i2c-when-fifo-disabled.patch",
+    "0151-veux-disable-touch-lockscreen-overlay.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -222,19 +223,16 @@ source_checks["veux_gpio_i2c_fallback_when_fifo_disabled"] = (
     and "veux_fb_touch_status(17, goodix ? 0x9896u : 0x5452u);" in touch_driver
     and "TOUCH: IC detected=0x" in serial
 )
-source_checks["veux_touch_status_is_labeled_bottom_left_and_cleared_on_gui_present"] = (
-    "veux_fb_touch_status_redraw(void)" in serial
-    and "veux_fb_touch_status_clear(void)" in serial
-    and "veux_fb_touch_status_clear();" in (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
-    and "veux_fb_touch_status_redraw();" not in (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
-    and "VEUX_FB_HEIGHT - 300u + row * 32u" in serial
-    and 'state == 14 ? "TOUCH: unsupported IC flags="' in serial
-    and 'state == 15 ? "TOUCH: I2C IRQ/BB flags="' in serial
-    and 'state == 16 ? "TOUCH: I2C transfer=0x"' in serial
-    and 'state == 17 ? "TOUCH: IC detected=0x"' in serial
-    and "veux_fb_touch_status(7, pin)" in touch_driver
-    and "veux_fb_touch_status(ge == 0 ? 5u : 6u" in touch_driver
-    and "TOUCH: GPIO write/readback FAILED pin=" in serial
+source_checks["veux_touch_overlay_disabled_with_touch_driver_enabled"] = (
+    "veux_fb_touch_status(unsigned int state, unsigned int detail)" in serial
+    and "Touch works; keep the diagnostic lockscreen overlay disabled." in serial
+    and "(void)state;" in serial
+    and "(void)detail;" in serial
+    and "Do not clear the overlay area on GUI handoff." in serial
+    and "static int\ntouch_gpio_i2c_read_reg" in touch_driver
+    and "st.gpio_i2c = if_disable != 0;" in touch_driver
+    and "void sweet_touch_init(void)" in touch_driver
+    and "veux_fb_touch_status(17, goodix ? 0x9896u : 0x5452u);" in touch_driver
 )
 
 source_checks["direct_framebuffer_build_id_print"] = (
