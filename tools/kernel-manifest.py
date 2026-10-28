@@ -224,7 +224,7 @@ source_checks["veux_gpio_i2c_fallback_when_fifo_disabled"] = (
     and "TOUCH: IC detected=0x" in serial
 )
 source_checks["veux_touch_overlay_disabled_with_touch_driver_enabled"] = (
-    "veux_fb_touch_status(unsigned int state, unsigned int detail)" in serial
+    "veux_fb_touch_status_draw(unsigned int state, unsigned int detail, unsigned int row)" in serial
     and "Touch works; keep the diagnostic lockscreen overlay disabled." in serial
     and "(void)state;" in serial
     and "(void)detail;" in serial

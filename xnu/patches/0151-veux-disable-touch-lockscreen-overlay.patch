@@ -2,22 +2,32 @@ From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 Subject: [PATCH] Disable VEUX touch lockscreen overlay
 
 Keep the VEUX Goodix touch driver and its status bookkeeping active, but make
-the framebuffer status and clear hooks inert so the touch lockscreen overlay
-does not draw over the GUI.
+the framebuffer status drawing and clear hooks inert so the touch lockscreen
+overlay does not draw over the GUI.
 
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
-@@ -1797,2 +1797,7 @@
- veux_fb_touch_status(unsigned int state, unsigned int detail)
+@@ -1709,6 +1709,12 @@ static volatile unsigned int veux_fb_touch_detail[VEUX_TOUCH_STATUS_HISTORY];
+ static void
+ veux_fb_touch_status_draw(unsigned int state, unsigned int detail, unsigned int row)
  {
 +	/* Touch works; keep the diagnostic lockscreen overlay disabled. */
 +	(void)state;
 +	(void)detail;
++	(void)row;
 +	return;
 +
-@@ -1810,2 +1815,5 @@
+ 	if (!veux_fb_console_base) return;
+ 	const char *message = state == 0 ? "TOUCH: worker started" :
+ 	    state == 1 ? "TOUCH: mapping MMIO" :
+@@ -1791,6 +1797,9 @@ veux_fb_touch_status_redraw(void)
+ void
  veux_fb_touch_status_clear(void)
  {
 +	/* Do not clear the overlay area on GUI handoff. */
 +	return;
 +
+ 	if (!veux_fb_console_base) return;
+ 	volatile uint32_t *fb = veux_fb_console_base;
+ 	const uint32_t stride = veux_fb_console_stride / 4u;
