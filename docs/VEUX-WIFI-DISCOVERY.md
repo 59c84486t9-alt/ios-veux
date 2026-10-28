@@ -1,9 +1,9 @@
 # VEUX Wi-Fi discovery: current evidence and safe next step
 
-Collected 2026-10-28 from the saved recovery device tree, archived recovery
-logs, the local SM6375 reference kernel, and the XNU build tree. The reference
-kernel is the community `kernel_xiaomi_sm6375` checkout; it is not established
-as the exact source for the installed Paimon recovery kernel.
+Updated 2026-10-29 from live root recovery ADB, the live device tree, the local
+SM6375 reference kernel, and the XNU build tree. The reference kernel is the
+community `kernel_xiaomi_sm6375` checkout; it is not established as the exact
+source for the installed Paimon recovery kernel.
 
 ## Hardware identification
 
@@ -15,8 +15,8 @@ denotes iWCN. The local SM6375 reference driver's OF match table maps
 `qcom,icnss` to `ADRASTEA_DEVICE_ID` (`0xabcd`) and `qcom,wcn6750` to
 `WCN6750_DEVICE_ID` (`0x6750`). Thus the live DT strongly identifies an
 Adrastea-style ICNSS configuration and argues against a standard WCN6750
-configuration. It does not prove the physical package marking or the runtime
-ID because recovery is not currently attached.
+configuration. It does not prove the physical package marking or runtime
+silicon ID; recovery does not expose the ID in its current logs or sysfs.
 
 Its supplies are `vdd-cx-mx`, `vdd-1.8-xo`, `vdd-1.3-rfa`, `vdd-smps`,
 `vdd-3.3-ch0`, and `vdd-3.3-ch1`. Its interrupt property encodes GIC SPI
@@ -61,7 +61,7 @@ from these saved records.
 
 ## Recovery ground truth available locally
 
-The archived recovery log contains:
+The recovery log contains:
 
 - `icnss2 c800000.qcom,icnss: Adding to iommu group 8`
 - `icnss2: Recursive recovery allowed for WLAN`
@@ -71,28 +71,82 @@ The archived recovery log contains:
 - `bt-reset-gpio not provided in devicetree` and `wl-reset-gpio not provided in device tree`
 
 This establishes Linux platform-driver binding for ICNSS2, not that WLAN
-firmware booted or the radio enumerated. The saved log has no WPSS/remoteproc
-running message, WLAN/QMI server arrival, radio firmware request, or PCI
-device vendor/device ID. The only observed firmware failures in this excerpt
-are unrelated `ipa_fws.mdt` requests. No recovery `wlan0`/`iw`/`lspci` output,
-regulator debugfs dump, live GPIO value dump, ICNSS sysfs `uevent`, or
-`/vendor/firmware_mnt/image` listing is archived. The phone is currently
-absent from both ADB and Fastboot, so those requested live checks could not be
-rerun.
+firmware booted or the radio enumerated. Live root recovery ADB on slot A
+returned the complete requested Wi-Fi-related dmesg matches:
+
+```text
+[    0.732528] cnss_utils: Unable to create debugfs -19
+[    0.762187] wlan_hdd_state wlan major(505) initialized
+[    1.157732] ipa 5800000.qcom,ipa:ipa_smmu_wlan: Adding to iommu group 3
+[    1.160609] icnss2 c800000.qcom,icnss: Adding to iommu group 8
+[    1.160624] icnss2: Recursive recovery allowed for WLAN
+[    1.160853] icnss2 c800000.qcom,icnss: for wcss_msa0 segments only will be dumped.
+[    1.160910] icnss2: Platform driver probed successfully
+[    1.172742] uaudio-qmi soc:usb_audio_qmi_dev: Adding to iommu group 25
+[    3.130600] sysmon-qmi: ssctl_new_server: Connection established between QMI handle and adsp's SSCTL service
+```
+
+There is no WPSS/remoteproc running message, runtime device ID, WLAN QMI
+service arrival, or radio firmware request in that output. `/sys/bus/platform/
+drivers/icnss2/` has the bound `c800000.qcom,icnss` device. Its uevent reports
+`DRIVER=icnss2`, `OF_NAME=qcom,icnss`, `OF_FULLNAME=/soc/qcom,icnss@C800000`,
+and `OF_COMPATIBLE_0=qcom,icnss`. The node has write-only `wpss_boot` and
+`wlan_en_delay` attributes. The local reference driver's `wpss_boot` handler
+is WCN6750-only, but that attribute's existence alone does not show WPSS is
+running; it was not written.
+
+The live ICNSS properties are `compatible=qcom,icnss`,
+`reg=<0x0c800000 0x00800000 0xb0000000 0x00010000>`,
+`reg-names=membase,smmu_iova_ipa`, 12 interrupt entries (encoded GIC SPI
+0x166–0x171), and IOMMU specifier `<0xa4 0x80 1>`. There is no
+`qcom,rproc-handle`. Matching live-tree paths include ICNSS and the separate
+WCN3990 Bluetooth node, but no WCN/WPSS/remoteproc node. The recovery driver
+bound via `qcom,icnss`, which the local source maps to Adrastea ID `0xabcd`;
+this is strong DT/driver-match evidence against standard WCN6750, not a
+runtime silicon ID read.
+
+The recovery image has no `/vendor/firmware_mnt/image` directory. Its visible
+`/vendor/firmware` contains Goodix touchscreen files only; no `qca6750`,
+`wpss.mdt`, `bdwlan.*`, or `regdb.bin` files were found in the searched
+recovery firmware paths. This describes the mounted recovery filesystem, not
+the full Android vendor partition. No `/sys/class/remoteproc` is exposed.
+
+Recovery has no `/sys/bus/pci/devices` directory; `/sys/bus/mmc/devices` is
+empty. The two SDHCI hosts exist but declare `no-sdio` in the live DT. There
+is no `wlan0` in `ifconfig -a`; `ip` and `iw` are unavailable. No matching
+WPSS/WLAN/PCI/MSI memory regions appear in `/proc/iomem`. Thus recovery does
+not provide a working radio reference and exposes no APSS PCI or SDIO
+enumeration. The 0xc800000 ICNSS platform region is not a PCI host aperture.
+
+The ICNSS supplier regulators all reported `disabled`, `num_users=0`, and
+zero requested current in regulator sysfs. Their displayed microvolt values
+are framework configuration metadata, not measured rail voltages. Four
+regulator phandles are shared with the separate WCN3990 Bluetooth node. The
+BT node has GPIO69 as `bt-sw-ctrl-gpio`; recovery reports missing
+`bt-reset-gpio` and `wl-reset-gpio`. No WLAN enable GPIO is exposed in the
+ICNSS node. Debugfs is unavailable (`cnss_utils: Unable to create debugfs
+-19`), so GPIO line values, regulator debugfs summaries, and clock state
+could not be read. No sysfs attributes or hardware controls were written.
 
 ## Linux bring-up sequence from the local reference driver
 
 The reference `drivers/soc/qcom/icnss2` code recognizes WCN6750 (0x6750) and
-Adrastea (0xabcd). For WCN6750 it obtains the ICNSS power rails and RF clock,
-waits for the WLAN firmware service/QMI server, exchanges WLFW capability and
-host-capability messages, powers the platform, obtains device info and maps
-the returned memory/BAR and MHI state information, then sends `regdb.bin` and
-the selected board-data BDF through WLFW QMI. The default BDF type is set in
-ICNSS driver control parameters; the filename depends on ID and board data.
-The source names `bdwlan.bin`, board-specific BDF variants, and `regdb.bin`;
-exact installed paths/payloads must be captured from the target recovery's
-firmware requests or mounted vendor firmware. Do not assume the unrelated
-`ipa_fws.mdt` request is Wi-Fi firmware.
+Adrastea (0xabcd). For the DT-selected Adrastea path, the driver obtains its
+regulators and MSA memory, waits for a WLFW QMI service, registers indications,
+exchanges MSA memory-info and MSA-ready messages, obtains WLFW capabilities,
+then powers the ICNSS platform and exchanges further WLFW messages. The
+reference code does not associate this compatible with the WCN6750-only
+WPSS-boot sysfs handler or the WCN6750 PCI BAR/MHI setup. Recovery logs do
+not show that the Adrastea WLFW service started, so the actual VEUX sequence
+and whether firmware boots on WPSS or another subsystem remain unobserved.
+
+For comparison, the separate WCN6750 path powers the platform, obtains device
+info and maps firmware-returned BAR/MHI state, then sends `regdb.bin` and the
+selected board-data BDF through WLFW QMI. The source names `bdwlan.bin`,
+board-specific BDF variants, and `regdb.bin`; exact installed paths/payloads
+must be captured from the target Android vendor image. Do not assume the
+unrelated `ipa_fws.mdt` request is Wi-Fi firmware. No reset pulse width or
+board-level regulator enable order has been established from recovery.
 
 The WCN6750 rail list in this reference source specifies `vdd-cx-mx` at
 824–952 mV, `vdd-1.8-xo` at 1.872 V, and `vdd-1.3-rfa` at 1.256–1.352 V;
@@ -150,11 +204,12 @@ controller found, (2) controller/link state accessible, (3) endpoint ID
 read, (4) WLAN enable/reset pin state, and (5) rail/clock state. Unsupported
 must be displayed explicitly as `NOT PROBED`, not as absent or powered off.
 
-To settle the remaining runtime questions, reconnect VEUX to recovery with
-`adb root` and capture the full requested WLAN/ICNSS/WPSS dmesg, bound
-`icnss2` sysfs device and `uevent`, matching device-tree nodes and phandle
-targets, firmware directory listing, `/sys/bus/pci/devices`,
-`/sys/bus/mmc/devices`, `ip link`, `iw dev`, `/proc/iomem`, regulator debugfs,
-and GPIO debugfs. Then compare the runtime silicon ID with the DT-derived
-Adrastea-style identity before making any driver choice. No image was built or
-flashed for Wi-Fi in this investigation.
+Remaining hardware questions are the physical silicon/runtime ID, whether
+Android's full vendor image contains and starts matching radio firmware, and
+the actual WLAN pin/clock states. The recovery-only data does not justify an
+XNU diagnostic that claims to probe an endpoint: there is no exposed APSS PCI
+host or SDIO function, and no safe documented host register set to read. A
+future diagnostic must report these items as `NOT EXPOSED` or `NOT PROBED`,
+not as a confirmed absent chip or measured-off rail. No Wi-Fi code, CI build,
+image build, or partition write was made. Recovery was selected on slot A;
+no image was written to boot_a or boot_b.
