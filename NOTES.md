@@ -1,3 +1,15 @@
+## >>> UPDATE 2026-10-29 (40784264836 overlay-free boot_b flash) <<<
+
+- User asked to flash the verified overlay-free wrapper. Reverified build/run ID
+  `40784264836`, kernel, phone DTB, normal boot arguments, and strict patch
+  manifest immediately before writing. Fastboot identified the known VEUX device
+  serial `4078cac030c8`.
+- `fastboot flash boot_b /home/nyra/veux-artifacts/40784264836/normal.img`
+  returned `OKAY` for send and write; reboot also returned `OKAY`. `boot_a` and
+  all other partitions were untouched.
+- After 90 seconds, neither ADB nor fastboot re-enumerated. Host-side lockscreen
+  confirmation is still pending; visible build ID should be `40784264836`.
+
 ## >>> UPDATE 2026-10-29 (touch lockscreen overlay disabled build) <<<
 
 - Patch 0151 makes the framebuffer touch status renderer and handoff clear hook
