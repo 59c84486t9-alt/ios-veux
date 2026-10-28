@@ -9,14 +9,28 @@ as the exact source for the installed Paimon recovery kernel.
 
 The recovery live DT contains `/soc/qcom,icnss@C800000`, with `compatible =
 "qcom,icnss"`, `reg = <0x0c800000 0x00800000 0xb0000000 0x00010000>`, and
-`reg-names = "membase", "smmu_iova_ipa"`. Its supplies are `vdd-cx-mx`,
-`vdd-1.8-xo`, `vdd-1.3-rfa`, `vdd-smps`, `vdd-3.3-ch0`, and
-`vdd-3.3-ch1`. It has GIC interrupts 0x166–0x171 (decimal 358–369), an
+`reg-names = "membase", "smmu_iova_ipa"`. In the local Qualcomm vendor
+binding, `qcom,icnss` denotes the Adrastea architecture; `qcom,wcn6750`
+denotes iWCN. The local SM6375 reference driver's OF match table maps
+`qcom,icnss` to `ADRASTEA_DEVICE_ID` (`0xabcd`) and `qcom,wcn6750` to
+`WCN6750_DEVICE_ID` (`0x6750`). Thus the live DT strongly identifies an
+Adrastea-style ICNSS configuration and argues against a standard WCN6750
+configuration. It does not prove the physical package marking or the runtime
+ID because recovery is not currently attached.
+
+Its supplies are `vdd-cx-mx`, `vdd-1.8-xo`, `vdd-1.3-rfa`, `vdd-smps`,
+`vdd-3.3-ch0`, and `vdd-3.3-ch1`. Its interrupt property encodes GIC SPI
+values 0x166–0x171 (decimal SPI numbers 358–369), an
 SMMU reference, and a WLAN SMP2P crash/error input. The source ICNSS2 driver
-supports WCN6750 and Adrastea IDs. The saved live DT says only `qcom,icnss`,
-not `qcom,wcn6750`; therefore the ICNSS node is confirmed, while the exact
-radio model is not confirmed by that property alone. WCN6750 is a plausible
-board-level candidate, not a ground-truth result yet.
+supports both IDs, but this DT does not use the WCN6750 match.
+
+This differs materially from the reference WCN6750 node in `yupik.dtsi`: that
+node uses `compatible = "qcom,wcn6750"`, `reg-names = "msi_addr",
+"smmu_iova_ipa", "tcs_cmd"`, and 32 CE interrupt entries beginning at GIC
+SPI 768. VEUX instead has two regions named `membase` and `smmu_iova_ipa`,
+12 interrupt entries beginning at encoded SPI 0x166, and no `tcs_cmd` or
+`msi_addr` region. The ICNSS register region at 0xc800000 is not an MSI BAR
+and should not be treated as a PCIe root-complex window.
 
 The live tree also contains a separate `qcom,wcn3990` Bluetooth node. Its
 `qcom,bt-sw-ctrl-gpio` tuple is `<0xa7 0x45 0>`, i.e. GPIO 69 using the
@@ -25,14 +39,23 @@ referenced TLMM controller. The recovery log reports that `bt-reset-gpio` and
 saved ICNSS properties. Do not equate the Bluetooth switch-control GPIO with
 WLAN enable or reset.
 
+The saved live DT archive contains no node/property path matching WPSS,
+remoteproc, `qcom,rproc-handle`, or a WCN6750 compatible. In the local
+reference WCN6750 tree, WPSS is a separate subsystem/remoteproc node and
+GLINK/QRTR endpoint, rather than a `qcom,rproc-handle` property on ICNSS. Its
+absence in this archive means no DT-declared WPSS instance is evidenced; it
+does not establish whether the proprietary recovery firmware starts a remote
+processor through another mechanism.
+
 The two SDHCI hosts are at `0x04744000` (DT interrupt cells `0x15c` and
 `0x160`) and `0x04784000` (cells `0x15e` and `0x161`). Both have `no-sdio`;
 the first also has `no-sd`, and the
 second has `no-mmc`. Recovery logged `mmc0` and `mmc1` as ADMA 64-bit hosts,
 but neither is an SDIO WLAN interface. The live DT archive has no PCI/PCIe
 host node. The ICNSS block is at `0x0c800000`; do not call that address a PCIe
-root-complex address. Linux's ICNSS/WCN6750 path uses QMI and MHI-related
-resources, with remote WCSS firmware, rather than a normal SDIO function.
+root-complex address. The reference WCN6750 path uses QMI/MHI with a WPSS
+firmware-enumerated PCIe endpoint, rather than a normal SDIO function; the
+saved VEUX DT does not confirm that WCN6750 path.
 The precise external endpoint/config-space discovery path is not established
 from these saved records.
 
@@ -48,12 +71,14 @@ The archived recovery log contains:
 - `bt-reset-gpio not provided in devicetree` and `wl-reset-gpio not provided in device tree`
 
 This establishes Linux platform-driver binding for ICNSS2, not that WLAN
-firmware booted or the radio enumerated. The saved log has no WLAN/QMI server
-arrival, no radio firmware request, and no PCI device vendor/device ID. The
-only observed firmware failures in this excerpt are unrelated `ipa_fws.mdt`
-requests. No recovery regulator debugfs dump or live GPIO value dump is
-present in the available files, and the device is currently absent from both
-ADB and Fastboot.
+firmware booted or the radio enumerated. The saved log has no WPSS/remoteproc
+running message, WLAN/QMI server arrival, radio firmware request, or PCI
+device vendor/device ID. The only observed firmware failures in this excerpt
+are unrelated `ipa_fws.mdt` requests. No recovery `wlan0`/`iw`/`lspci` output,
+regulator debugfs dump, live GPIO value dump, ICNSS sysfs `uevent`, or
+`/vendor/firmware_mnt/image` listing is archived. The phone is currently
+absent from both ADB and Fastboot, so those requested live checks could not be
+rerun.
 
 ## Linux bring-up sequence from the local reference driver
 
@@ -88,6 +113,32 @@ driver. XNU IOKit contains generic PCI device abstractions, which alone do not
 enumerate a Qualcomm host or power a link. No Skywalk hardware hook for this
 radio is present.
 
+## Existing XNU Wi-Fi ports
+
+HackiOS is structurally the closer starting point if the runtime device turns
+out to be WCN6750. Its published Wi-Fi port is more than ath11k plus LinuxKPI:
+the WCN6750-specific XNU side supplies SMEM/SMP2P, power/mailbox handling,
+WPSS firmware loading and TrustZone start, GLINK/QRTR, QMI and WLFW, then
+exposes the hybrid AHB/PCIe device to ath11k through `wifi/lx`. The public
+HackiOS README documents WCN6750 operation and the `wpss.mdt`/segment firmware
+inputs. It is a reference implementation for the exact candidate chip, but
+its redwood SoC addresses, rails, GIC, SMMU, mailbox and firmware packaging
+cannot be copied to VEUX.
+
+ios-topaz's `TopazModem` patches (0113–0130) implement modem/WLFW/QMI/GLINK/
+QRTR services on SM6225 topaz. That is useful protocol-level reference if
+VEUX's Adrastea setup needs the same WLAN firmware service, but it is not the
+same SoC or proven same radio architecture. It does not supply VEUX's
+ICNSS/WPSS device support.
+
+The single largest missing piece for either route is the VEUX-specific
+Qualcomm remote WLAN host stack: establish and power the actual Adrastea/iWCN
+target, load/start its remote firmware if required, and implement the
+SMEM/SMP2P + mailbox + GLINK/QRTR + QMI/WLFW control path. ath11k/LinuxKPI
+comes later and cannot discover or start this platform by itself. Given the
+DT mismatch, do not choose the WCN6750 `wifi/lx` path until recovery runtime
+identifies the chip and confirms WPSS and firmware-service behavior.
+
 ## Diagnostic build decision
 
 Do not report an XNU enumeration result yet: XNU currently has no host driver
@@ -99,12 +150,11 @@ controller found, (2) controller/link state accessible, (3) endpoint ID
 read, (4) WLAN enable/reset pin state, and (5) rail/clock state. Unsupported
 must be displayed explicitly as `NOT PROBED`, not as absent or powered off.
 
-To complete that diagnostic, reconnect VEUX to recovery with `adb root` and
-capture `lspci -vvv` (if available), `/sys/bus/pci/devices`,
-`/sys/bus/mmc/devices`, WLAN-related `dmesg`, `/sys/kernel/debug/regulator`,
-`/sys/kernel/debug/gpio`, and ICNSS platform sysfs/uevent state. Then establish
-the exact VEUX downstream `veux.dtsi` / `sm6375.dtsi` source revision or
-decode the live DT nodes and their phandle targets. Once the actual host and
-safe read-only register set are confirmed, add the diagnostic through strict
-CI/manifest and boot the verified candidate from `boot_b` only. No image was
-built or flashed for Wi-Fi in this investigation.
+To settle the remaining runtime questions, reconnect VEUX to recovery with
+`adb root` and capture the full requested WLAN/ICNSS/WPSS dmesg, bound
+`icnss2` sysfs device and `uevent`, matching device-tree nodes and phandle
+targets, firmware directory listing, `/sys/bus/pci/devices`,
+`/sys/bus/mmc/devices`, `ip link`, `iw dev`, `/proc/iomem`, regulator debugfs,
+and GPIO debugfs. Then compare the runtime silicon ID with the DT-derived
+Adrastea-style identity before making any driver choice. No image was built or
+flashed for Wi-Fi in this investigation.
