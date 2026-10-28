@@ -4715,3 +4715,41 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `tools/validate-repo.py`, Python syntax checks, and `git diff --check`. Strict
   CI, wrapper verification and device boot are still pending. Do not alter
   `boot_a`; only a held wrapper to `boot_b` is in scope after verification.
+
+## >>> UPDATE 2026-10-28 (40733082776 per-read probe CI and wrappers) <<<
+
+- Commit `d41b246` (`Add per-read VEUX TLMM diagnostics`) was pushed to
+  `veux-xnu-build`. Strict CI
+  [40733082776](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40733082776)
+  passed repository/patch preflight, XNU build, synthetic diagnostic bounds,
+  strict kernel feature manifest, buildtree packaging and KDK inspection.
+- CI kernel SHA-256 is
+  `63bf8fd6514bed448f8f4a001e3c0e982581aedebaf6ec11036de2cf842a1bde`.
+  Repacked both boot-v2 variants using the exact CI kernel, the previously
+  verified VEUX shim/header and DTB, and the previously verified phone ADT.
+  The DTB SHA-256 remains
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+- Held wrapper is
+  `/home/nyra/veux-artifacts/40733082776/held.img`, SHA-256
+  `d40af20d8463b25515495e80db3f889d92430af8941b7167cb5c87f6a2a37aff`.
+  `verify-veux-wrapper.py --variant held` passed with the exact CI kernel,
+  payload, DTB, both-variant manifest and full held boot-argument string.
+  It compares pins 19/20/21/22/44/51 first, then pins 4-63 in sequence, skips
+  0-3, flushes a numbered bottom-left checkpoint before each 32-bit CFG read,
+  and does no GPIO/rail/reset/I2C/UFS writes before its WFE hold.
+- Normal wrapper is
+  `/home/nyra/veux-artifacts/40733082776/normal.img`, SHA-256
+  `c913b6aacbe5672408b3927ceb7eb3076593b30dc06f0cbe9c765925b1fcfc63`.
+  `verify-veux-wrapper.py --variant normal` passed; it carries the same
+  kernel with the manifest's full RW arguments and the revised touch status
+  panel. It has not been flashed.
+- The repository's downstream pinctrl and touchscreen DTS contain no explicit
+  `qcom,gpios-reserved`, secure GPIO range, or TZ-owned range. Recovery
+  chardev consumer labels are not a secure-line list. The probe records
+  ESR/FAR/ELR on a synchronous abort, but cannot force a truly stalled MMIO
+  transaction to resume; if one occurs, the last screen checkpoint identifies
+  the exact PA window and GPIO attempted.
+- Host `fastboot devices` and `adb devices` returned no attached device after
+  wrapper verification. No image was written. Await Fastboot reconnect, then
+  verify serial/product/unlocked/current slot/partition capacity and flash only
+  `boot_b` as previously authorized; never write `boot_a`.
