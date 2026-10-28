@@ -1,0 +1,109 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Show the VEUX touch probe result over the GUI
+
+The normal build mutes the framebuffer console when the GUI takes over, hiding
+the delayed GT9896 probe result. Draw a compact status line for each major
+worker stage and the final ID read; keep GUI boot and boot arguments unchanged.
+
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -24,5 +24,6 @@
+ extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
++extern void veux_fb_touch_status(unsigned int state, unsigned int detail);
+ void sweet_touch_init(void);
+ 
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+@@ -617,3 +617,6 @@ touch_thread(void *arg, wait_result_t result)
+ 	printf("TOUCH: starting in %u s\n", delay_s);
+ 	touch_wait(delay_s * 1000u);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_fb_touch_status(0, 0);
++#endif
+ 	printf("TOUCH: mapping GCC/TLMM/GENI\n");
+@@ -621,1 +624,4 @@
+ 	printf("TOUCH: mapping GCC/TLMM/GENI\n");
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_fb_touch_status(1, 0);
++#endif
+@@ -668,5 +672,6 @@
+ #endif
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_fb_touch_status(2, 0);
+ 	printf("VEUX TOUCH: entering GCC clock setup\n");
+ #endif
+ 	if (!touch_clocks()) {
+@@ -704,3 +709,6 @@
+ 	printf("VEUX TOUCH: clock and SE8 setup passed; entering GPIO/rail sequence\n");
+ #endif
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_fb_touch_status(3, 0);
++#endif
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+@@ -744,5 +752,11 @@
+ 	printf("VEUX TOUCH: rails/reset settled; starting GT9896 PID read on SE8\n");
+ #endif
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_fb_touch_status(4, 0);
++#endif
+ 	int ge = touch_probe_info(GOODIX_PID_REG, gid);
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_fb_touch_status(ge == 0 ? 5u : 6u, (unsigned int)ge);
++#endif
+ 	printf("SWEET TOUCH: probe 0x5d err=%d pid=%02x%02x%02x%02x fw=%02x.%02x.%02x.%02x irq=%#x\n",
+ 	    ge, gid[0], gid[1], gid[2], gid[3], gid[8], gid[9], gid[10], gid[11], st.irq_status);
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1704,3 +1704,48 @@
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ }
++
++void
++veux_fb_touch_status(unsigned int state, unsigned int detail)
++{
++	if (!veux_fb_console_base) return;
++	const char *message = state == 0 ? "TOUCH: worker started" :
++	    state == 1 ? "TOUCH: mapping MMIO" :
++	    state == 2 ? "TOUCH: GCC and SE8 setup" :
++	    state == 3 ? "TOUCH: GPIO and power setup" :
++	    state == 4 ? "TOUCH: reading GT9896 ID" :
++	    state == 5 ? "TOUCH: GT9896 ID read OK" : "TOUCH: GT9896 ID read FAILED";
++	volatile uint32_t *fb = veux_fb_console_base;
++	const uint32_t x0 = 12, y0 = 44, pad = 6;
++	uint32_t msg_len = 0;
++	while (message[msg_len]) ++msg_len;
++	const uint32_t width = (msg_len + 17u) * 8u + pad * 2u;
++	for (uint32_t y = y0; y < y0 + 16u + pad * 2u; ++y)
++		for (uint32_t x = x0; x < x0 + width; ++x) fb[y * VEUX_FB_WIDTH + x] = 0xff000000u;
++	uint32_t x = x0 + pad;
++	for (const unsigned char *c = (const unsigned char *)message; *c; ++c, x += 8u) {
++		for (unsigned y = 0; y < 16; ++y) {
++			unsigned char bits = iso_font[(unsigned)*c * 16u + y];
++			for (unsigned b = 0; b < 8; ++b) if (bits & (0x80u >> b))
++				fb[(y0 + pad + y) * VEUX_FB_WIDTH + x + b] = 0xffffffffu;
++		}
++	}
++	static const char prefix[] = " err=0x";
++	static const char hex[] = "0123456789ABCDEF";
++	for (const unsigned char *c = (const unsigned char *)prefix; *c; ++c, x += 8u) {
++		for (unsigned y = 0; y < 16; ++y) {
++			unsigned char bits = iso_font[(unsigned)*c * 16u + y];
++			for (unsigned b = 0; b < 8; ++b) if (bits & (0x80u >> b))
++				fb[(y0 + pad + y) * VEUX_FB_WIDTH + x + b] = 0xffffffffu;
++		}
++	}
++	for (int shift = 28; shift >= 0; shift -= 4, x += 8u) {
++		unsigned char c = (unsigned char)hex[(detail >> shift) & 0xfu];
++		for (unsigned y = 0; y < 16; ++y) {
++			unsigned char bits = iso_font[(unsigned)c * 16u + y];
++			for (unsigned b = 0; b < 8; ++b) if (bits & (0x80u >> b))
++				fb[(y0 + pad + y) * VEUX_FB_WIDTH + x + b] = 0xffffffffu;
++		}
++	}
++	__asm__ volatile("dsb sy" ::: "memory");
++}
+ #endif /* ARM64_BOARD_CONFIG_VEUX */
+-- 
+2.39.5

@@ -4516,3 +4516,25 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 
 - User returned the phone in Fastboot. Reverified serial `4078cac030c8`, product `veux`, unlocked, active slot B, `boot_b` capacity `0x8000000`. The verified normal image SHA-256 was `8b23739f55534f085c5d09271202637f5b305f7734a9995baa477b70b03f6976` (17,260,544 bytes).
 - Flashed `/home/nyra/veux-artifacts/40674297635/normal.img` to `boot_b` only. Fastboot reported `OKAY`; current slot remained B and reboot returned `OKAY`. `boot_a` was not written. Await lock-screen and swipe result; the active touch init is delayed, so allow about 45 seconds after startup before judging touch.
+
+## >>> UPDATE 2026-10-28 (visible touch probe status) <<<
+
+- The user reports the current normal VEUX image reaches iOS but has no touch,
+  and that the logs are difficult to read. The supplied close-up shows the
+  shim handoff (`XNU jumping (fbcon clears screen)`), not the delayed touch
+  worker result. Normal boot intentionally mutes the framebuffer console after
+  the first GUI present, so the worker's `printf` result is hidden.
+- Added patch 0146 to render a single 16-pixel status line in a small top-left
+  black panel after the 45-second touch worker delay. It reports worker/MMIO,
+  GCC+SE8, GPIO+power, ID-read-started, and final GT9896 ID-read result with
+  the error code. Normal GUI and boot arguments stay unchanged. The overlay is
+  diagnostic only; it does not establish that touch works, and it can be
+  overwritten by a later GUI framebuffer update.
+- Added the patch and source/kernel-string checks to `tools/kernel-manifest.py`.
+  `tools/validate-repo.py`, Python syntax compilation, `git diff --check`, and
+  patch-format parsing pass. CI/build and exact wrapper verification remain
+  required before any device write.
+- Fastboot currently enumerates serial `4078cac030c8`, product `veux`,
+  unlocked, current slot B, with `boot_b` capacity 0x8000000. No new image has
+  been flashed in this update. If CI and wrapper verification pass, only
+  `boot_b` is authorized for the diagnostic candidate; never write `boot_a`.

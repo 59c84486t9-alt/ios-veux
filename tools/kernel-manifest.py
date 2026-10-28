@@ -62,6 +62,7 @@ for patch in (
     "0143-veux-tlmm-alt-first-compact.patch",
     "0144-veux-tlmm-two-read-fault-context.patch",
     "0145-veux-touch-use-regbase-adjusted-tlmm.patch",
+    "0146-veux-touch-gui-status.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -91,6 +92,7 @@ needles = {
     "veux_touch_probe_hold": b"held before root mount; exactly two read-only TLMM CFG reads; no UFS/GPIO writes",
     "veux_variant_held": b"variant=held",
     "veux_variant_normal": b"variant=normal ID=",
+    "veux_touch_gui_status": b"TOUCH: GT9896 ID read FAILED",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
     "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",
@@ -189,6 +191,12 @@ source_checks["veux_active_touch_uses_regbase_adjusted_tlmm"] = (
     and "#define TOUCH_GPIO_SCL   20u" in touch_driver
     and "#define TOUCH_GPIO_RESET 21u" in touch_driver
     and "#define TOUCH_GPIO_IRQ   22u" in touch_driver
+)
+source_checks["veux_touch_final_status_is_drawn_after_the_probe"] = (
+    "veux_fb_touch_status(unsigned int state, unsigned int detail)" in serial
+    and "TOUCH: GT9896 ID read FAILED" in serial
+    and "veux_fb_touch_status(ge == 0 ? 5u : 6u" in touch_driver
+    and "veux_fb_touch_status(4, 0)" in touch_driver
 )
 source_checks["direct_framebuffer_build_id_print"] = (
     'veux_fb_print_build_id();' in fb_init
