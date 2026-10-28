@@ -4490,3 +4490,17 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   variant description names the two exact PA reads. A corrected CI run is
   pending. No image has been flashed. User authorized a boot_b-only flash after
   strict CI and wrapper verification; never write boot_a.
+
+### Two-read held TLMM probe flashed to boot_b — 2026-10-28
+
+- Corrected strict CI run [40632021168](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40632021168) passed the XNU build, diagnostic bounds check, strict feature manifest, packaging, and KDK inspection. Downloaded artifact SHA-256 matches CI's `SHA256SUMS`: `c4b6bcaecfc820b19cfedbac3c30a87af75febc278a6804f376d0848b4231c2e`.
+- Packed a held diagnostic wrapper from the exact CI kernel, the previously verified shim/header/phone DTB, and its embedded ADT. `verify-veux-wrapper.py` passed payload reconstruction, build/run ID, exact DTB and boot-argument checks, and the two-variant manifest. Wrapper SHA-256: `e4bf89b168a9917fd5c34632784aa3eefd5a938a3b7ffc4a9deb34b2ac26aa87`; wrapper and manifest are in `/home/nyra/veux-artifacts/40632021168-complete/`.
+- This held build performs only the two requested read-only CFG reads at GPIO3 PA `0x503000` and GPIO19 PA `0x513000`, each with BEFORE/AFTER and narrow ESR/FAR/ELR fault context. It parks in WFE before root mount; it does no rail/reset/I2C sequence, UFS writes, or GPIO writes, and is expected not to reach iOS.
+- Fastboot verified serial `4078cac030c8`, product `veux`, unlocked, current slot B, `boot_b` size `0x8000000`. Flashed the 17.3 MB verified wrapper to `boot_b` only; flash and reboot returned OKAY. `boot_a` was not written and the active slot was not changed. User will inspect the held probe output; obtain a straight-on photo of the BEFORE/AFTER lines or any captured fault line.
+
+### REG_BASE probe result and active-driver correction — 2026-10-28
+
+- User photo from held build 40632021168 shows both read transactions completed without a fault: GPIO3 CFG at PA `0x503000` returned `0x00000001`; GPIO19 CFG at PA `0x513000` returned `0x00000000`. This supports the 0x500000 window being readable and shows GPIO19 is readable; it does not alone prove the GPIO19 touch state is configured.
+- Decoded the exact phone DTB `dtb/vendor_boot_b_unpacked/dtb_1.dtb`: SE8 is `/soc/i2c@4c88000`; its `pinctrl-0` is `qupv3_se8_i2c_active`, whose pins are GPIO19/20, function `qup12`, drive-strength 8 mA, pull-up. The Goodix reset/IRQ active state is GPIO21/22. Because the held probe runs before touch initialization, GPIO19=0 is compatible with the pinmux not yet having been applied.
+- Found the concrete active-path mismatch: patch 0137 still sets `TOUCH_NORTH_PA` to the DT resource PA `0x400000` directly, omitting Blair `REG_BASE=0x100000`. Therefore all later active CFG/IO reads and writes use the wrong base even though the held probe correctly reads from `0x500000`.
+- Added patch 0145 to use effective PA `0x500000` in the active touch driver, and added a strict manifest assertion binding that base and the VEUX SDA/SCL/reset/IRQ pins. `tools/validate-repo.py`, Python syntax, and `git diff --check` pass. Patch is not yet built by CI or flashed. Next: commit/push, run strict CI, package the normal variant with the manifest's full RW boot args, verify the wrapper, then ask the user to reconnect in Fastboot before the boot_b-only flash. Never write boot_a.

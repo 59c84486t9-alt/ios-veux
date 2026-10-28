@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Use the REG_BASE-adjusted VEUX TLMM address for touch
+
+The read-only held probe confirms the live pin-controller window at PA
+0x500000: GPIO3 reads nonzero while GPIO19 is readable. The active driver
+still mapped the DT resource base 0x400000 directly, omitting Blair's
+REG_BASE=0x100000. Use the effective register base so its GPIO accesses reach
+the pin registers used by Linux.
+
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -39,6 +39,6 @@
+ #define TOUCH_SE_PA      0x04c88000u
+ #define TOUCH_GCC_PA     0x01400000u
+-#define TOUCH_NORTH_PA   0x00400000u /* Blair TLMM, exact VEUX phone DT */
++#define TOUCH_NORTH_PA   0x00500000u /* phone DT base + Blair REG_BASE */
+ #define TOUCH_GCC_VOTE   0x7900cu
+ #define TOUCH_RCG        0x5327cu    /* QUP1 SE8 S2 */
+ #define TOUCH_GCC_VOTE_MASK ((1u << 17) | (1u << 18) | (1u << 23))
+--
+2.39.5

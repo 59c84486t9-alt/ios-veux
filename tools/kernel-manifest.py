@@ -61,6 +61,7 @@ for patch in (
     "0142-veux-held-tlmm-ab-probe-and-normal-boot.patch",
     "0143-veux-tlmm-alt-first-compact.patch",
     "0144-veux-tlmm-two-read-fault-context.patch",
+    "0145-veux-touch-use-regbase-adjusted-tlmm.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -139,6 +140,7 @@ ufs = (a.source_root / "bsd/dev/sweet_ufs.c").read_text()
 serial = (a.source_root / "pexpert/arm/pe_serial.c").read_text()
 touch_probe = (a.source_root / "bsd/dev/veux_touch_probe.c").read_text()
 touch_active = (a.source_root / "bsd/dev/veux_touch_active.c").read_text()
+touch_driver = (a.source_root / "bsd/dev/sweet_touch.c").read_text()
 early = (a.source_root / "osfmk/arm64/veux_early.c").read_text()
 fb_init = serial.split("veux_fb_init(void)", 1)[1].split("veux_fb_console_putc(char c)", 1)[0]
 stage_fn = early.split("veux_stage_mark_nb(unsigned int cell)", 1)[1].split("veux_stage_flush(void)", 1)[0]
@@ -180,6 +182,13 @@ source_checks["active_touch_probe_remains_separate_from_read_only_held_path"] = 
     "veux_touch_active_probe" not in touch_probe
     and "0x4022" in touch_active
     and "touch_active_gpio_cfg" in touch_active
+)
+source_checks["veux_active_touch_uses_regbase_adjusted_tlmm"] = (
+    "#define TOUCH_NORTH_PA   0x00500000u /* phone DT base + Blair REG_BASE */" in touch_driver
+    and "#define TOUCH_GPIO_SDA   19u" in touch_driver
+    and "#define TOUCH_GPIO_SCL   20u" in touch_driver
+    and "#define TOUCH_GPIO_RESET 21u" in touch_driver
+    and "#define TOUCH_GPIO_IRQ   22u" in touch_driver
 )
 source_checks["direct_framebuffer_build_id_print"] = (
     'veux_fb_print_build_id();' in fb_init
