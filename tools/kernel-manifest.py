@@ -66,6 +66,7 @@ for patch in (
     "0147-veux-touch-status-persistent-present.patch",
     "0148-veux-geni-fifo-linux-sequence.patch",
     "0149-veux-tlmm-per-read-checkpoints-and-touch-overlay.patch",
+    "0150-veux-touch-gpio-i2c-when-fifo-disabled.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -97,8 +98,8 @@ needles = {
     "veux_variant_normal": b"variant=normal ID=",
     "veux_touch_gui_status": b"TOUCH: GT9896 ID read FAILED",
     "veux_touch_gui_status_repaint": b"TOUCH: report read FAILED err=",
-    "veux_touch_gui_i2c_irq": b"TOUCH: I2C IRQ bits=",
-    "veux_touch_gui_i2c_state": b"TOUCH: SE/TX/RX=",
+    "veux_touch_gui_i2c_irq": b"TOUCH: I2C IRQ/BB flags=",
+    "veux_touch_gui_i2c_state": b"TOUCH: I2C transfer=",
     "surface_service": b"IOCoreSurfaceRoot",
     "mobile_framebuffer_service": b"IOMobileFramebufferUserClient",
     "watchdog_compatibility_service": b"IOWatchdog registered (accepts check-ins, never fires)",
@@ -211,6 +212,16 @@ source_checks["veux_geni_fifo_sequence_matches_linux"] = (
     and "touch_wr(st.se, 0x814, tx_depth);" in touch_driver
     and "touch_wr(st.se, 0xe1c, 0); /* mask external IRQ routing; poll local status */" in touch_driver
 )
+source_checks["veux_gpio_i2c_fallback_when_fifo_disabled"] = (
+    "st.gpio_i2c = if_disable != 0;" in touch_driver
+    and "FIFO disabled by hardware; using GPIO I2C" in touch_driver
+    and "touch_gpio_i2c_read_reg(addr, reg, wide, buf, len)" in touch_driver
+    and "touch_gpio_i2c_write_reg(0x5d, GOODIX_EVENT_REG, 0)" in touch_driver
+    and "unsigned bus_mux = st.gpio_i2c ? 0u : 1u;" in touch_driver
+    and "TOUCH: I2C transfer=0x" in serial
+    and "veux_fb_touch_status(17, goodix ? 0x9896u : 0x5452u);" in touch_driver
+    and "TOUCH: IC detected=0x" in serial
+)
 source_checks["veux_touch_status_is_labeled_bottom_left_and_cleared_on_gui_present"] = (
     "veux_fb_touch_status_redraw(void)" in serial
     and "veux_fb_touch_status_clear(void)" in serial
@@ -218,8 +229,9 @@ source_checks["veux_touch_status_is_labeled_bottom_left_and_cleared_on_gui_prese
     and "veux_fb_touch_status_redraw();" not in (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
     and "VEUX_FB_HEIGHT - 300u + row * 32u" in serial
     and 'state == 14 ? "TOUCH: unsupported IC flags="' in serial
-    and 'state == 15 ? "TOUCH: I2C IRQ bits="' in serial
-    and 'state == 16 ? "TOUCH: SE/TX/RX="' in serial
+    and 'state == 15 ? "TOUCH: I2C IRQ/BB flags="' in serial
+    and 'state == 16 ? "TOUCH: I2C transfer=0x"' in serial
+    and 'state == 17 ? "TOUCH: IC detected=0x"' in serial
     and "veux_fb_touch_status(7, pin)" in touch_driver
     and "veux_fb_touch_status(ge == 0 ? 5u : 6u" in touch_driver
     and "TOUCH: GPIO write/readback FAILED pin=" in serial

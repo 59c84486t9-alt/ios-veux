@@ -1,0 +1,243 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Use GPIO I2C when VEUX SE8 FIFO is disabled
+
+Blair's adjusted TLMM window is now readable and the phone reports
+GENI_IF_DISABLE_RO=1. Treat that read-only bit as FIFO_IF_DISABLE: retain the
+verified GCC clock sequence, but use bounded open-drain GPIO19/20 transactions
+for GT9896 ID/report reads when FIFO mode is unavailable. Expose selected
+transport, transfer result and detected IC in the touch status overlay.
+
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -96,7 +96,7 @@
+ 
+ static struct {
+ 	vm_offset_t se, gcc, gpio;
+-	bool started, dead, probing;
++	bool started, dead, probing, gpio_i2c;
+ 	int kind, irq_hint;
+ 	uint32_t irq_status, irq_last, active;
+ 	unsigned sent, got;
+@@ -173,6 +173,130 @@
+ #endif
+ }
+ 
++/* GPIO I2C fallback for SEs whose read-only FIFO_IF_DISABLE bit is set. */
++static bool
++touch_gpio_i2c_line(unsigned pin, bool drive_low)
++{
++	/* Open drain: output-low drives 0; input releases the line. */
++	return touch_gpio(pin, 0, 3, 0, drive_low, false);
++}
++
++static bool
++touch_gpio_i2c_scl_high(void)
++{
++	if (!touch_gpio_i2c_line(TOUCH_GPIO_SCL, false)) return false;
++	for (unsigned i = 0; i < 2000; ++i) {
++		if (touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_SCL)) & 1u) {
++			delay(5);
++			return true;
++		}
++		delay(5);
++	}
++	return false;
++}
++
++static int
++touch_gpio_i2c_start(void)
++{
++	if (!touch_gpio_i2c_line(TOUCH_GPIO_SDA, false) ||
++	    !touch_gpio_i2c_scl_high()) return ETIMEDOUT;
++	if (!(touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_SDA)) & 1u)) return EBUSY;
++	delay(5);
++	if (!touch_gpio_i2c_line(TOUCH_GPIO_SDA, true)) return EIO;
++	delay(5);
++	if (!touch_gpio_i2c_line(TOUCH_GPIO_SCL, true)) return EIO;
++	delay(5);
++	return 0;
++}
++
++static int
++touch_gpio_i2c_stop(void)
++{
++	if (!touch_gpio_i2c_line(TOUCH_GPIO_SDA, true)) return EIO;
++	delay(5);
++	if (!touch_gpio_i2c_scl_high()) return ETIMEDOUT;
++	if (!touch_gpio_i2c_line(TOUCH_GPIO_SDA, false)) return EIO;
++	delay(5);
++	return 0;
++}
++
++static int
++touch_gpio_i2c_write_bit(bool high)
++{
++	if (!touch_gpio_i2c_line(TOUCH_GPIO_SDA, !high)) return EIO;
++	delay(5);
++	if (!touch_gpio_i2c_scl_high()) return ETIMEDOUT;
++	if (high && !(touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_SDA)) & 1u)) return EBUSY;
++	delay(5);
++	if (!touch_gpio_i2c_line(TOUCH_GPIO_SCL, true)) return EIO;
++	delay(5);
++	return 0;
++}
++
++static int
++touch_gpio_i2c_write_byte(uint8_t value)
++{
++	for (int bit = 7; bit >= 0; --bit) {
++		int err = touch_gpio_i2c_write_bit((value >> bit) & 1u);
++		if (err) return err;
++	}
++	if (!touch_gpio_i2c_line(TOUCH_GPIO_SDA, false)) return EIO;
++	delay(5);
++	if (!touch_gpio_i2c_scl_high()) return ETIMEDOUT;
++	bool nack = (touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_SDA)) & 1u) != 0;
++	delay(5);
++	if (!touch_gpio_i2c_line(TOUCH_GPIO_SCL, true)) return EIO;
++	delay(5);
++	return nack ? ENXIO : 0;
++}
++
++static int
++touch_gpio_i2c_read_byte(uint8_t *value, bool ack)
++{
++	uint8_t byte = 0;
++	for (unsigned bit = 0; bit < 8; ++bit) {
++		if (!touch_gpio_i2c_line(TOUCH_GPIO_SDA, false) ||
++		    !touch_gpio_i2c_scl_high()) return ETIMEDOUT;
++		byte = (uint8_t)((byte << 1) |
++		    !!(touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_SDA)) & 1u));
++		delay(5);
++		if (!touch_gpio_i2c_line(TOUCH_GPIO_SCL, true)) return EIO;
++		delay(5);
++	}
++	int err = touch_gpio_i2c_write_bit(!ack);
++	if (!err) *value = byte;
++	return err;
++}
++
++static int
++touch_gpio_i2c_read_reg(uint8_t addr, uint16_t reg, bool wide,
++    uint8_t *buf, unsigned len)
++{
++	if (!buf || !len || len > 90) return EINVAL;
++	int err = touch_gpio_i2c_start();
++	if (!err) err = touch_gpio_i2c_write_byte((uint8_t)(addr << 1));
++	if (!err && wide) err = touch_gpio_i2c_write_byte((uint8_t)(reg >> 8));
++	if (!err) err = touch_gpio_i2c_write_byte((uint8_t)reg);
++	if (!err) err = touch_gpio_i2c_start();
++	if (!err) err = touch_gpio_i2c_write_byte((uint8_t)((addr << 1) | 1u));
++	for (unsigned i = 0; !err && i < len; ++i)
++		err = touch_gpio_i2c_read_byte(&buf[i], i + 1u < len);
++	int stop_err = touch_gpio_i2c_stop();
++	return err ? err : stop_err;
++}
++
++static int
++touch_gpio_i2c_write_reg(uint8_t addr, uint16_t reg, uint8_t value)
++{
++	int err = touch_gpio_i2c_start();
++	if (!err) err = touch_gpio_i2c_write_byte((uint8_t)(addr << 1));
++	if (!err) err = touch_gpio_i2c_write_byte((uint8_t)(reg >> 8));
++	if (!err) err = touch_gpio_i2c_write_byte((uint8_t)reg);
++	if (!err) err = touch_gpio_i2c_write_byte(value);
++	int stop_err = touch_gpio_i2c_stop();
++	return err ? err : stop_err;
++}
++
+ static bool
+ touch_clocks(void)
+ {
+@@ -388,6 +512,19 @@
+ static int
+ touch_read(uint8_t addr, uint16_t reg, bool wide, uint8_t *buf, unsigned len)
+ {
++	if (st.gpio_i2c) {
++		int err = touch_gpio_i2c_read_reg(addr, reg, wide, buf, len);
++		uint32_t pins = (touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_SDA)) & 1u) |
++		    ((touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_SCL)) & 1u) << 1);
++		st.irq_status = 0x80000000u | pins; /* bit31 marks the GPIO backend */
++		st.irq_last = pins;
++		if (st.probing) printf("VEUX TOUCH GPIO-I2C: read addr=%#x reg=%#x len=%u err=%d lines=%#x\n",
++		    addr, reg, len, err, pins);
++		veux_fb_touch_status(15, st.irq_status);
++		veux_fb_touch_status(16, ((addr & 0xffu) << 24) |
++		    (((uint32_t)err & 0xffu) << 16) | (pins & 0xffffu));
++		return err;
++	}
+ 	uint8_t ptr[2] = {(uint8_t)(reg >> 8), (uint8_t)reg};
+ 	int err = touch_msg(addr, wide ? ptr : ptr + 1, wide ? 2u : 1u,
+ 	    NULL, 0, true);
+@@ -401,6 +538,7 @@
+ static int
+ touch_goodix_ack(void)
+ {
++	if (st.gpio_i2c) return touch_gpio_i2c_write_reg(0x5d, GOODIX_EVENT_REG, 0);
+ 	const uint8_t ack[3] = {GOODIX_EVENT_REG >> 8, GOODIX_EVENT_REG & 0xffu, 0};
+ 	return touch_msg(0x5d, ack, sizeof(ack), NULL, 0, false);
+ }
+@@ -587,7 +725,9 @@
+ 	    fw, (fw >> 8) & 0xffu, touch_rd(st.se, SE_STATUS), tx, rx,
+ 	    touch_rd(st.se, 0x908));
+ 	uint32_t if_disable = touch_rd(st.se, 0x64) & 1u;
+-	printf("TOUCH: GENI_IF_DISABLE_RO=%u (informational; Linux configures FIFO mode)\n", if_disable);
++	st.gpio_i2c = if_disable != 0;
++	printf("TOUCH: GENI_IF_DISABLE_RO=%#x; transport=%s\n", if_disable,
++	    st.gpio_i2c ? "GPIO open-drain I2C" : "GENI FIFO");
+ 	if (((fw >> 8) & 0xffu) != 3u ||
+ 	    ((tx >> 24) & 0x3fu) != 32u || ((rx >> 24) & 0x3fu) != 32u ||
+ 	    ((tx >> 16) & 0x3fu) < 2u || ((rx >> 16) & 0x3fu) < 2u) {
+@@ -598,6 +738,10 @@
+ 		printf("SWEET TOUCH: SE7 already busy; probes skipped\n");
+ 		return false;
+ 	}
++	if (st.gpio_i2c) {
++		printf("VEUX TOUCH SE8: FIFO disabled by hardware; using GPIO I2C for ID and reports\n");
++		return true;
++	}
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 	printf("VEUX TOUCH SE8: firmware checks passed; before register programming\n");
+ #endif
+@@ -761,10 +905,11 @@
+ 	printf("VEUX TOUCH: TLMM reset=%#x irq=%#x rails AVDD=%u DVDD=%u\n",
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_RESET)),
+ 	    touch_rd(st.gpio, TOUCH_GPIO_IO(TOUCH_GPIO_IRQ)), TOUCH_GPIO_AVDD, TOUCH_GPIO_DVDD);
+-	printf("VEUX TOUCH GPIO: configure SDA GPIO19 for SE8\n");
+-	if (!touch_gpio(TOUCH_GPIO_SDA, 1, 3, 0, false, false)) goto out;
+-	printf("VEUX TOUCH GPIO: configure SCL GPIO20 for SE8\n");
+-	if (!touch_gpio(TOUCH_GPIO_SCL, 1, 3, 0, false, false)) goto out;
++	printf("VEUX TOUCH GPIO: configure SDA/SCL GPIO19/20 transport=%s\n",
++	    st.gpio_i2c ? "GPIO I2C" : "SE8 QUP12");
++	unsigned bus_mux = st.gpio_i2c ? 0u : 1u;
++	if (!touch_gpio(TOUCH_GPIO_SDA, bus_mux, 3, 0, false, false)) goto out;
++	if (!touch_gpio(TOUCH_GPIO_SCL, bus_mux, 3, 0, false, false)) goto out;
+ 	printf("VEUX TOUCH GPIO: configure IRQ GPIO22 input\n");
+ 	if (!touch_gpio(TOUCH_GPIO_IRQ, 0, 3, 0, false, false)) goto out;
+ 	printf("VEUX TOUCH GPIO: enable AVDD GPIO51\n");
+@@ -817,6 +962,9 @@
+ 		goto out;
+ 	}
+ 	st.kind = goodix ? TOUCH_GOODIX : TOUCH_FTS;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	veux_fb_touch_status(17, goodix ? 0x9896u : 0x5452u);
++#endif
+ 	printf("SWEET TOUCH: selected %s, 1080x2400, poll=10ms irq-hint=%d\n",
+ 	    goodix ? "GT9896 Yellowstone" : "Focaltech 54:52", st.irq_hint);
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1724,8 +1724,9 @@
+ 	    state == 11 ? "TOUCH: report read FAILED err=" :
+ 	    state == 13 ? "TOUCH: GT9896 report polling" :
+ 	    state == 14 ? "TOUCH: unsupported IC flags=" :
+-	    state == 15 ? "TOUCH: I2C IRQ bits=" :
+-	    state == 16 ? "TOUCH: SE/TX/RX=" :
++	    state == 15 ? "TOUCH: I2C IRQ/BB flags=" :
++	    state == 16 ? "TOUCH: I2C transfer=0x" :
++	    state == 17 ? "TOUCH: IC detected=0x" :
+ 	    "TOUCH: unknown state";
+ 	volatile uint32_t *fb = veux_fb_console_base;
+ 	const uint32_t stride = veux_fb_console_stride / 4u;
+--
+2.39.5
