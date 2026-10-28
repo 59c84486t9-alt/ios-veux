@@ -4483,7 +4483,10 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   normal XNU exception handling. A bus transaction that hangs without raising
   an exception may still stop at BEFORE without an AFTER or abort line.
 - The new patch and source/manifest checks pass local repository validation and
-  patch dry-run against the post-0143 source. CI has not yet been dispatched;
-  no image has been built or flashed in this update. User authorized a
-  boot_b-only flash after strict CI and wrapper verification; never write
-  boot_a.
+  patch dry-run against the post-0143 source. CI 40630226004 compiled XNU and
+  passed host bounds checks, but the strict manifest rejected one stale source
+  assertion that expected the abort callback after a local `state` declaration.
+  The assertion now matches the early call using `&context->ss`, and the held
+  variant description names the two exact PA reads. A corrected CI run is
+  pending. No image has been flashed. User authorized a boot_b-only flash after
+  strict CI and wrapper verification; never write boot_a.

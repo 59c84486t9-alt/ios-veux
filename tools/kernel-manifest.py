@@ -161,7 +161,7 @@ source_checks["veux_touch_tlmm_ab_dump_is_read_only_and_held_before_mount"] = (
     and "VEUX TLMM AFTER pin=%u CFG PA=" in touch_probe
     and "VEUX TLMM FAULT pin=%u PA=" in touch_probe
     and "exactly two read-only TLMM CFG reads" in touch_probe
-    and "veux_touch_probe_fault_note(esr, far, get_saved_state_pc(state))" in (a.source_root / "osfmk/arm64/sleh.c").read_text()
+    and "veux_touch_probe_fault_note(esr, far, get_saved_state_pc(&context->ss))" in (a.source_root / "osfmk/arm64/sleh.c").read_text()
     and 'for (;;) __asm__ volatile("wfe"' in touch_probe
     and "VEUX TOUCH PROBE: refusing non-held mode; this diagnostic is read-only" in touch_probe
     and 'veux_touch_probe_init();' in ufs
@@ -389,7 +389,7 @@ manifest = {
     "kernel_path": str(a.kernel),
     "variants": {
         "normal": {"boot_args": a.boot_args, "root_mode_requested": "rw"},
-        "held": {"boot_args": a.held_boot_args, "root_mode_requested": "ro", "probe": "read-only 0x500000 TLMM dump; WFE before root mount"},
+        "held": {"boot_args": a.held_boot_args, "root_mode_requested": "ro", "probe": "read-only CFG reads at PA 0x503000 and 0x513000; WFE before root mount"},
     },
     "boot_args": a.boot_args,
     "held_boot_args": a.held_boot_args,
