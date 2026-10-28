@@ -59,6 +59,8 @@ for patch in (
     "0140-veux-touch-tlmm-physical-map-check.patch",
     "0141-veux-touch-nofault-tlmm-translation.patch",
     "0142-veux-held-tlmm-ab-probe-and-normal-boot.patch",
+    "0143-veux-tlmm-alt-first-compact.patch",
+    "0144-veux-tlmm-two-read-fault-context.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -82,10 +84,10 @@ needles = {
     "software_gui_userclient_base_fallback": b"VEUX GUI: IOMFB base start rejected; continuing software client",
     "software_gui_swap_trace": b"VEUX GUI: framebuffer swap %u mask=0x%x",
     "software_apple_keystore_service": b"SWEET AKS: AppleKeyStore registered (no passcode, unlocked)",
-    "veux_touch_probe_mapping": b"VEUX TLMM %s CFG DUMP BEGIN PA=",
-    "veux_touch_probe_compact_dump": b"VEUX TLMM %s CFG DUMP BEGIN",
-    "veux_touch_probe_alt_readonly": b"VEUX TLMM %s CFG DUMP BEGIN",
-    "veux_touch_probe_hold": b"held before root mount; no UFS writes or GPIO writes",
+    "veux_touch_probe_before": b"VEUX TLMM BEFORE pin=%u CFG PA=",
+    "veux_touch_probe_after": b"VEUX TLMM AFTER pin=%u CFG PA=",
+    "veux_touch_probe_fault": b"VEUX TLMM FAULT pin=%u PA=",
+    "veux_touch_probe_hold": b"held before root mount; exactly two read-only TLMM CFG reads; no UFS/GPIO writes",
     "veux_variant_held": b"variant=held",
     "veux_variant_normal": b"variant=normal ID=",
     "surface_service": b"IOCoreSurfaceRoot",
@@ -151,15 +153,15 @@ source_checks["framebuffer_console_is_bootarg_gated_and_normal_status_is_tempora
 source_checks["veux_touch_tlmm_ab_dump_is_read_only_and_held_before_mount"] = (
     'PE_parse_boot_argn("veuxtouchprobe", &enabled, sizeof(enabled))' in touch_probe
     and 'PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold))' in touch_probe
-    and "VEUX_TOUCH_TLMM_PA     0x00400000u" in touch_probe
     and "VEUX_TOUCH_TLMM_ALT_PA 0x00500000u" in touch_probe
-    and "for (unsigned pin = 0; pin < VEUX_TOUCH_TLMM_PINS; ++pin)" in touch_probe
     and "volatile uint32_t" in touch_probe
-    and 'touch_probe_tlmm_cfg_dump(tlmm, VEUX_TOUCH_TLMM_ALT_PA, "REGBASE500000")' in touch_probe
-    and "stride=0x1000 width=32; rows show PA/VA offsets" in touch_probe
-    and "%02u:%08x@+%05x" in touch_probe
-    and "prior capture stopped during PA=0x401000 read" in touch_probe
-    and "no UFS writes or GPIO writes" in touch_probe
+    and "touch_probe_tlmm_cfg_once(tlmm, VEUX_TOUCH_TLMM_ALT_PA, 3)" in touch_probe
+    and "touch_probe_tlmm_cfg_once(tlmm, VEUX_TOUCH_TLMM_ALT_PA, 19)" in touch_probe
+    and "VEUX TLMM BEFORE pin=%u CFG PA=" in touch_probe
+    and "VEUX TLMM AFTER pin=%u CFG PA=" in touch_probe
+    and "VEUX TLMM FAULT pin=%u PA=" in touch_probe
+    and "exactly two read-only TLMM CFG reads" in touch_probe
+    and "veux_touch_probe_fault_note(esr, far, get_saved_state_pc(state))" in (a.source_root / "osfmk/arm64/sleh.c").read_text()
     and 'for (;;) __asm__ volatile("wfe"' in touch_probe
     and "VEUX TOUCH PROBE: refusing non-held mode; this diagnostic is read-only" in touch_probe
     and 'veux_touch_probe_init();' in ufs

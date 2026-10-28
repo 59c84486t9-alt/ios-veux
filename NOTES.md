@@ -4468,3 +4468,22 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   token lacks the `workflow` scope needed to update `.github/workflows/xnu.yml`.
   No CI run could be dispatched from this unpushed commit. The commit remains
   local on `veux-xnu-build`; no device or root-image write was made.
+
+### Two-address VEUX TLMM fault-context probe — 2026-10-28
+
+- Replaced the 64-pin buffered scan in the held diagnostic with exactly two
+  read-only 32-bit CFG reads from the Linux REG_BASE-adjusted `0x500000`
+  mapping: GPIO3 control at PA `0x503000`, followed by touch SDA GPIO19 at PA
+  `0x513000`. Each prints a BEFORE marker with PA/VA and an AFTER marker with
+  the value. No GPIO writes, rail/reset sequence, I2C, root mount, or UFS write
+  is enabled; the held path still stops in WFE before root mount.
+- The existing VEUX synchronous-abort path already records ESR/FAR/ELR. Added a
+  narrow read-armed callback before that path's diagnostic work so an abort
+  during either MMIO read prints its pin, target PA/VA, ESR, FAR, and ELR before
+  normal XNU exception handling. A bus transaction that hangs without raising
+  an exception may still stop at BEFORE without an AFTER or abort line.
+- The new patch and source/manifest checks pass local repository validation and
+  patch dry-run against the post-0143 source. CI has not yet been dispatched;
+  no image has been built or flashed in this update. User authorized a
+  boot_b-only flash after strict CI and wrapper verification; never write
+  boot_a.

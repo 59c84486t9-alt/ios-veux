@@ -1,0 +1,202 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+Subject: [PATCH] Probe two VEUX TLMM registers with abort annotation
+
+Replace the buffered 64-pin sweep with two read-only CFG accesses: known-used
+GPIO3 and touch SDA GPIO19. Log each access before and after, and annotate a
+synchronous abort with its target PA/VA and ESR/FAR/ELR. The existing VEUX
+abort path still owns normal exception handling.
+
+diff --git a/bsd/dev/veux_touch_probe.c b/bsd/dev/veux_touch_probe.c
+--- a/bsd/dev/veux_touch_probe.c
++++ b/bsd/dev/veux_touch_probe.c
+@@ -8,38 +8,12 @@
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ extern void veux_fb_print_build_id(void);
+ 
+-#define VEUX_TOUCH_SE_PA       0x04c88000u
+-#define VEUX_TOUCH_GCC_PA      0x01400000u
+ #define VEUX_TOUCH_TLMM_PA     0x00400000u
+ #define VEUX_TOUCH_TLMM_ALT_PA 0x00500000u
+-#define VEUX_TOUCH_SE_SIZE     0x4000u
+-#define VEUX_TOUCH_GCC_SIZE    0x80000u
+ #define VEUX_TOUCH_TLMM_SIZE   0x40000u
+-#define VEUX_TOUCH_TLMM_PINS   64u
+ 
+-#define SE_STATUS              0x040u
+-#define SE_M_CLK               0x048u
+-#define SE_FW_REV              0x068u
+-#define SE_CLK_SEL             0x07cu
+-#define SE_IRQ                 0x610u
+-#define SE_IRQ_EN              0x614u
+-#define SE_TX_COUNT            0x800u
+-#define SE_RX_COUNT            0x804u
+-#define GCC_QUP1_S2_CMD_RCGR   0x5327cu
+-#define GCC_QUP1_S2_BRANCH     0x53278u
+-#define GCC_QUP1_M_AHB_BRANCH  0x53004u
+-#define GCC_QUP1_S_AHB_BRANCH  0x53008u
+-#define GCC_BRANCH_VOTE        0x7900cu
+ #define TLMM_GPIO_CFG(pin)     ((uint32_t)(pin) * 0x1000u)
+ #define TLMM_GPIO_INOUT(pin)   (TLMM_GPIO_CFG(pin) + 4u)
+-
+-static uint32_t
+-touch_probe_rd(vm_offset_t base, uint32_t offset)
+-{
+-	uint32_t value = *(volatile uint32_t *)(base + (vm_offset_t)offset);
+-	__asm__ volatile("dmb oshld" ::: "memory");
+-	return value;
+-}
+ 
+ static uint32_t
+ touch_probe_tlmm_rd(vm_offset_t va, vm_offset_t pa, uint32_t offset)
+@@ -80,29 +54,48 @@
+ 	}
+ }
+ 
+-static bool
+-touch_probe_tlmm_cfg_dump(vm_offset_t va, vm_offset_t pa, const char *tag)
++/* The MMIO read runs with a narrow abort annotation window. XNU's existing
++ * VEUX abort path records ESR/FAR/ELR; this callback binds that record to a
++ * TLMM pin and physical address before the normal kernel-abort handler runs. */
++static volatile bool touch_probe_read_armed;
++static volatile uint32_t touch_probe_read_pin;
++static volatile vm_offset_t touch_probe_read_pa;
++static volatile vm_offset_t touch_probe_read_va;
++
++bool
++veux_touch_probe_fault_note(uint32_t esr, vm_offset_t far, vm_offset_t elr)
+ {
+-	uint32_t cfg[VEUX_TOUCH_TLMM_PINS];
+-	bool any_nonzero = false;
+-	printf("VEUX TLMM %s CFG DUMP BEGIN PA=%#llx VA=%p stride=0x1000 width=32; rows show PA/VA offsets\n",
+-	    tag, (unsigned long long)pa, (void *)va);
+-	for (unsigned pin = 0; pin < VEUX_TOUCH_TLMM_PINS; ++pin) {
+-		uint32_t off = TLMM_GPIO_CFG(pin);
+-		cfg[pin] = *(volatile uint32_t *)(va + (vm_offset_t)off);
+-		__asm__ volatile("dmb oshld" ::: "memory");
+-		any_nonzero |= cfg[pin] != 0;
+-	}
+-	for (unsigned row = 0; row < VEUX_TOUCH_TLMM_PINS; row += 4) {
+-		printf("VEUX TLMM %s %02u:%08x@+%05x %02u:%08x@+%05x %02u:%08x@+%05x %02u:%08x@+%05x\n",
+-		    tag,
+-		    row, cfg[row], TLMM_GPIO_CFG(row),
+-		    row + 1, cfg[row + 1], TLMM_GPIO_CFG(row + 1),
+-		    row + 2, cfg[row + 2], TLMM_GPIO_CFG(row + 2),
+-		    row + 3, cfg[row + 3], TLMM_GPIO_CFG(row + 3));
+-	}
+-	printf("VEUX TLMM %s CFG DUMP END nonzero=%u\n", tag, (unsigned)any_nonzero);
+-	return any_nonzero;
++	if (!touch_probe_read_armed) return false;
++	touch_probe_read_armed = false;
++	__asm__ volatile("dmb ish" ::: "memory");
++	printf("VEUX TLMM FAULT pin=%u PA=%#llx VA=%p ESR=%#x FAR=%#llx ELR=%#llx\n",
++	    touch_probe_read_pin, (unsigned long long)touch_probe_read_pa,
++	    (void *)touch_probe_read_va, esr, (unsigned long long)far,
++	    (unsigned long long)elr);
++	return true;
++}
++
++static uint32_t
++touch_probe_tlmm_cfg_once(vm_offset_t va, vm_offset_t pa, unsigned pin)
++{
++	uint32_t off = TLMM_GPIO_CFG(pin);
++	vm_offset_t addr = va + (vm_offset_t)off;
++	vm_offset_t phys = pa + (vm_offset_t)off;
++	printf("VEUX TLMM BEFORE pin=%u CFG PA=%#llx VA=%p width=32\n",
++	    pin, (unsigned long long)phys, (void *)addr);
++	__asm__ volatile("dmb ish" ::: "memory");
++	touch_probe_read_pin = pin;
++	touch_probe_read_pa = phys;
++	touch_probe_read_va = addr;
++	touch_probe_read_armed = true;
++	__asm__ volatile("dmb ish" ::: "memory");
++	uint32_t value = *(volatile uint32_t *)addr;
++	__asm__ volatile("dmb oshld" ::: "memory");
++	touch_probe_read_armed = false;
++	__asm__ volatile("dmb ish" ::: "memory");
++	printf("VEUX TLMM AFTER pin=%u CFG PA=%#llx VA=%p value=%08x\n",
++	    pin, (unsigned long long)phys, (void *)addr, value);
++	return value;
+ }
+ 
+ 
+@@ -111,40 +104,28 @@
+ {
+ 	int enabled = 0;
+ 	if (!PE_parse_boot_argn("veuxtouchprobe", &enabled, sizeof(enabled)) || enabled != 1) return;
+-
+-	vm_offset_t se = ml_io_map(VEUX_TOUCH_SE_PA, VEUX_TOUCH_SE_SIZE);
+-	vm_offset_t gcc = ml_io_map(VEUX_TOUCH_GCC_PA, VEUX_TOUCH_GCC_SIZE);
+-	/* The 0x400000 candidate stalled on the pin-1 read in build 40612700352. */
+-	vm_offset_t tlmm = ml_io_map(VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
+-	if (!se || !gcc || !tlmm) {
+-		printf("VEUX TOUCH PROBE: mapping failed se=%u gcc=%u tlmm=%u\n",
+-		    se != 0, gcc != 0, tlmm != 0);
+-		return;
+-	}
+-	printf("VEUX TOUCH PROBE: read-only SE8 fw=%#x status=%#x mclk=%#x clk_sel=%#x irq=%#x irq_en=%#x tx_count=%#x rx_count=%#x\n",
+-	    touch_probe_rd(se, SE_FW_REV), touch_probe_rd(se, SE_STATUS),
+-	    touch_probe_rd(se, SE_M_CLK), touch_probe_rd(se, SE_CLK_SEL),
+-	    touch_probe_rd(se, SE_IRQ), touch_probe_rd(se, SE_IRQ_EN),
+-	    touch_probe_rd(se, SE_TX_COUNT), touch_probe_rd(se, SE_RX_COUNT));
+-	printf("VEUX TOUCH PROBE: read-only GCC rcgr=%#x cfg=%#x branch=%#x m_ahb=%#x s_ahb=%#x vote=%#x\n",
+-	    touch_probe_rd(gcc, GCC_QUP1_S2_CMD_RCGR),
+-	    touch_probe_rd(gcc, GCC_QUP1_S2_CMD_RCGR + 4u),
+-	    touch_probe_rd(gcc, GCC_QUP1_S2_BRANCH), touch_probe_rd(gcc, GCC_QUP1_M_AHB_BRANCH),
+-	    touch_probe_rd(gcc, GCC_QUP1_S_AHB_BRANCH), touch_probe_rd(gcc, GCC_BRANCH_VOTE));
+-
+ 	int hold = 0;
+ 	bool should_hold = PE_parse_boot_argn("veuxtouchprobehold", &hold, sizeof(hold)) && hold == 1;
+ 	if (!should_hold) {
+ 		printf("VEUX TOUCH PROBE: refusing non-held mode; this diagnostic is read-only\n");
+ 		return;
+ 	}
++
+ 	printf("VEUX BOOT: variant=held\n");
+ 	veux_fb_print_build_id();
+-	printf("VEUX TLMM: Linux recovery line-info controls gpio3,7,8,9 and Goodix 21,22,44,51; UFS/UART/SPMI controls are from live chardev inventory\n");
+-	/* Read only the REG_BASE-adjusted candidate first; avoid the stalled 0x401000 read. */
+-	printf("VEUX TLMM: skipping 0x400000 full scan; prior capture stopped during PA=0x401000 read\n");
+-	(void)touch_probe_tlmm_cfg_dump(tlmm, VEUX_TOUCH_TLMM_ALT_PA, "REGBASE500000");
+-	printf("VEUX TOUCH PROBE: held before root mount; no UFS writes or GPIO writes; hard reset to reboot\n");
++	printf("VEUX TLMM TARGETS: REG_BASE candidate=0x500000; read GPIO3 control then GPIO19 SDA only\n");
++	vm_offset_t tlmm = ml_io_map(VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
++	if (!tlmm) {
++		printf("VEUX TLMM MAP FAILED PA=%#llx size=%#x\n",
++		    (unsigned long long)VEUX_TOUCH_TLMM_ALT_PA, VEUX_TOUCH_TLMM_SIZE);
++		return;
++	}
++	printf("VEUX TLMM MAP PA=%#llx VA=%p bytes=%#x attr=VM_WIMG_IO\n",
++	    (unsigned long long)VEUX_TOUCH_TLMM_ALT_PA, (void *)tlmm,
++	    VEUX_TOUCH_TLMM_SIZE);
++	(void)touch_probe_tlmm_cfg_once(tlmm, VEUX_TOUCH_TLMM_ALT_PA, 3);
++	(void)touch_probe_tlmm_cfg_once(tlmm, VEUX_TOUCH_TLMM_ALT_PA, 19);
++	printf("VEUX TOUCH PROBE: held before root mount; exactly two read-only TLMM CFG reads; no UFS/GPIO writes\n");
+ 	veux_fb_print_build_id();
+ 	for (;;) __asm__ volatile("wfe" ::: "memory");
+ }
+
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -124,6 +124,10 @@
+ _Static_assert(ARM64_KDBG_CODE_GUEST <= KDBG_CODE_MAX, "arm64 KDBG trace codes out of range");
+ _Static_assert(ARM64_KDBG_CODE_GUEST <= UINT16_MAX, "arm64 KDBG trace codes out of range");
+ 
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++extern bool veux_touch_probe_fault_note(uint32_t, vm_offset_t, vm_offset_t);
++#endif
++
+ void panic_with_thread_kernel_state(const char *msg, arm_saved_state_t *ss) __abortlike;
+ 
+ void sleh_synchronous_sp1(arm_context_t *, uint32_t, vm_offset_t) __abortlike;
+@@ -611,6 +615,9 @@
+ void
+ sleh_synchronous(arm_context_t *context, uint32_t esr, vm_offset_t far)
+ {
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++ (void)veux_touch_probe_fault_note(esr, far, get_saved_state_pc(&context->ss));
++#endif
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+  veux_fault_dump(esr, get_saved_state_pc(&context->ss), far,
+      get_saved_state_sp(&context->ss));
+
