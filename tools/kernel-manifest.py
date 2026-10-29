@@ -326,9 +326,9 @@ if not all(phase4_binary.values()):
 print("VEUX MODEM Phase-4 binary markers: PASS " + repr(phase4_binary))
 modem_needles = {
     "pas_parameters": b"VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3",
-    "pas_mdt_copying": b"VEUX MODEM PAS: copying mdt metadata\n",
-    "pas_metadata_copied": b"VEUX MODEM PAS: metadata copied\n",
-    "pas_calling_init_image": b"VEUX MODEM PAS: calling init_image\n",
+    "pas_mdt_copying": b"VEUX MODEM PAS: copying mdt metadata",
+    "pas_metadata_copied": b"VEUX MODEM PAS: metadata copied",
+    "pas_calling_init_image": b"VEUX MODEM PAS: calling init_image",
     "ipcc_parameters": b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
     "smp2p_ready": b"VEUX MODEM: SMP2P READY",
     "glink_version_ack": b"VEUX GLINK: VERSION_ACK",
