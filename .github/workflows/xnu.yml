@@ -413,7 +413,7 @@ jobs:
             --source-root dxb/xnu \
             --output out/manifest.json
 
-      - name: Phase 2 IPCC sub-gate (expected modem-manifest red)
+      - name: Phase 2 IPCC sub-gate
         id: ipcc_gate
         if: always() && steps.build.outcome == 'success' && env.MACHINE_CONFIG == 'VEUX'
         run: |
@@ -433,13 +433,16 @@ jobs:
           manifest_status=$?
           set -e
           cat out/ipcc-subgate.log
-          test "$manifest_status" -eq 1
+          if [ "$manifest_status" -eq 1 ]; then
+            grep -Fxq 'missing modem markers: pas_parameters, smp2p_ready, glink_version_ack, glink_open_ack_ipcrtr, qrtr_hello, qrtr_wlfw_server, wlfw_ind_register, wlfw_msa_info, wlfw_msa_ready, wlfw_cap, wlfw_chip_id, modem_hold' out/ipcc-subgate.log
+          elif [ "$manifest_status" -ne 0 ]; then
+            exit "$manifest_status"
+          fi
           grep -Fq 'VEUX IPCC Phase-2 source assertions: PASS' out/ipcc-subgate.log
           grep -Fq 'VEUX IPCC Phase-2 binary marker and read-only self-test string: PASS' out/ipcc-subgate.log
-          grep -Fxq 'missing modem markers: pas_parameters, smp2p_ready, glink_version_ack, glink_open_ack_ipcrtr, qrtr_hello, qrtr_wlfw_server, wlfw_ind_register, wlfw_msa_info, wlfw_msa_ready, wlfw_cap, wlfw_chip_id, modem_hold' out/ipcc-subgate.log
-          echo 'Phase-2 IPCC gate passed; full milestone manifest is red only for its 12 not-yet-implemented modem markers.'
+          echo 'Phase-2 IPCC source and binary sub-gates passed.'
 
-      - name: Phase 3 modem pool sub-gate (expected modem-manifest red)
+      - name: Phase 3 modem pool sub-gate
         id: pool_gate
         if: always() && steps.build.outcome == 'success' && env.MACHINE_CONFIG == 'VEUX'
         run: |
@@ -459,13 +462,37 @@ jobs:
           manifest_status=$?
           set -e
           cat out/pool-subgate.log
-          test "$manifest_status" -eq 1
+          if [ "$manifest_status" -eq 1 ]; then
+            grep -Fxq 'missing modem markers: pas_parameters, smp2p_ready, glink_version_ack, glink_open_ack_ipcrtr, qrtr_hello, qrtr_wlfw_server, wlfw_ind_register, wlfw_msa_info, wlfw_msa_ready, wlfw_cap, wlfw_chip_id, modem_hold' out/pool-subgate.log
+          elif [ "$manifest_status" -ne 0 ]; then
+            exit "$manifest_status"
+          fi
           grep -Fq 'VEUX IPCC Phase-2 source assertions: PASS' out/pool-subgate.log
           grep -Fq 'VEUX IPCC Phase-2 binary marker and read-only self-test string: PASS' out/pool-subgate.log
           grep -Fq 'VEUX MODEM POOL Phase-3 source assertions: PASS' out/pool-subgate.log
           grep -Fq 'VEUX MODEM POOL Phase-3 binary marker/selftest strings: PASS' out/pool-subgate.log
-          grep -Fxq 'missing modem markers: pas_parameters, smp2p_ready, glink_version_ack, glink_open_ack_ipcrtr, qrtr_hello, qrtr_wlfw_server, wlfw_ind_register, wlfw_msa_info, wlfw_msa_ready, wlfw_cap, wlfw_chip_id, modem_hold' out/pool-subgate.log
-          echo 'Phase-3 modem pool gate passed; full milestone manifest remains red only for its 12 not-yet-implemented modem markers.'
+          echo 'Phase-3 modem pool source and binary sub-gates passed.'
+
+      - name: Phase 4 modem milestone sub-gate
+        id: phase4_gate
+        if: always() && steps.build.outcome == 'success' && env.MACHINE_CONFIG == 'VEUX'
+        run: |
+          KERNEL=$(find dxb/fakeroot/System/Library/Kernels -type f -name '*development*veux*' -print -quit)
+          test -n "$KERNEL"
+          python3 tools/kernel-manifest.py \
+            --kernel "$KERNEL" \
+            --patch-status patch-status.txt \
+            --build-id "$VEUX_BUILD_ID" \
+            --boot-args "$VEUX_BOOT_ARGS" \
+            --held-boot-args "$VEUX_HELD_BOOT_ARGS" \
+            --modem-held-boot-args "$VEUX_MODEM_HELD_BOOT_ARGS" \
+            --source-root dxb/xnu \
+            --output out/phase4-manifest.json > out/phase4-subgate.log 2>&1
+          cat out/phase4-subgate.log
+          grep -Fq 'VEUX MODEM Phase-4 source assertions: PASS' out/phase4-subgate.log
+          grep -Fq 'VEUX MODEM Phase-4 binary markers: PASS' out/phase4-subgate.log
+          ! grep -Fq 'missing modem markers:' out/phase4-subgate.log
+          echo 'Phase-4 gate passed: full milestone manifest green.'
 
       - name: Package build tree for local compiles
         if: always()
@@ -483,7 +510,7 @@ jobs:
           ls -la buildtree.tgz
 
       - uses: actions/upload-artifact@v4
-        if: always() && steps.build.outcome == 'success' && steps.ipcc_gate.outcome == 'success' && steps.pool_gate.outcome == 'success'
+        if: always() && steps.build.outcome == 'success' && steps.ipcc_gate.outcome == 'success' && steps.pool_gate.outcome == 'success' && steps.phase4_gate.outcome == 'success'
         with:
           name: xnu-buildtree
           path: buildtree.tgz
@@ -511,7 +538,7 @@ jobs:
           (cd out && shasum -a 256 kernel.* > SHA256SUMS) || true
 
       - uses: actions/upload-artifact@v4
-        if: always() && steps.build.outcome == 'success' && steps.ipcc_gate.outcome == 'success' && steps.pool_gate.outcome == 'success'
+        if: always() && steps.build.outcome == 'success' && steps.ipcc_gate.outcome == 'success' && steps.pool_gate.outcome == 'success' && steps.phase4_gate.outcome == 'success'
         with:
           name: xnu-kernel
           path: out/

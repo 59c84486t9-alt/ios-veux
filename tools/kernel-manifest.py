@@ -228,6 +228,52 @@ pool_binary_checks = {
 if not all(pool_binary_checks.values()):
     raise SystemExit("VEUX MODEM POOL Phase-3 binary marker gate failed: " + repr(pool_binary_checks))
 print("VEUX MODEM POOL Phase-3 binary marker/selftest strings: PASS " + repr(pool_binary_checks))
+phase4_patch_names = (
+    "0154-veux-modem-pas.patch",
+    "0155-veux-modem-firmware.patch",
+    "0156-veux-modem-glink.patch",
+    "0157-veux-modem-pdmapper.patch",
+    "0158-veux-modem-wlfw.patch",
+)
+phase4_patch_texts = {}
+phase4_status = {}
+for name in phase4_patch_names:
+    patch_path = Path("xnu/patches") / name
+    phase4_patch_texts[name] = patch_path.read_text() if patch_path.is_file() else ""
+    terminal = [line for line in status if line.startswith(f"PATCH_STATUS: {name} ") and
+                line.endswith((" APPLIED", " ALLOWLISTED_SKIP"))]
+    phase4_status[name] = len(terminal) == 1 and terminal[0].endswith(" APPLIED")
+phase4_text = "\n".join(phase4_patch_texts.values())
+phase4_lower = phase4_text.lower()
+import re
+phase4_forbidden = {
+    "legacy_apcs_or_topaz_pool": any(x in phase4_lower for x in ("apcs", "0x0f111000", "0xe0000000")),
+    "host_cap_path": re.search(r"\bhost_cap\b", phase4_lower) is not None,
+    "bdf_or_post_cap_paths": any(re.search(p, phase4_lower) for p in (
+        r"\bbdf(?:_\w*)?\b", r"\bcal_report\b", r"\bwlan_cfg\b",
+        r"\bwlan_mode\b", r"\bhtt\b", r"\bwmi\b", r"\bce_\w*",
+        r"\bscan_\w*")),
+}
+phase4_sources = {
+    "five_unique_patch_files": all(phase4_patch_texts.values()),
+    "patches_applied_without_skip": all(phase4_status.values()),
+    "firmware_table_116_rows": phase4_patch_texts["0155-veux-modem-firmware.patch"].count("{ \"") == 116,
+    "pas_and_modem_worker_hold": "veux_modem_start(void)" in phase4_text and "veux_modem_hold(void)" in phase4_text,
+    "modem_a_read_only_api": "sweet_ufs_read_part(\"modem_a\"" in phase4_text,
+    "glink_qrtr_pdm_wlfw_functions": all(x in phase4_text for x in (
+        "veux_glink_poll", "veux_pdmap_rx", "veux_wlfw_rx", "veux_scm_assign")),
+    "forbidden_apcs_host_cap_bdf_wlan_paths_absent": not any(phase4_forbidden.values()),
+}
+if not all(phase4_sources.values()):
+    raise SystemExit("VEUX Phase-4 source assertions failed: " + repr(phase4_sources) + " forbidden=" + repr(phase4_forbidden))
+print("VEUX MODEM Phase-4 source assertions: PASS " + repr(phase4_sources))
+phase4_binary = {
+    "firmware_marker": b"VEUX MODEM FW:" in kernel,
+    "pdmapper_marker": b"VEUX PDMAP:" in kernel,
+}
+if not all(phase4_binary.values()):
+    raise SystemExit("VEUX Phase-4 binary marker checks failed: " + repr(phase4_binary))
+print("VEUX MODEM Phase-4 binary markers: PASS " + repr(phase4_binary))
 modem_needles = {
     "pas_parameters": b"VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3",
     "ipcc_parameters": b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
