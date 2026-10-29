@@ -134,7 +134,7 @@ new file mode 100644
 + printf("VEUX MODEM PAS: read modem.mdt\n");if(veux_fw_read("modem.mdt",0,mdt,n)!=n){kfree_data(mdt,n);return false;}
 + struct elf32_ehdr *eh=(void *)mdt;if(memcmp(eh->id,"\177ELF",4)||eh->phoff+(uint64_t)eh->phnum*sizeof(struct elf32_phdr)>(uint64_t)n){kfree_data(mdt,n);return false;}
 + struct elf32_phdr *ph=(void *)(mdt+eh->phoff);uint32_t hash=~0U,min=~0U,max=0;bool reloc=false;
-+ for(uint32_t i=0;i<eh->phnum;i++){if((ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)hash=i;if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;if(ph[i].flags&MDT_RELOCATABLE)reloc=true;if(ph[i].paddr<min)min=ph[i].paddr;if(ph[i].paddr+ph[i].memsz>max)max=ph[i].paddr+ph[i].memsz;}
++ for(uint32_t i=0;i<eh->phnum;i++){if((ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)hash=i;if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;if(ph[i].flags&MDT_RELOCATABLE)reloc=true;uint64_t seg=ph[i].paddr<MODEM_SIZE?MODEM_PA+ph[i].paddr:ph[i].paddr;if(seg>UINT64_MAX-ph[i].memsz){kfree_data(mdt,n);return false;}if(seg<min)min=(uint32_t)seg;if(seg+ph[i].memsz>max)max=(uint32_t)(seg+ph[i].memsz);}
 + if(hash==~0U||min<MODEM_PA||max>MODEM_PA+MODEM_SIZE){kfree_data(mdt,n);return false;}
 + struct elf32_phdr *hp=&ph[hash];uint64_t hdr=eh->phoff+(uint64_t)eh->phnum*sizeof(*ph),ms=hdr+hp->filesz;IOPhysicalAddress meta_pa=0;uint8_t *meta=NULL;
 + meta=IOMallocContiguous((vm_size_t)ms,0x1000,&meta_pa);if(!meta){kfree_data(mdt,n);return false;}bzero(meta,ms);
@@ -142,7 +142,7 @@ new file mode 100644
 + if(hp->offset+(uint64_t)hp->filesz<=(uint64_t)n)memcpy(meta+hdr,mdt+hp->offset,hp->filesz);else{char name[20];snprintf(name,sizeof(name),"modem.b%02u",hash);if(veux_fw_read(name,0,meta+hdr,hp->filesz)!=hp->filesz){IOFreeContiguous(meta,(vm_size_t)ms);kfree_data(mdt,n);return false;}}
 + printf("VEUX MODEM PAS: metadata copied\n");barrier();uint64_t res=0,st=0;printf("VEUX MODEM PAS: calling init_image\n");st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,(uint64_t)meta_pa,0,&res);IOFreeContiguous(meta,(vm_size_t)ms);meta=NULL;printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
 + if(reloc){st=smc(SCM_FN(SCM_SVC_PIL,PIL_MEM_SETUP),3,PAS_ID_MODEM,min,(max-min+0xfff)&~0xfffULL,&res);printf("VEUX MODEM PAS: mem_setup ret=%llx res=%llx\n",st,res);if(st||res)goto fail;}
-+ printf("VEUX MODEM PAS: load segments\n");for(uint32_t i=0;i<eh->phnum;i++){if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;char name[20];snprintf(name,sizeof(name),"modem.b%02u",i);uint64_t map_pa=ph[i].paddr&~0x3fffULL,offset=ph[i].paddr-map_pa;uint64_t map_len=(offset+ph[i].memsz+0x3fffULL)&~0x3fffULL;uint8_t *map=veux_modem_map_phys(map_pa,map_len);if(!map)goto fail;uint8_t *dst=map+offset;if(ph[i].filesz&&!veux_fw_find(name)){printf("VEUX MODEM PAS: segment %s absent, skip\n",name);continue;}if(ph[i].filesz&&veux_fw_read(name,0,dst,ph[i].filesz)!=ph[i].filesz)goto fail;if(ph[i].memsz>ph[i].filesz)bzero(dst+ph[i].filesz,ph[i].memsz-ph[i].filesz);barrier();}
++ printf("VEUX MODEM PAS: loading segments\n");for(uint32_t i=0;i<eh->phnum;i++){if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;if(ph[i].filesz>ph[i].memsz)goto fail;char name[20];snprintf(name,sizeof(name),"modem.b%02u",i);uint64_t seg_pa=ph[i].paddr<MODEM_SIZE?MODEM_PA+ph[i].paddr:ph[i].paddr;if(seg_pa<MODEM_PA||seg_pa>MODEM_PA+MODEM_SIZE||ph[i].memsz>MODEM_PA+MODEM_SIZE-seg_pa)goto fail;uint64_t map_pa=seg_pa&~0x3fffULL,offset=seg_pa-map_pa;uint64_t map_len=(offset+ph[i].memsz+0x3fffULL)&~0x3fffULL;uint8_t *map=veux_modem_map_phys(map_pa,map_len);if(!map)goto fail;uint8_t *dst=map+offset;if(ph[i].filesz&&!veux_fw_find(name)){printf("VEUX MODEM PAS: segment %s absent\n",name);goto fail;}if(ph[i].filesz&&veux_fw_read(name,0,dst,ph[i].filesz)!=ph[i].filesz)goto fail;if(ph[i].memsz>ph[i].filesz)bzero(dst+ph[i].filesz,ph[i].memsz-ph[i].filesz);barrier();}printf("VEUX MODEM PAS: segments loaded\n");
 + st=smc(SCM_FN(SCM_SVC_PIL,PIL_AUTH_RESET),1,PAS_ID_MODEM,0,0,&res);printf("VEUX MODEM PAS: auth_reset ret=%llx res=%llx\n",st,res);kfree_data(mdt,n);return st==0&&res==0;
 +fail: kfree_data(mdt,n);return false;
 +}
@@ -216,30 +216,19 @@ diff --git a/iokit/Kernel/arm/VeuxModemMap.cpp b/iokit/Kernel/arm/VeuxModemMap.c
 new file mode 100644
 --- /dev/null
 +++ b/iokit/Kernel/arm/VeuxModemMap.cpp
-@@ -0,0 +1,27 @@
-+#include <IOKit/IOMemoryDescriptor.h>
+@@ -0,0 +1,16 @@
 +#include <stdint.h>
++extern "C" uintptr_t ml_io_map(uintptr_t, uintptr_t);
 +
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
-+
-+/* Keep mappings alive for the modem firmware's lifetime. */
-+static IOMemoryMap *veux_modem_segment_maps[64];
-+static uint32_t veux_modem_segment_map_count;
 +
 +extern "C" void *
 +veux_modem_map_phys(uint64_t pa, uint64_t size)
 +{
-+ IOMemoryDescriptor *descriptor;
-+ IOMemoryMap *mapping;
-+ if(size==0||pa>UINT64_MAX-size||veux_modem_segment_map_count>=64)return 0;
-+ descriptor=IOMemoryDescriptor::withPhysicalAddress((IOPhysicalAddress)pa,(IOByteCount)size,kIODirectionInOut);
-+ if(!descriptor)return 0;
-+ mapping=descriptor->map(kIOMapWriteCombineCache);
-+ descriptor->release();
-+ if(!mapping)return 0;
-+ if(!mapping->getVirtualAddress()){mapping->release();return 0;}
-+ veux_modem_segment_maps[veux_modem_segment_map_count++]=mapping;
-+ return (void *)mapping->getVirtualAddress();
++ if(size==0||pa>UINTPTR_MAX-size)return 0;
++ /* ml_io_map creates an I/O mapping, not an 81 MiB heap buffer. XNU exposes no
++  * matching unmap API here, so mappings remain until reset. */
++ return (void *)ml_io_map((uintptr_t)pa,(uintptr_t)size);
 +}
 +
 +#endif

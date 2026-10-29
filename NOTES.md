@@ -5398,3 +5398,12 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - **Authorized write:** `boot_b` only, exactly `17,281,024` bytes from the verified wrapper with SHA-256 `f88ce7be47129505a75f9b88f893a3c5b766f365e7f8c5612a808a0b9c5b4c99`. No fallback partition is needed. This record precedes the flash.
 - Flash result: `fastboot flash boot_b /home/nyra/veux-artifacts/40960193990/modem-held.img` returned `Sending 'boot_b' (16876 KB) OKAY`, `Writing 'boot_b' OKAY`, `Finished. Total time: 0.540s`; `fastboot set_active b` returned `OKAY`; `fastboot reboot` returned `OKAY`. No other partition was written.
 - After the requested three-minute observation window, `fastboot devices` and `adb devices -l` were both empty. Screen photo/result is pending; check for `VEUX MODEM PAS: copying mdt metadata`, `metadata copied`, and `calling init_image` before concluding the XPU hang is resolved.
+
+
+## Phase 4.16 — PAS segment mapping fix (pre-CI)
+
+- The reported 81 MiB `kmem_alloc` matches the full modem carveout size. In the current PAS patch, segment copies go through `IOMemoryDescriptor::map()`, which can reserve a correspondingly large kernel VA range, and the mapping objects are held forever. Replaced this with `ml_io_map()` for each page-aligned segment mapping; no segment buffer is allocated from the heap or modem metadata pool. Added the requested `loading segments` / `segments loaded` checkpoints and strict per-segment carveout bounds.
+- MDT `p_paddr` is normalized: absolute addresses already inside `[0x8b800000, 0x9b800000)` are preserved; relative offsets below `0x10000000` are rebased at `0x8b800000`. This retains the absolute-address convention used by the matching Qualcomm PAS loader while tolerating relative values.
+- `ml_io_map()` has no paired unmap API in this XNU interface, so each short-lived segment I/O mapping remains mapped until reset. This avoids the large descriptor-map allocation path; it is a deliberate limitation of the available API. Segment data itself is copied directly into the mapped physical carveout.
+- Updated patch 0154, its 0159 DT-CRC patch context, the Phase-4 source/binary manifest gates, and wrapper verification markers. No new patch number was created.
+- Pre-CI validation: pending. No CI dispatch, wrapper build, or flash has occurred. Any flash remains `boot_b` only after green CI, wrapper verification, and the recorded fastboot checklist.

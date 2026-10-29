@@ -111,6 +111,8 @@ if a.variant == "modem-held":
         b"VEUX MODEM PAS: copying mdt metadata\n",
         b"VEUX MODEM PAS: metadata copied\n",
         b"VEUX MODEM PAS: calling init_image\n",
+        b"VEUX MODEM PAS: loading segments\n",
+        b"VEUX MODEM PAS: segments loaded\n",
         b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
         b"VEUX MODEM: SMP2P READY", b"VEUX GLINK: VERSION_ACK",
         b"VEUX GLINK: OPEN_ACK IPCRTR", b"VEUX QRTR: HELLO",

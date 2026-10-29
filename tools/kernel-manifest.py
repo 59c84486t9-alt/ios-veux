@@ -291,10 +291,13 @@ phase4_sources = {
         "VEUX MODEM PAS: metadata copied", "VEUX MODEM PAS: calling init_image")) and
         "veux_modem_pool_alloc(ms,&mpa)" not in phase4_text.replace(" ", ""),
     "pas_scm_pool_buffers_still_use_pool_va": "veux_modem_pool_alloc(0x1000,&pa)" in phase4_text.replace(" ", "") and "veux_modem_pool_va(pa,0x1000)" in phase4_text.replace(" ", ""),
-    "pas_segments_map_physical_carveout_with_iomemorydescriptor": all(x in phase4_text for x in (
-        "IOMemoryDescriptor::withPhysicalAddress", "descriptor->map(kIOMapWriteCombineCache)",
-        "veux_modem_map_phys(map_pa,map_len)", "veux_modem_segment_maps")) and
-        "ml_io_map_wcomb(map_pa,map_len)" not in phase4_text.replace(" ", ""),
+    "pas_segments_use_per_segment_io_mapping_without_heap_alloc": all(x in phase4_text for x in (
+        "veux_modem_map_phys(map_pa,map_len)", "MODEM_PA+ph[i].paddr",
+        'extern "C" uintptr_t ml_io_map(uintptr_t, uintptr_t)', "ml_io_map((uintptr_t)pa,(uintptr_t)size)")) and
+        "IOMemoryDescriptor::withPhysicalAddress" not in phase4_text and
+        "veux_modem_segment_maps" not in phase4_text and
+        not any(x in phase4_text.split("VEUX MODEM PAS: loading segments", 1)[1].split("VEUX MODEM PAS: segments loaded", 1)[0]
+                for x in ("kmem_alloc(", "IOMalloc(", "veux_modem_pool_alloc(", "MODEM_POOL_SIZE")),
     "forbidden_apcs_host_cap_bdf_wlan_paths_absent": not any(phase4_forbidden.values()),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
     "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],
@@ -320,6 +323,9 @@ phase4_binary = {
         b"VEUX MODEM PAS: copying mdt metadata\n",
         b"VEUX MODEM PAS: metadata copied\n",
         b"VEUX MODEM PAS: calling init_image\n")),
+    "pas_segment_copy_checkpoints": all(x in kernel for x in (
+        b"VEUX MODEM PAS: loading segments\n",
+        b"VEUX MODEM PAS: segments loaded\n")),
 }
 if not all(phase4_binary.values()):
     raise SystemExit("VEUX Phase-4 binary marker checks failed: " + repr(phase4_binary))
@@ -329,6 +335,8 @@ modem_needles = {
     "pas_mdt_copying": b"VEUX MODEM PAS: copying mdt metadata",
     "pas_metadata_copied": b"VEUX MODEM PAS: metadata copied",
     "pas_calling_init_image": b"VEUX MODEM PAS: calling init_image",
+    "pas_loading_segments": b"VEUX MODEM PAS: loading segments",
+    "pas_segments_loaded": b"VEUX MODEM PAS: segments loaded",
     "ipcc_parameters": b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
     "smp2p_ready": b"VEUX MODEM: SMP2P READY",
     "glink_version_ack": b"VEUX GLINK: VERSION_ACK",
