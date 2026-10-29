@@ -227,7 +227,7 @@ print("VEUX MODEM POOL Phase-3 source assertions: PASS " + repr(pool_source_chec
 pool_binary_checks = {
     "region_marker": b"VEUX MODEM POOL: 0x%llx + 0x%llx (from %s)" in kernel,
     "allocation_marker": b"VEUX MODEM POOL: alloc 0x%llx + 0x%llx" in kernel,
-    "no_cpu_write_selftest_strings": b"VEUX MODEM POOL: selftest" not in kernel and b"0xdeadbeef" not in kernel,
+    "no_pool_write_selftest_log": b"VEUX MODEM POOL: selftest" not in kernel,
 }
 if not all(pool_binary_checks.values()):
     raise SystemExit("VEUX MODEM POOL Phase-3 binary marker gate failed: " + repr(pool_binary_checks))

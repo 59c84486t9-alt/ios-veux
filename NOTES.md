@@ -5235,5 +5235,9 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   0152–0154, and `git diff --check` passed. Initial CI run 40870510906 was
   cancelled after detecting a stale workflow grep for the removed self-test
   label; the gate is corrected in the follow-up commit. A second run was cancelled after
-  checking the exact Holi DT binding and correcting its PPI from 9 to 8. Wrapper rebuild,
+  checking the exact Holi DT binding and correcting its PPI from 9 to 8. CI
+  run 40871053680 compiled the kernel and passed host checks, but its binary
+  gate falsely rejected the generic `0xdeadbeef` token anywhere in XNU. The
+  binary assertion is narrowed to the unique pool self-test marker; the source
+  gate still rejects the write value in the pool implementation. Wrapper rebuild,
   verification, device checklist, and boot_b flash are pending.
