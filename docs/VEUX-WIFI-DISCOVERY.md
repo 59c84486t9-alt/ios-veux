@@ -340,3 +340,172 @@ no image was written to boot_a or boot_b.
 - [WLFW generated message definitions](https://android.googlesource.com/kernel/msm/+/fb60953788da42586b6ef4f982c4c97602efa281/drivers/net/wireless/cnss2/wlan_firmware_service_v01.h)
 - [QCA host-CMN Adrastea register definitions](https://android.googlesource.com/kernel/msm/+/8158d57467c4332c1b144c5dc4cc21d5ade64ce6/drivers/staging/qca-wifi-host-cmn/hif/src/adrastea_reg_def.h), [CE descriptor definitions](https://android.googlesource.com/kernel/msm/+/efc684e83e29f4a8d0dd0f6cde762c78897f769a/drivers/staging/qca-wifi-host-cmn/hif/src/ce/ce_internal.h), and [Adrastea HIF selection](https://android.googlesource.com/kernel/msm/+/8158d57467c4332c1b144c5dc4cc21d5ade64ce6/drivers/staging/qca-wifi-host-cmn/hif/src/hif_main.c)
 - [ios-topaz WLFW implementation](https://github.com/MakrSas/ios-topaz/blob/topaz/xnu/patches/0122-topaz-modem-wlfw.patch) and [SNOC WLAN/CE implementation](https://github.com/MakrSas/ios-topaz/blob/topaz/xnu/patches/0123-topaz-wlan-scan.patch)
+
+## 2026-10-29 host-copy firmware audit: WLAN PD ownership and open loader
+
+This audit used host-side read-only copies under `/tmp/veux-wifi-readonly` of
+`vendor_a`, `modem_a`, `vendor_boot_a`, and `dtbo_a`, including the supplied
+backup images. The live phone was rechecked at the end: ADB remained root
+recovery on slot `_a`. No partition was mounted on the device, no sysfs control
+was written, and no image was built or flashed.
+
+### What the shipped copies establish
+
+The vendor_a ext4 copy has **zero `.ko` files** and no populated
+`/vendor/lib/modules` tree. There is no shipped ICNSS2, WLAN, Q6V5, PIL,
+GLINK, QRTR, MHI, or WPSS loader module in this image to reverse with Ghidra.
+This specifically prevents a binary-level proof of the ICNSS2 Adrastea
+`host_cap` branch and of an APSS `subsystem_get` / `pil_get` → firmware-load
+call chain. The exact loader question is therefore still open; upstream kernel
+source remains source-derived evidence only.
+
+The vendor copy's legacy `/etc/wifi/WCNSS_qcom_cfg.ini` has `gEnableBmps=1`
+and `gWlanMccToSccSwitchMode = 0`. Searches found no `hostname`,
+`wlanFwName`, `qmi`, `host_cap`, or `msa` settings. Its location under the
+legacy WLAN configuration tree does not identify the Adrastea firmware loader
+or establish a runtime QMI transport.
+
+The modem_a FAT image contains `/image/wlanmdsp.mbn` (3,970,288 bytes),
+`bdwlan.bin`, many `bdwlan.<id>`/`bdwlan.b<id>` variants, and
+`bdwlanu.b65`/`bdwlanu.b69`; it has no `wpss.mdt`. `wlanmdsp.mbn` is a
+complete ELF32 little-endian Qualcomm DSP6 executable with 7 program
+headers, entry address `0xb0000000`, and no section table. `unblob` classified
+the whole file as ELF32 with no unknown tail; `binwalk` found SHA-256, AES
+S-box, and CRC tables, not another nested firmware container. Strings include
+`IMAGE_VARIANT_STRING=QCAHNALASTRAITQ`,
+`QC_IMAGE_VERSION_STRING=WLAN.HL.3.3.2-00445-QCAHLSWMTPLZ-1`, and
+`msm/modem/wlan_pd`. These are consistent with the Adrastea/QCA WLAN DSP
+firmware path and do not identify a WCN6750 or WCN3990 image. They are
+firmware strings, not a runtime silicon-ID read.
+
+The `modemuw.jsn` in that partition declares the service domain
+`msm/modem/wlan_pd`, QMI instance 180, and three service providers:
+kernel `elf_loader`, TMS `servreg`, and WLAN `fw`. The modem DSP ELF also
+contains the string `wlanmdsp.mbn` and candidate image paths
+`/readonly/firmware/image/wlanmdsp.mbn`,
+`/readonly/vendor/firmware_mnt/image/wlanmdsp.mbn`, and
+`/readonly/vendor/firmware/wlanmdsp.mbn`. Together these are strong evidence
+that the modem's WLAN PD owns the WLAN firmware service and resolves the
+image. They **do not prove which APSS-side Linux function loads the image into
+the modem**, that the firmware was loaded in recovery, or that the WLAN PD
+was running. Recovery had no WLFW server-arrival or WLAN image-load log.
+Accordingly, report the ownership as modem/WLAN-PD-hosted, but keep the exact
+APSS loader call chain unresolved.
+
+Ghidra 12.1.4 successfully analyzed the 3.97 MB WLAN MBN previously, yielding
+9,100 procedures and 5,225 strings. A separate attempt to import the
+88,260,892-byte reconstructed modem ELF exceeded REA's 330-second startup
+deadline. The REA startup limit was increased to 900 seconds and one retry is
+then attempted, but the tool call ended at its 450-second client deadline
+without a result. No completion or OOM is inferred from that client timeout.
+The main loader-specific limitation is still the absence of the vendor kernel
+modules, not a lack of strings in the modem image. The reconstructed ELF was
+assembled from the modem MDT/segments only for analysis; it is not an assertion
+that stock Linux loads `wlanmdsp.mbn` by that same mechanism.
+
+### Container checks and DT files
+
+`unblob` recognized vendor_boot_a's legacy LZ4 payload, but extraction stopped
+because the `lz4` executable is not installed. The existing independent
+fallback extracted the boot-v3 ramdisk and DTB; the ramdisk was decompressed
+with the system `liblz4` and contains no kernel modules or WLAN/PIL files.
+Both `vendor_boot_a` and `vendor_boot_b` SHA-256 to
+`318f68ca588a6c7a618b042de4359a3d48fbe96f6415e8173cc4be4adc91e793`.
+`unblob` found no container in `dtbo_a`; both carved overlays are empty, and
+their models are the VEUX/PEUX QRD NOPMI variants. Neither adds WPSS, modem
+PIL, or an ICNSS rproc handle.
+
+### WLFW and Topaz delta
+
+The source-derived WLFW protocol is common QMI service `0x45`; Adrastea's
+ICNSS2 server-arrival sequence is indication registration, MSA_INFO request
+`0x2d`, MSA_READY request `0x2e`, then capabilities. It skips `host_cap` for
+device ID `0xabcd`. This Adrastea branch and its TLV codec are **not
+confirmed from a shipped kernel binary**, because the permitted vendor image
+has no ICNSS2 module. No service was observed at runtime.
+
+Wire fields below are source-derived from the checked-in ICNSS2 QMI codec and
+Topaz's patch (not a VEUX packet capture). MSA_INFO request TLV `0x01` carries
+an 8-byte little-endian address; TLV `0x02` carries a 4-byte size. Topaz
+decodes MSA_INFO response TLV `0x03` as a one-byte region count followed by
+13-byte records: 8-byte address at record offset 0, 4-byte size at offset 8,
+and one-byte secure flag at offset 12. QMI's normal response result/error
+fields also apply. Topaz's CAP response parser reads TLV `0x10` as two
+little-endian 32-bit values at value offsets 0 and 4 (`chip_id` and
+`chip_family`), TLV `0x11` as a 32-bit `board_id`, TLV `0x13` as a 32-bit
+firmware version followed at offset 4 by a one-byte string length and string,
+and TLV `0x14` as the firmware build-ID bytes. These Topaz field parses do not
+confirm what VEUX's modem will return; CAP `soc_id` coverage should be added
+from the matching generated WLFW schema before treating it as decoded.
+
+| WLFW step | ios-topaz reference | VEUX Adrastea delta |
+| --- | --- | --- |
+| `ind_register` | Encoded in patch 0122 | Retain, but no runtime service arrival captured |
+| `host_cap` | Sent before MSA_INFO | Skip for Adrastea ID `0xabcd` per source; not verified in shipped `.ko` |
+| `msa_mem_info` (`0x2d`) | Encodes MSA address (8-byte TLV `0x01`) and size (4-byte TLV `0x02`), decodes returned memory regions | Keep wire shape; replace MSA allocation and secure-region handling with target values |
+| `msa_ready` (`0x2e`) | Encodes empty request and decodes response | Same message shape; send after Adrastea MSA_INFO |
+| capabilities | Requests/decodes TLV `0x10` (`chip_id`, `chip_family`), `0x11` (`board_id`), `0x13` (firmware version/string), `0x14` (build ID) after MSA_READY | Use response `chip_id`, `chip_family`, `board_id`, and `soc_id` as identity ground truth; values unknown in recovery. Add/verify `soc_id` against generated WLFW schema |
+
+Topaz's GLINK/QRTR + QMI stack is structurally relevant because the VEUX
+firmware metadata declares a modem WLAN PD and a WLAN firmware QMI service.
+That does **not yet prove from a captured runtime transport** which GLINK/QRTR
+channel carries the WLAN service. Treat modem PAS/GLINK/QRTR/WLFW as the best
+working architecture hypothesis, not a fully demonstrated live sequence.
+
+### Adrastea CE map and implementation direction
+
+Downstream QCA host-CMN source describes the Adrastea HIF as SNOC. From the
+VEUX ICNSS base `0x0c800000`, CE0 is at `+0x240000` = `0x0ca40000`; each of
+12 engines advances by `0x1000`. The direct GIC specifiers are encoded
+`0x166..0x171`. The live DT's `smmu_iova_ipa` region is `0xb0000000` with
+length `0x10000`; this supplies the region bound but does not reveal actual
+ring IOVAs or the runtime SMMU mapping/permissions.
+
+The downstream QCA_WIFI_3_0 source/destination descriptor is four 32-bit
+words (16 bytes): low buffer address; high address plus control flags; length
+and metadata; Toeplitz result. Topaz's descriptor is also 16 bytes, but packs
+a contiguous 64-bit address, length, flags, and Toeplitz field differently.
+Its record is not binary-compatible. Adrastea's register definitions place
+source base low/high/size at CE offsets `0x00/0x04/0x08`, destination base
+low/high/size at `0x0c/0x10/0x14`, control at `0x18/0x1c`, host interrupt
+enable/status at `0x2c/0x30`, misc interrupt enable/status at `0x34/0x38`,
+source/destination write indices at `0x3c/0x40`, current ring indices at
+`0x44/0x48`, and watermarks at `0x4c/0x50`. The wrapper index register pair
+is at offsets `0xc004/0xc008` relative to CE0. Adrastea's CE MSI registers
+are missing/disabled in the downstream header; use the DT's direct GIC IRQs.
+Topaz's CE map and MSA/VMID/PAS/SMEM constants must all be replaced or
+revalidated. The exact XNU DMA ring addresses, SMMU attach, cache policy, and
+interrupt routing are not established by the host-copy audit.
+
+For the current DT-selected Adrastea configuration, the next XNU skeleton
+should start with the ios-topaz-shaped modem PAS + GLINK/QRTR + WLFW path,
+then add a separate Adrastea SNOC CE layer using the target descriptor and
+register definitions. HackiOS's WPSS/ath11k LinuxKPI port targets WCN6750 and
+depends on a WPSS/rproc boot plus hybrid AHB/PCIe path; none is evidenced in
+the VEUX DT or firmware files. The single biggest missing XNU foundation is
+the target-specific modem subsystem bootstrap/transport that supplies the
+running WLAN-PD WLFW service and negotiated MSA. Do not implement endpoint
+enumeration from the WCN6750/PCIe model.
+
+The Topaz constants that must be replaced or validated before adapting its
+patches are concrete, not just tuning knobs: PAS modem ID `4`; modem pool base
+`0xe0000000` with 4/8/16 MiB growth stages; SMEM physical base `0x46000000`
+and 2 MiB size; MSA base `0x51900000` and 1 MiB size; secure VMIDs for MSS
+MSA/WLAN/WLAN-CE (`0x18`/`0x19` for the WLAN entries); GLINK SMEM item IDs
+478/479/480 and APCS doorbell bit 12; the assumed modem/RPMsg/QRTR service
+nodes and PAS memory regions; WLAN firmware root and `bdwlan.bin` fallback;
+board-ID-to-BDF selection and CAL/BDF download policy; indication-register
+defaults/client ID; and its WCN3988 CE register, descriptor, shadow, IRQ and
+ring-DMA setup. Only the WLFW message IDs/field widths and some Adrastea CE
+register geometry are supported by common source evidence. None of the
+Topaz memory addresses, secure assignments, GLINK item IDs, firmware path,
+board-data policy, or runtime service node values is established for VEUX.
+
+The following require a stock-Android runtime and cannot be recovered from
+root recovery or the allowed host copies: WLFW capability response and
+runtime chip/family/board IDs; whether the modem and WLAN PD boot; the actual
+MSA address/size and secure memory regions returned; actual CE ring addresses
+and DMA/SMMU map; which subsystem log records the image load; and the
+board-level WLAN pin, clock, and rail state. No XNU probe/build was performed
+because there is no supported Adrastea host bootstrap in the current tree to
+produce a meaningful hardware-presence result.

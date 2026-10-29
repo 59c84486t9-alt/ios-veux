@@ -1,3 +1,51 @@
+## >>> UPDATE 2026-10-29 (Adrastea WLAN firmware image audit) <<<
+
+- Audited only host-side copies of vendor_a, modem_a, vendor_boot_a, and
+  dtbo_a. The USB device remains root recovery on slot `_a`; no partition,
+  sysfs control, mount, image, or boot target was written.
+- `vendor_a` contains zero `.ko` files and no `lib/modules` payload. In
+  particular, no shipped `icnss2`, WLAN, Q6V5, PIL, GLINK, QRTR, or MHI
+  modules are available from the allowed copy to decompile. The vendor copy
+  has only the legacy `WCNSS_qcom_cfg.ini` (gEnableBmps=1 and
+  gWlanMccToSccSwitchMode=0 among queried keys); it contains no hostname,
+  wlanFwName, QMI, host_cap, or MSA settings.
+- modem_a contains `wlanmdsp.mbn` (ELF32 Qualcomm DSP6, 7 program headers,
+  entry 0xb0000000, 3,970,288 bytes), BDF files, and `modemuw.jsn`. `unblob`
+  identifies the whole MBN as ELF32; `binwalk` found only SHA256/AES/CRC
+  tables, not a nested container. Its strings identify
+  `QCAHNALASTRAITQ`, `WLAN.HL.3.3.2-00445-QCAHLSWMTPLZ-1`, and
+  `msm/modem/wlan_pd`; they do not identify WCN6750 or WCN3990.
+- `modemuw.jsn` declares `modem/wlan_pd` (QMI instance 180) with a kernel
+  `elf_loader`, TMS `servreg`, and WLAN `fw` service. The modem DSP ELF also
+  contains `wlanmdsp.mbn` and candidate firmware paths under
+  `/readonly/{firmware/image,vendor/firmware_mnt/image,vendor/firmware}/`.
+  This is strong evidence that the modem's WLAN PD owns the WLAN firmware
+  service and locates the image, but it does not prove the APSS loader call
+  chain or that this ELF was loaded at runtime. No `wpss.mdt` exists in the
+  modem image copy.
+- `unblob` recognized the full vendor_boot_a legacy-LZ4 region but could not
+  decompress it because the `lz4` executable is missing; the already
+  extracted ramdisk was independently decompressed with the system liblz4 and
+  contained no kernel modules. Both dtbo_a entries are empty overlays. The
+  `wlanmdsp.mbn` unblob result is a complete ELF32 with no trailing unknown
+  chunk. REA/Ghidra's first modem-ELF import exceeded its 330-second deadline;
+  the runtime deadline was raised to 900 seconds and analysis retried, but the
+  retry hit the REA client tool-call deadline at 450 seconds with no result.
+  Module-level loader proof remains unavailable because those modules are
+  absent from the approved vendor copy.
+- Decision for the XNU skeleton: use the ios-topaz-shaped modem PAS + GLINK/
+  QRTR + WLFW path as the closer architecture for the Adrastea DT, with
+  Adrastea's no-host_cap state transition, target MSA/secure-memory values,
+  and QCA_WIFI_3_0 CE descriptors/register programming. Do not start from
+  HackiOS's WCN6750 WPSS/ath11k path: recovery DT and files expose no WPSS
+  node/handle, rproc service, or `wpss.mdt`. Biggest unresolved platform
+  component is the target's modem PAS/GLINK/QRTR boot and memory-sharing
+  contract; the WLFW chip/family/board capabilities and granted MSA are also
+  only obtainable from a stock-Android runtime.
+- Updated `docs/VEUX-WIFI-DISCOVERY.md` with the source/runtime/binary
+  evidence distinctions and an explicit open loader question. No XNU code,
+  build, or flash was attempted.
+
 ## >>> UPDATE 2026-10-29 (Adrastea vendor_a and WPSS image audit) <<<
 
 - Recovery remained root ADB on VEUX slot A. Read-only `adb exec-out dd` copied
