@@ -59,7 +59,7 @@ new file mode 100644
 @@ -0,0 +1,138 @@
 +#include <pexpert/arm64/board_config.h>
 +#include <kern/debug.h>
-+#include <pexpert/arm/protos.h>
++#include <kern/misc_protos.h>
 +#include <stdint.h>
 +#include <string.h>
 +#include "veux_modem.h"
