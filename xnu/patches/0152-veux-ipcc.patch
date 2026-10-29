@@ -4,31 +4,33 @@ Date: Thu, 29 Oct 2026 03:36:51 +0100
 Subject: [PATCH] Add VEUX polling IPCC transport
 
 ---
- iokit/Kernel/arm/VeuxPlatformExpert.cpp |   4 +
+ iokit/Kernel/arm/VeuxPlatformExpert.cpp |   6 +
  osfmk/arm64/veux_ipcc.c                 | 151 ++++++++++++++++++++++++
  osfmk/conf/files.arm64                  |   1 +
- 3 files changed, 156 insertions(+)
+ 3 files changed, 158 insertions(+)
  create mode 100644 osfmk/arm64/veux_ipcc.c
 
 diff --git a/iokit/Kernel/arm/VeuxPlatformExpert.cpp b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
 index a98b9d9..b1facee 100644
 --- a/iokit/Kernel/arm/VeuxPlatformExpert.cpp
 +++ b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
-@@ -14,6 +14,9 @@
+@@ -14,6 +14,10 @@
  #include <string.h>
  #include <pexpert/pexpert.h>
  
-+/* Private init hook for the VEUX polling-only IPCC transport. */
++/* Private early-init hooks for the VEUX polling transport and reserved pool. */
 +extern "C" void veux_ipcc_init(void);
++extern "C" void veux_modem_pool_init(void);
 +
  class VeuxPlatformExpert : public IODTPlatformExpert {
  	OSDeclareDefaultStructors(VeuxPlatformExpert);
  
-@@ -106,6 +109,7 @@ VeuxPlatformExpert::start(IOService *provider)
+@@ -106,6 +110,8 @@ VeuxPlatformExpert::start(IOService *provider)
  	if (!IODTPlatformExpert::start(provider)) {
  		return false;
  	}
 +	veux_ipcc_init();
++	veux_modem_pool_init();
  	registerService();
  	IOLog("VEUX: platform expert registered\n");
  	return true;

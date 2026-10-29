@@ -178,11 +178,16 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
     cpus = node('cpus', [ph(), ('#address-cells', u32(1)),
                          ('#size-cells', u32(0))], cpu_nodes)
 
-    gic = node('gic', [
+    gic = node('interrupt-controller', [
         ph(),
         ('compatible', cstr('arm,gic-v3')),
         ('interrupt-controller', b''),
+        ('#interrupt-cells', u32(3)),
+        ('#redistributor-regions', u32(1)),
+        ('redistributor-stride', u64(0x20000)),
+        ('interrupts', u32(1, 9, 4)),  # GIC PPI 9, level-high
         ('virtual-timer-intid', u32(QEMU_VTIMER_INTID if qemu else VTIMER_INTID)),
+        # /arm-io/ranges makes these child-relative addresses absolute.
         ('reg', u64(gicd - SOC_BASE, GICD_SIZE, gicr - SOC_BASE, GICR_SIZE)),
     ])
     arm_io = node('arm-io', [

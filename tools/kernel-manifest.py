@@ -203,8 +203,9 @@ pool_source_checks = {
         "VEUX_MODEM_POOL_BASE                 0xc0000000ULL",
         "VEUX_MODEM_POOL_SIZE                 0x05100000ULL",
         "removed_region@c0000000")),
-    "write_combined_mapping_alignment_and_zeroing": "ml_io_map_wcomb" in pool_source and "VEUX_MODEM_POOL_ALIGNMENT" in pool_source and "allocation[i] = 0" in pool_source,
+    "write_combined_mapping_without_pool_writes": "ml_io_map_wcomb" in pool_source and "VEUX_MODEM_POOL_ALIGNMENT" in pool_source and "allocation[i] = 0" not in pool_source and "0xdeadbeef" not in pool_source,
     "early_startup_maps_pool_before_io_submap": "STARTUP(KMEM, STARTUP_RANK_FIRST, veux_modem_pool_init);" in pool_source and "#include <kern/startup.h>" in pool_source,
+    "ipcc_selftest_precedes_pool_mapping": pool_source.find("veux_ipcc_init();") < pool_source.find("ml_io_map_wcomb") and "extern void veux_ipcc_init(void);" in pool_source,
     "no_direct_heap_allocator_calls_for_reserved_pool": not pool_heap_calls,
     "static_asserts_cover_required_regions": all(x in pool_assertions for x in (
         "overlaps pil_mpss_wlan_mem", "overlaps wlan_msa", "overlaps ramoops",
@@ -216,7 +217,7 @@ pool_source_checks = {
         "overlaps cdsp", "overlaps video", "overlaps ipa_fw",
         "overlaps ipa_gsi", "overlaps gpu_micro_code", "overlaps memshare_region")),
     "runtime_overlap_panic_guard": "veux_modem_pool_has_forbidden_overlap" in pool_source and "panic(\"VEUX MODEM POOL overlaps reserved carve-out\")" in pool_source,
-    "selftest_writes_and_checks_readback": "0xdeadbeefU" in pool_source and "VEUX MODEM POOL: selftest ok" in pool_source and "VEUX MODEM POOL: selftest FAIL" in pool_source,
+    "pool_init_is_read_only": "0xdeadbeef" not in pool_source and "VEUX MODEM POOL: selftest" not in pool_source and "allocation[i] = 0" not in pool_source and "veux_modem_pool_alloc(0x1000ULL" not in pool_source,
     "no_legacy_or_topaz_pool_constants": not any(x in pool_source for x in ("APCS", "APCS_IPC", "0x0f111000", "0xe0000000")),
     "patch_0153_applied_without_skip": len(pool_patch_results) == 1 and pool_patch_results[0].endswith(" APPLIED"),
 }
@@ -224,14 +225,13 @@ if not all(pool_source_checks.values()):
     raise SystemExit("VEUX MODEM POOL Phase-3 sub-gate failed: " + repr(pool_source_checks))
 print("VEUX MODEM POOL Phase-3 source assertions: PASS " + repr(pool_source_checks))
 pool_binary_checks = {
-    "region_marker": b"VEUX MODEM POOL:" in kernel,
+    "region_marker": b"VEUX MODEM POOL: 0x%llx + 0x%llx (from %s)" in kernel,
     "allocation_marker": b"VEUX MODEM POOL: alloc 0x%llx + 0x%llx" in kernel,
-    "selftest_ok": b"VEUX MODEM POOL: selftest ok" in kernel,
-    "selftest_fail": b"VEUX MODEM POOL: selftest FAIL" in kernel,
+    "no_cpu_write_selftest_strings": b"VEUX MODEM POOL: selftest" not in kernel and b"0xdeadbeef" not in kernel,
 }
 if not all(pool_binary_checks.values()):
     raise SystemExit("VEUX MODEM POOL Phase-3 binary marker gate failed: " + repr(pool_binary_checks))
-print("VEUX MODEM POOL Phase-3 binary marker/selftest strings: PASS " + repr(pool_binary_checks))
+print("VEUX MODEM POOL read-only init/allocation binary markers: PASS " + repr(pool_binary_checks))
 phase4_patch_names = (
     "0154-veux-modem-pas.patch",
     "0155-veux-modem-firmware.patch",

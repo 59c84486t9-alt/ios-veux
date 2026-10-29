@@ -5217,3 +5217,20 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   qualifier/alignment warnings); no warning-as-error gate is enabled. No device
   runtime validation was performed. No wrapper was built and no partition was
   flashed. Stop at Gate 4; do not start Phase 5 until reviewed/authorized.
+
+### VEUX modem-held pool/GIC diagnostic retry — 2026-10-29
+
+- The latest device boot stopped after the reserved pool log. This retry removes
+  the pool write/read self-test and allocator zero-fill; early pool init only
+  logs, maps the `removed_region@c0000000` range, and initializes the read-only
+  IPCC diagnostic first. The platform expert also calls IPCC init before the
+  idempotent pool init. No CPU pool writes occur during pool initialization or
+  allocation.
+- The generated VEUX ADT already used the VEUX-specific GICD/GICR physical
+  addresses (`0x0f200000`/`0x0f240000`), but exposed the node as `/arm-io/gic`.
+  Renamed it `/arm-io/interrupt-controller`, retained the correct parent-relative
+  `reg` entries, added standard GICv3 interrupt properties, and added
+  `tools/test-veux-gic-adt.py` to verify the generated node and address mapping.
+- Local checks so far: GIC ADT check, Python syntax checks, patch parsing for
+  0152–0154, and `git diff --check` passed. CI, wrapper rebuild/verification,
+  device checklist, and boot_b flash are pending.

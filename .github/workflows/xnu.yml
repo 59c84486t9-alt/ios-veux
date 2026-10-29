@@ -397,6 +397,7 @@ jobs:
           python3 tools/test-veux-console.py dxb/xnu diag-host
           python3 tools/test-veux-frames.py dxb/xnu diag-host
           python3 tools/test-veux-psci-adt.py
+          python3 tools/test-veux-gic-adt.py
 
       - name: Kernel feature manifest
         if: success() && env.MACHINE_CONFIG == 'VEUX'
