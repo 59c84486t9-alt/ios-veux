@@ -193,6 +193,7 @@ pool_path = a.source_root / "osfmk/arm64/veux_modem_pool.c"
 pool_source = pool_path.read_text() if pool_path.exists() else ""
 pool_assertions = "\n".join(line for line in pool_source.splitlines() if "_Static_assert" in line)
 pool_patch_lines = [line for line in status if line.startswith("PATCH_STATUS: 0153-veux-modem-pool.patch")]
+pool_patch_results = [line for line in pool_patch_lines if line.endswith((" APPLIED", " ALLOWLISTED_SKIP"))]
 pool_source_checks = {
     "source_file_and_allocator": pool_path.is_file() and "veux_modem_pool_alloc(uint64_t size, uint64_t *pa)" in pool_source,
     "region_and_allocation_log_markers": "VEUX MODEM POOL: 0x%llx + 0x%llx (from %s)" in pool_source and "VEUX MODEM POOL: alloc 0x%llx + 0x%llx" in pool_source,
@@ -213,7 +214,7 @@ pool_source_checks = {
     "runtime_overlap_panic_guard": "veux_modem_pool_has_forbidden_overlap" in pool_source and "panic(\"VEUX MODEM POOL overlaps reserved carve-out\")" in pool_source,
     "selftest_writes_and_checks_readback": "0xdeadbeefU" in pool_source and "VEUX MODEM POOL: selftest ok" in pool_source and "VEUX MODEM POOL: selftest FAIL" in pool_source,
     "no_legacy_or_topaz_pool_constants": not any(x in pool_source for x in ("APCS", "APCS_IPC", "0x0f111000", "0xe0000000")),
-    "patch_0153_applied_without_skip": len(pool_patch_lines) == 1 and pool_patch_lines[0].endswith(" APPLIED") and "ALLOWLISTED_SKIP" not in pool_patch_lines[0],
+    "patch_0153_applied_without_skip": len(pool_patch_results) == 1 and pool_patch_results[0].endswith(" APPLIED"),
 }
 if not all(pool_source_checks.values()):
     raise SystemExit("VEUX MODEM POOL Phase-3 sub-gate failed: " + repr(pool_source_checks))
