@@ -1,3 +1,22 @@
+## >>> UPDATE 2026-10-29 (Phase 5 wrapper gate stopped before flash) <<<
+
+- Built `/home/nyra/veux-artifacts/40853717857/modem-held.img` from CI run
+  `40853717857`, the existing verified VEUX shim build path, the known phone
+  ADT, and phone DTB SHA-256
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+  The exact modem-held boot args are recorded in its manifest. Wrapper SHA-256:
+  `86847f28f6207ace9a16a592d769b7740a74f5e843e060a087aeac6ebfec39b1`.
+- `tools/verify-veux-wrapper.py --variant modem-held` passed its checks,
+  including byte-for-byte payload reconstruction, CI kernel hash, DTB hash,
+  build ID, and exact boot args. A follow-up binary gate found the forbidden
+  literal `0xe0000000` twice in the compiled kernel at offsets `0xb4d7e` and
+  `0xb4fc1`, inside XNU IPv4 multicast-address checks; it is absent from the
+  five modem patches. Since the Phase-5 acceptance text requires that literal
+  to be absent from the kernel binary, the gate failed. No fastboot variables
+  were queried, the phone stayed in recovery on slot A, and no partition was
+  written or activated. Stop here pending a corrected gate that distinguishes
+  unrelated networking code from forbidden modem code.
+
 ## >>> UPDATE 2026-10-29 (Adrastea modem/WLAN gate follow-up) <<<
 
 - Rechecked live recovery read-only on device `4078cac030c8`, slot `_a`: recovery kernel is Linux 5.4.292-Paimon. `/proc/config.gz` reports built-in ICNSS2, WLAN/CLD LL, PIL, subsystem restart, SMP2P, GLINK, and QRTR; `/proc/kallsyms` contains `icnss_probe`, `icnss_wpss_load`, `subsystem_get`, `pil_boot`, and `wlan_hdd_*` symbols. No `.ko` or module load lists are present in the live vendor/system/odm trees. Checked physical GPT and super inventories have no vendor_dlkm/odm_dlkm/system_dlkm carriers. See `docs/VEUX-WIFI-ADRASTEA-PORT-AUDIT.md` for the evidence and limitations.
