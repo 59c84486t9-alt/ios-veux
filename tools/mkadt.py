@@ -178,16 +178,18 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
     cpus = node('cpus', [ph(), ('#address-cells', u32(1)),
                          ('#size-cells', u32(0))], cpu_nodes)
 
-    gic = node('interrupt-controller', [
+    gic = node('gic', [
         ph(),
-        ('compatible', cstr('arm,gic-v3')),
-        ('interrupt-controller', b''),
+        ('compatible', cstr('arm,gic')),
+        # XNU pe_arm_map_interrupt_controller searches this property value.
+        ('interrupt-controller', cstr('master')),
         ('#interrupt-cells', u32(3)),
         ('#redistributor-regions', u32(1)),
         ('redistributor-stride', u64(0x20000)),
         ('interrupts', u32(1, 8, 4)),  # Holi/SM6375 GIC PPI 8, level-high
         ('virtual-timer-intid', u32(QEMU_VTIMER_INTID if qemu else VTIMER_INTID)),
-        # /arm-io/ranges makes these child-relative addresses absolute.
+        # Keep the nonzero SOC_BASE required by pe_arm_get_soc_base_phys();
+        # XNU adds it to these child-relative addresses to reach VEUX GICD/R.
         ('reg', u64(gicd - SOC_BASE, GICD_SIZE, gicr - SOC_BASE, GICR_SIZE)),
     ])
     arm_io = node('arm-io', [
