@@ -199,9 +199,8 @@ diff --git a/osfmk/arm64/veux_modem_pool.c b/osfmk/arm64/veux_modem_pool.c
 diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
 --- a/iokit/conf/files.arm64
 +++ b/iokit/conf/files.arm64
-@@ -9,2 +9,3 @@
- iokit/Kernel/arm/VeuxPlatformExpert.cpp                         optional iokitcpp
- iokit/Kernel/arm/VeuxCPU.cpp                                    optional iokitcpp
+@@ -13,1 +13,2 @@
+ # SWEET device-tree platform (empty translation unit on other boards)
 +iokit/Kernel/arm/VeuxModemMap.cpp                               optional iokitcpp
 diff --git a/iokit/Kernel/arm/VeuxModemMap.cpp b/iokit/Kernel/arm/VeuxModemMap.cpp
 new file mode 100644
