@@ -5048,3 +5048,34 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Uploaded artifact `xnu-kernel` contains `kernel.development.veux`, SHA-256 `17e53a8a1c2fa7e47ab3cb42773fb47e7d3d713a07f661f219bff66643b9476c`. `patch-status.txt` records `0152-veux-ipcc.patch APPLIED` and `0153-veux-modem-pool.patch APPLIED`, each with no skip. Four pre-existing unrelated patches remain allowlisted skips.
 - Phase 3 sub-gate output is in CI artifact `xnu-kernel/pool-subgate.log`; IPCC sub-gate output is `xnu-kernel/ipcc-subgate.log`. Local artifact copy: `/home/nyra/veux-artifacts/40814735587/xnu-kernel/`.
 - No wrapper was built; no device boot or partition write occurred. Stop at Gate 3 pending review; do not start Phase 4 until the Gate 3 result is reported and confirmed.
+
+### VEUX modem boot → GLINK/QRTR → WLFW CAP Phase 4 — CI gate green (2026-10-29)
+
+- Added the Phase 4 implementation as patches `0154`–`0158` and the dedicated
+  manifest/CI gate. The first two CI attempts caught compile issues in the new
+  sources; fixed the conflicting libkern include, used the kernel `delay()` API,
+  bounded JSON reads/searches, and included the kernel miscellaneous prototypes.
+- Final CI run [40853717857](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40853717857)
+  passed on commit `cd15641f45eac7c3b22c9e2e7d99da148653f883`. Build, host
+  diagnostics, the kernel feature manifest, Phase 2/3 sub-gates, Phase 4
+  sub-gate, artifact packaging, and upload all succeeded.
+- Kernel artifact `kernel.development.veux` SHA-256:
+  `3f957a29b32738c5d151f556076757d3b1602fd2cb3109502b866b072ac189d7`.
+  Local copy: `/tmp/veux-phase4-run-40853717857/xnu-kernel/`.
+- `patch-status.txt` reports patches `0154`–`0158` each `APPLIED`, with no
+  skips. The milestone manifest has all 13 modem markers present, zero missing.
+  Phase 4 source and binary checks passed, including the 116-entry firmware
+  table, `VEUX MODEM FW:` and `VEUX PDMAP:` binary strings, and the combined
+  forbidden-source-path assertion. The manifest confirms all 13 individual
+  modem marker checks are true.
+- Exact modem-held boot args:
+  `debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 modem=1 modem_watch=180 veuxfbconsole=1`.
+  `veux_modem_hold()` logs once and loops with `dsb sy; wfe`; it is reached by
+  the modem worker on its terminal paths. `veux_modem_start()` is called from
+  `sweet_ufs_rootdev()` before the root-device return/mount continues, and it
+  starts the worker only when `modem=1` is set.
+- The compiler succeeded with no errors. It still emits warnings in the new
+  modem sources (mostly declaration placement, integer narrowing, and pointer
+  qualifier/alignment warnings); no warning-as-error gate is enabled. No device
+  runtime validation was performed. No wrapper was built and no partition was
+  flashed. Stop at Gate 4; do not start Phase 5 until reviewed/authorized.
