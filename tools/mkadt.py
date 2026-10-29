@@ -185,7 +185,7 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
         ('#interrupt-cells', u32(3)),
         ('#redistributor-regions', u32(1)),
         ('redistributor-stride', u64(0x20000)),
-        ('interrupts', u32(1, 9, 4)),  # GIC PPI 9, level-high
+        ('interrupts', u32(1, 8, 4)),  # Holi/SM6375 GIC PPI 8, level-high
         ('virtual-timer-intid', u32(QEMU_VTIMER_INTID if qemu else VTIMER_INTID)),
         # /arm-io/ranges makes these child-relative addresses absolute.
         ('reg', u64(gicd - SOC_BASE, GICD_SIZE, gicr - SOC_BASE, GICR_SIZE)),

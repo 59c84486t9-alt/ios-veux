@@ -24,5 +24,5 @@ assert props.get("interrupt-controller") == b""
 assert int.from_bytes(props["#interrupt-cells"], "little") == 3
 assert struct.unpack("<QQQQ", props["reg"]) == (0x0e200000, 0x10000, 0x0e240000, 0x100000), \
     "VEUX GIC reg must map to GICD 0x0f200000 and GICR 0x0f240000 through /arm-io/ranges"
-assert struct.unpack("<III", props["interrupts"]) == (1, 9, 4)
+assert struct.unpack("<III", props["interrupts"]) == (1, 8, 4)
 print("VEUX ADT /arm-io/interrupt-controller: GICD 0x0f200000, GICR 0x0f240000")

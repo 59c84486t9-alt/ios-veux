@@ -5229,10 +5229,11 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - The generated VEUX ADT already used the VEUX-specific GICD/GICR physical
   addresses (`0x0f200000`/`0x0f240000`), but exposed the node as `/arm-io/gic`.
   Renamed it `/arm-io/interrupt-controller`, retained the correct parent-relative
-  `reg` entries, added standard GICv3 interrupt properties, and added
+  `reg` entries, added standard GICv3 properties including Holi's PPI 8, and added
   `tools/test-veux-gic-adt.py` to verify the generated node and address mapping.
 - Local checks so far: GIC ADT check, Python syntax checks, patch parsing for
   0152–0154, and `git diff --check` passed. Initial CI run 40870510906 was
   cancelled after detecting a stale workflow grep for the removed self-test
-  label; the gate is corrected in the follow-up commit. Wrapper rebuild,
+  label; the gate is corrected in the follow-up commit. A second run was cancelled after
+  checking the exact Holi DT binding and correcting its PPI from 9 to 8. Wrapper rebuild,
   verification, device checklist, and boot_b flash are pending.
