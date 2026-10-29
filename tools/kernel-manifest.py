@@ -238,6 +238,7 @@ phase4_patch_names = (
     "0156-veux-modem-glink.patch",
     "0157-veux-modem-pdmapper.patch",
     "0158-veux-modem-wlfw.patch",
+    "0159-veux-dt-crc-diagnostics.patch",
 )
 phase4_patch_texts = {}
 phase4_status = {}
@@ -248,6 +249,17 @@ for name in phase4_patch_names:
                 line.endswith((" APPLIED", " ALLOWLISTED_SKIP"))]
     phase4_status[name] = len(terminal) == 1 and terminal[0].endswith(" APPLIED")
 phase4_text = "\n".join(phase4_patch_texts.values())
+dt_crc_patch = phase4_patch_texts["0159-veux-dt-crc-diagnostics.patch"]
+dt_crc_checks = {
+    "boot_args_device_tree_pointer": "args->deviceTreeP" in dt_crc_patch and "args->deviceTreeLength" in dt_crc_patch,
+    "crc32_implementation": "0xedb88320U" in dt_crc_patch and "veux_dt_crc32" in dt_crc_patch,
+    "before_and_after_thread_logs": all(x in dt_crc_patch for x in (
+        'veux_dt_crc_log("before_modem_thread")', 'veux_dt_crc_log("after_modem_thread")')),
+    "log_format": "VEUX DT: crc=0x%08x stage=%s\\n" in dt_crc_patch,
+}
+if not all(dt_crc_checks.values()):
+    raise SystemExit("VEUX DT CRC Phase-4.11 source gate failed: " + repr(dt_crc_checks))
+print("VEUX DT CRC Phase-4.11 source assertions: PASS " + repr(dt_crc_checks))
 phase4_lower = phase4_text.lower()
 phase4_forbidden = {
     "legacy_apcs_or_topaz_pool": any(x in phase4_lower for x in ("apcs", "0x0f111000", "0xe0000000")),
@@ -258,7 +270,7 @@ phase4_forbidden = {
         r"\bscan_\w*")),
 }
 phase4_sources = {
-    "five_unique_patch_files": all(phase4_patch_texts.values()),
+    "six_unique_patch_files": all(phase4_patch_texts.values()),
     "patches_applied_without_skip": all(phase4_status.values()),
     "firmware_table_116_rows": phase4_patch_texts["0155-veux-modem-firmware.patch"].count("{ \"") == 116,
     "pas_and_modem_worker_hold": "veux_modem_start(void)" in phase4_text and "veux_modem_hold(void)" in phase4_text,
@@ -274,6 +286,8 @@ print("VEUX MODEM Phase-4 source assertions: PASS " + repr(phase4_sources))
 phase4_binary = {
     "firmware_marker": b"VEUX MODEM FW:" in kernel,
     "pdmapper_marker": b"VEUX PDMAP:" in kernel,
+    "adt_crc_log_format": b"VEUX DT: crc=0x%08x stage=%s\n" in kernel,
+    "adt_crc_before_after_thread": b"before_modem_thread" in kernel and b"after_modem_thread" in kernel,
 }
 if not all(phase4_binary.values()):
     raise SystemExit("VEUX Phase-4 binary marker checks failed: " + repr(phase4_binary))

@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000006 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Add VEUX ADT CRC breadcrumbs around modem startup
+
+diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
+--- a/osfmk/arm64/veux_modem_pas.c
++++ b/osfmk/arm64/veux_modem_pas.c
+@@ -1,4 +1,5 @@
+ #include <pexpert/arm64/board_config.h>
++#include <pexpert/arm64/boot.h>
+ #include <kern/debug.h>
+ #include <kern/kalloc.h>
+ #include <pexpert/arm/protos.h>
+@@ -28,6 +29,38 @@
+ #define MODEM_SIZE 0x10000000ULL
+ #define SMEM_PA 0x80900000ULL
+ #define SMEM_SIZE 0x00200000U
++
++extern boot_args *BootArgs;
++
++static uint32_t
++veux_dt_crc32(void)
++{
++	const boot_args *args = BootArgs;
++	const uint8_t *dt;
++	uint32_t crc = ~0U;
++	if (args == NULL || args->deviceTreeP == NULL || args->deviceTreeLength == 0) {
++		return 0;
++	}
++	dt = (const uint8_t *)args->deviceTreeP;
++	for (uint32_t i = 0; i < args->deviceTreeLength; i++) {
++		crc ^= dt[i];
++		for (unsigned bit = 0; bit < 8; bit++) {
++			crc = (crc >> 1) ^ (0xedb88320U & (0U - (crc & 1U)));
++		}
++	}
++	return ~crc;
++}
++
++static void
++veux_dt_crc_log(const char *stage)
++{
++	const boot_args *args = BootArgs;
++	if (args == NULL || args->deviceTreeP == NULL || args->deviceTreeLength == 0) {
++		printf("VEUX DT: crc=unavailable stage=%s\n", stage);
++		return;
++	}
++	printf("VEUX DT: crc=0x%08x stage=%s\n", veux_dt_crc32(), stage);
++}
+ #define TCSR_PA 0x00340000ULL
+ #define ITEM_OUT 428
+ #define ITEM_IN 435
+@@ -83,7 +116,7 @@
+  struct elf32_phdr *hp=&ph[hash];uint64_t hdr=eh->phoff+(uint64_t)eh->phnum*sizeof(*ph),ms=hdr+hp->filesz,mpa;
+  if(!veux_modem_pool_alloc(ms,&mpa)){kfree_data(mdt,n);return false;}uint8_t *meta=veux_modem_pool_va(mpa,ms);if(!meta){kfree_data(mdt,n);return false;}memcpy(meta,mdt,hdr);
+  if(hp->offset+(uint64_t)hp->filesz<=(uint64_t)n)memcpy(meta+hdr,mdt+hp->offset,hp->filesz);else{char name[20];snprintf(name,sizeof(name),"modem.b%02u",hash);if(veux_fw_read(name,0,meta+hdr,hp->filesz)!=hp->filesz){kfree_data(mdt,n);return false;}}
+- barrier();uint64_t res=0,st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,mpa,0,&res);printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
++ barrier();veux_dt_crc_log("before_pil_init_image");uint64_t res=0,st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,mpa,0,&res);veux_dt_crc_log("after_pil_init_image");printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
+  if(reloc){st=smc(SCM_FN(SCM_SVC_PIL,PIL_MEM_SETUP),3,PAS_ID_MODEM,min,(max-min+0xfff)&~0xfffULL,&res);printf("VEUX MODEM PAS: mem_setup ret=%llx res=%llx\n",st,res);if(st||res)goto fail;}
+  printf("VEUX MODEM PAS: load segments\n");for(uint32_t i=0;i<eh->phnum;i++){if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;char name[20];snprintf(name,sizeof(name),"modem.b%02u",i);uint64_t map_pa=ph[i].paddr&~0x3fffULL,offset=ph[i].paddr-map_pa;uint64_t map_len=(offset+ph[i].memsz+0x3fffULL)&~0x3fffULL;uint64_t va=ml_io_map_wcomb(map_pa,map_len);if(!va)goto fail;uint8_t *dst=(uint8_t *)(va+offset);if(ph[i].filesz&&!veux_fw_find(name)){printf("VEUX MODEM PAS: segment %s absent, skip\n",name);continue;}if(ph[i].filesz&&veux_fw_read(name,0,dst,ph[i].filesz)!=ph[i].filesz)goto fail;if(ph[i].memsz>ph[i].filesz)bzero(dst+ph[i].filesz,ph[i].memsz-ph[i].filesz);barrier();}
+  st=smc(SCM_FN(SCM_SVC_PIL,PIL_AUTH_RESET),1,PAS_ID_MODEM,0,0,&res);printf("VEUX MODEM PAS: auth_reset ret=%llx res=%llx\n",st,res);kfree_data(mdt,n);return st==0&&res==0;
+@@ -94,10 +127,11 @@
+ void veux_modem_hold(void){printf("VEUX MODEM HOLD: wfe\n");for(;;)__asm__ volatile("dsb sy; wfe" ::: "memory");}
+ static int veux_modem_wait_chan;
+ static void veux_modem_run(void){
++ veux_dt_crc_log("modem_worker_entry");
+  uint32_t watch=180;PE_parse_boot_argn("modem_watch",&watch,sizeof(watch));
+  printf("VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3\n");
+  smem=(uint8_t *)ml_io_map_wcomb(SMEM_PA,SMEM_SIZE);tcsr=(volatile uint8_t *)ml_io_map(TCSR_PA,0x20000);if(!smem||!tcsr){printf("VEUX MODEM PAS: map failed\n");veux_modem_hold();}part=find_part(0,1);if(!part){printf("VEUX MODEM PAS: SMEM partition missing\n");veux_modem_hold();}
+- if(!load_modem()){printf("VEUX MODEM PAS: modem_boot failed\n");veux_modem_hold();}add_out(ITEM_OUT);
++ if(!load_modem()){veux_dt_crc_log("modem_boot_failed");printf("VEUX MODEM PAS: modem_boot failed\n");veux_modem_hold();}veux_dt_crc_log("after_modem_boot");add_out(ITEM_OUT);
+  printf("VEUX MODEM PAS: auth_reset complete; waiting SMP2P\n");uint32_t last=~0U;for(uint32_t ms=0;ms<watch*1000;ms++){(void)veux_ipcc_poll(2,2);struct smp_hdr *in=smem_find(ITEM_IN,NULL);if(in&&in->magic==SMP_MAGIC){volatile uint32_t *sk=smp_find(in,"slave-kernel"),*ipa=smp_find(in,"ipa");if(ipa&&*ipa==1)printf("VEUX MODEM: ipa_query_seen\n");if(sk&&*sk!=last){last=*sk;if(*sk&1){printf("VEUX MODEM: FATAL slave-kernel=0x%x\n",*sk);veux_modem_hold();}if(*sk&2){printf("VEUX MODEM: SMP2P READY\n");veux_glink_init();for(uint32_t g=0;g<watch*1000;g++){(void)veux_ipcc_poll(2,0);veux_glink_poll();delay(1000);}printf("VEUX MODEM PAS: modem_watch expired after READY\n");veux_modem_hold();}}}delay(1000);}
+  printf("VEUX MODEM PAS: modem_watch timeout\n");veux_modem_hold();
+ }
+@@ -105,7 +139,9 @@
+ void veux_modem_start(void){
+  uint32_t on=0;thread_t t;
+  if(!PE_parse_boot_argn("modem",&on,sizeof(on))||on!=1)return;
++ veux_dt_crc_log("before_modem_thread");
+  if(kernel_thread_start(veux_modem_thread,NULL,&t)!=KERN_SUCCESS){printf("VEUX MODEM PAS: worker creation failed\n");veux_modem_hold();}
++ veux_dt_crc_log("after_modem_thread");
+  thread_deallocate(t);
+  (void)assert_wait(&veux_modem_wait_chan,THREAD_UNINT);
+  thread_block(THREAD_CONTINUE_NULL);

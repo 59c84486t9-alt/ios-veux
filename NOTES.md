@@ -5270,3 +5270,27 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Extracted and text-dumped the embedded ADT from the 40384236283 GUI wrapper and the current 40873337445 modem-held wrapper. Their full ADT diff contains only `/chosen/random-seed`; `/arm-io` and `/arm-io/gic` properties are byte-for-byte identical. Both use `ranges = <0 0x01000000 0xff000000>`, `compatible = "arm,gic-v3"`, empty boolean `interrupt-controller`, timer INTID 19, and reg `<0x0e200000 0x10000 0x0e240000 0x100000>`. This maps to VEUX GICD/R `0x0f200000/0x0f240000`; `soc_phys` is `0x01000000` in both.
 - `mkadt.py` has one shared VEUX ADT path; there is no `modem-held`-specific ADT branch. The exact GIC mapping is already restored and covered by `tools/test-veux-gic-adt.py`. No ADT source change or new wrapper was warranted, and no Phase 4.10 flash was performed.
 - The user reports `VEUX IPCC: selftest raw_recv_id=0xffffffff`; this remains a separate IPCC access/clock/XPU investigation for the next phase. Need the latest screen photo/build ID to confirm the running image and capture the precise current panic before changing XNU GIC lookup code.
+
+## >>> UPDATE 2026-10-29 (Phase 4.11 ADT/PAS diagnosis) <<<
+
+- The modem-held payload places the ADT immediately after the kernel image.
+  For CI payload 40873337445, the payload header gives `kernel_end_va=0xfffffe00088e4000`,
+  `virt_base=0xfffffe0006000000`, and `phys_base=0x100000000`; the shim's
+  `deviceTreeP` VA resolves to physical `0x1028e4000`, with length `0x2ccc`.
+  The ADT occupies `[0x1028e4000, 0x1028e6ccc)`, outside the modem pool
+  `[0xc0000000, 0xc5100000)` and modem image carveout
+  `[0x8b800000, 0x9b800000)`. Direct overlap by those specified ranges is
+  therefore ruled out for that wrapper.
+- `veux_modem_start()` is called from the UFS root-device callback, not
+  `VeuxPlatformExpert::start()`. Patch 0159 adds read-only CRC32 snapshots at
+  thread launch, worker entry, before/after `PIL_INIT_IMAGE`, and after modem
+  boot so the next run can identify the first stage at which the ADT changes.
+- The downstream Blair IPCC node has `reg=<0x208000 0x1000>` and SPI 334 but
+  no `clocks`/`clock-names` properties. `gcc-blair.c` and its clock binding
+  have no IPCC-specific clock ID/branch. No speculative GCC register write is
+  added; `RECV_ID=0xffffffff` alone does not establish that a clock is the
+  cause.
+- User-provided photo is from the prior run and visibly shows VEUX touch GPIO,
+  GCC SE8, and I2C diagnostic lines; no `VEUX DT:` or modem PAS marker is
+  legible. User has returned the phone to fastboot (serial previously observed
+  as `4078cac030c8`).
