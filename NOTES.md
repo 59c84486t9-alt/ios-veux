@@ -1,3 +1,13 @@
+## >>> UPDATE 2026-10-29 (Phase 5.5 fastboot checklist failed) <<<
+
+- Fastboot enumerated serial `4078cac030c8`; `adb devices -l` was empty.
+- Read-only checks returned `product: veux`, `current-slot: b`,
+  `unlocked: yes`, and `partition-size:boot_b: 0x8000000`. The milestone
+  requires current-slot `a`, so the checklist failed. No flash, slot change,
+  or reboot command was issued. The verified wrapper remains ready at
+  `/home/nyra/veux-artifacts/40858907367/modem-held.img`; `boot_b` remains the
+  only authorized write target, subject to a passing checklist.
+
 ## >>> UPDATE 2026-10-29 (pool map fix CI and wrapper; flash gate blocked) <<<
 
 - The early-KMEM mapping correction is in commit `801c62e` and CI run
