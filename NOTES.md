@@ -1,3 +1,30 @@
+## >>> UPDATE 2026-10-29 (pool map fix CI and wrapper; flash gate blocked) <<<
+
+- The early-KMEM mapping correction is in commit `801c62e` and CI run
+  [40858907367](https://github.com/59c84486t9-alt/ios-veux/actions/runs/40858907367)
+  completed successfully. Build, host bounds, kernel feature manifest, Phase 2,
+  Phase 3, Phase 4, artifact packaging, and upload all passed. The Phase 3
+  report confirms the pool maps before `io_map_init()`; source assertions,
+  self-test strings, required and additional carve-out checks all passed.
+- Kernel SHA-256 is
+  `eb72771b80f3e25abba29efc225ada0cb63d1a5e94eb98af23d44a33d5c8870c`.
+  Patches `0153` through `0158` are each `APPLIED`; none of these six patches
+  was skipped. The 15 modem milestone markers are all present, the Phase 3
+  pool strings are in the kernel, and the modem-source absence checks passed.
+- Built `/home/nyra/veux-artifacts/40858907367/modem-held.img` with the exact
+  existing modem-held boot args and known phone ADT/DTB. Its manifest records
+  CI/build ID `40858907367`, the matching kernel SHA, DTB SHA
+  `08284b0f3b0d3810abda6d617598370099f36f0f54111668bfe89f6ee35b4e2e`, and
+  byte-for-byte payload verification. Wrapper SHA-256 is
+  `6a4f94457633e0e0e0f2833b6ef5afeadd422d2c89f10e8cdd0dcfb70e821101`;
+  size is 17,281,024 bytes. `verify-veux-wrapper.py --variant modem-held`
+  passed all 15 required markers and its source/binary absence checks.
+- Pre-flash checklist stopped: `fastboot devices` and `adb devices -l` both
+  returned no device entries. Therefore product, current-slot, unlocked state,
+  and `boot_b` partition size could not be re-verified. No flash, slot change,
+  or reboot command was issued. Resume only after the device enumerates and the
+  full checklist passes; authorized write target remains `boot_b` only.
+
 ## >>> UPDATE 2026-10-29 (modem pool early-map panic fix) <<<
 
 - The Phase-5 photo shows `VEUX MODEM POOL: 0xc0000000 + 0x5100000`, then
