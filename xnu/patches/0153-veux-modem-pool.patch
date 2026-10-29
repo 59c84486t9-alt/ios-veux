@@ -35,7 +35,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem_pool.c
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,160 @@
 +/*
 + * VEUX modem transport and metadata pool.
 + *
@@ -85,11 +85,12 @@ index 0000000..0000000
 +_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x00500fa4ULL, 0xbfe06fa5ULL - 0x00500fa4ULL), "VEUX MODEM POOL overlaps recovery initrd");
 +_Static_assert(VEUX_MODEM_POOL_SIZE >= 0x00400000ULL, "VEUX MODEM POOL must be at least 4 MiB");
 +
-+static volatile uint8_t *veux_modem_pool_mapping;
++static volatile uint32_t *veux_modem_pool_mapping;
 +static uint64_t veux_modem_pool_next;
 +static volatile uint32_t veux_modem_pool_lock;
 +
 +bool veux_modem_pool_alloc(uint64_t size, uint64_t *pa);
++void veux_modem_pool_init(void);
 +
 +static inline void
 +veux_modem_pool_barrier(void)
