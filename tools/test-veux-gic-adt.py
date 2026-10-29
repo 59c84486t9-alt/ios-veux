@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check that the generated VEUX ADT exposes XNU's GIC lookup node."""
+"""Keep the generated VEUX GIC node identical to the known-good GUI ADT."""
 import struct
 import sys
 from pathlib import Path
@@ -16,16 +16,19 @@ def child_named(node, name):
 adt_root = mkadt.build(seed=bytes(64), highmem=True, veux=True)
 arm_io = child_named(adt_root, "arm-io")
 assert len(arm_io) == 1, "VEUX ADT must contain one /arm-io node"
-gic = child_named(arm_io[0], "gic")
-assert len(gic) == 1, "VEUX ADT must expose /arm-io/interrupt-controller for XNU lookup"
-props = dict((key, value) for key, _flags, value in gic[0].props)
-assert props.get("compatible") == b"arm,gic\0"
-assert props.get("interrupt-controller") == b"master\0"
-assert int.from_bytes(props["#interrupt-cells"], "little") == 3
+arm_props = dict((key, value) for key, _flags, value in arm_io[0].props)
+assert struct.unpack("<QQQ", arm_props["ranges"]) == (0, 0x01000000, 0xff000000), \
+    "match the working GUI ADT; XNU reports soc_phys=0x01000000 here"
+gic_nodes = child_named(arm_io[0], "gic")
+assert len(gic_nodes) == 1, "XNU pe_init_fiq() requires /arm-io/gic"
+gic = gic_nodes[0]
+props = dict((key, value) for key, _flags, value in gic.props)
+assert props.get("compatible") == b"arm,gic-v3\0"
+assert props.get("interrupt-controller") == b"", "match the known-good boolean property"
 assert struct.unpack("<QQQQ", props["reg"]) == (0x0e200000, 0x10000, 0x0e240000, 0x100000), \
-    "VEUX GIC reg must map to GICD 0x0f200000 and GICR 0x0f240000 through /arm-io/ranges"
-assert struct.unpack("<III", props["interrupts"]) == (1, 8, 4)
-ranges = dict((key, value) for key, _flags, value in arm_io[0].props)["ranges"]
-assert struct.unpack("<QQQ", ranges) == (0, 0x01000000, 0xff000000), \
-    "XNU requires nonzero soc_phys=0x01000000; zero short-circuits interrupt mapping"
-print("VEUX ADT /arm-io/gic master: GICD 0x0f200000, GICR 0x0f240000, soc_phys 0x01000000")
+    "SOC_BASE 0x01000000 resolves these to VEUX GICD/R at 0x0f200000/0x0f240000"
+assert set(props) == {"name", "AAPL,phandle", "compatible", "interrupt-controller",
+                       "virtual-timer-intid", "reg"}, \
+    "do not add properties that differ from the known-good GUI GIC node"
+assert int.from_bytes(props["virtual-timer-intid"], "little") == 19
+print("VEUX GIC node matches working GUI ADT: /arm-io/gic, soc_phys=0x01000000, GICD/R=0x0f200000/0x0f240000")
