@@ -1,0 +1,209 @@
+From 0a65e770abe427f938fd468c98e99ac46353a3c5 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Thu, 29 Oct 2026 04:20:00 +0100
+Subject: [PATCH] Add VEUX reserved modem memory pool
+
+---
+ iokit/Kernel/arm/VeuxPlatformExpert.cpp |   2 +
+ osfmk/arm64/veux_modem_pool.c           | 151 ++++++++++++++++++++++++++++++++
+ osfmk/conf/files.arm64                  |   1 +
+ 3 files changed, 154 insertions(+)
+ create mode 100644 osfmk/arm64/veux_modem_pool.c
+
+diff --git a/iokit/Kernel/arm/VeuxPlatformExpert.cpp b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+index b1facee..85af6e1 100644
+--- a/iokit/Kernel/arm/VeuxPlatformExpert.cpp
++++ b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+@@ -16,6 +16,7 @@
+ 
+ /* Private init hook for the VEUX polling-only IPCC transport. */
+ extern "C" void veux_ipcc_init(void);
++extern "C" void veux_modem_pool_init(void);
+ 
+ class VeuxPlatformExpert : public IODTPlatformExpert {
+ 	OSDeclareDefaultStructors(VeuxPlatformExpert);
+@@ -111,6 +112,7 @@ VeuxPlatformExpert::start(IOService *provider)
+ 		return false;
+ 	}
+ 	veux_ipcc_init();
++	veux_modem_pool_init();
+ 	registerService();
+ 	IOLog("VEUX: platform expert registered\n");
+ 	return true;
+diff --git a/osfmk/arm64/veux_modem_pool.c b/osfmk/arm64/veux_modem_pool.c
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/osfmk/arm64/veux_modem_pool.c
+@@ -0,0 +1,151 @@
++/*
++ * VEUX modem transport and metadata pool.
++ *
++ * The selected fixed no-map region is removed_region@c0000000 from the live
++ * VEUX reserved-memory tree. It is not assigned to a Linux or DT peripheral
++ * consumer. The dynamic memshare_region is separately assigned to qcom,memshare
++ * and is intentionally left to that allocator.
++ */
++#include <arm/machine_routines.h>
++#include <kern/debug.h>
++#include <libkern/libkern.h>
++#include <stdbool.h>
++#include <stdint.h>
++
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++
++#define VEUX_MODEM_POOL_BASE                 0xc0000000ULL
++#define VEUX_MODEM_POOL_SIZE                 0x05100000ULL
++#define VEUX_MODEM_POOL_ALIGNMENT            0x1000ULL
++#define VEUX_MODEM_POOL_NODE                 "removed_region@c0000000"
++#define VEUX_MODEM_POOL_OVERLAPS(a, as, b, bs) \
++	(((a) < (b) + (bs)) && ((b) < (a) + (as)))
++
++/* Required VEUX exclusions: all intervals are base-inclusive, end-exclusive. */
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x8b800000ULL, 0x10000000ULL), "VEUX MODEM POOL overlaps pil_mpss_wlan_mem");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x86500000ULL, 0x00200000ULL), "VEUX MODEM POOL overlaps wlan_msa");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0xd0000000ULL, 0x00200000ULL), "VEUX MODEM POOL overlaps ramoops");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x85200000ULL, 0x00c00000ULL), "VEUX MODEM POOL overlaps framebuffer");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x80900000ULL, 0x00200000ULL), "VEUX MODEM POOL overlaps smem");
++/* Other fixed no-map/peripheral-owned carve-outs from the live DT. */
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x80000000ULL, 0x00600000ULL), "VEUX MODEM POOL overlaps hyp");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x80700000ULL, 0x00100000ULL), "VEUX MODEM POOL overlaps xbl_aop_mem");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x80880000ULL, 0x00014000ULL), "VEUX MODEM POOL overlaps reserved_xbl_uefi");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x80b00000ULL, 0x00100000ULL), "VEUX MODEM POOL overlaps fw_mem");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x80c00000ULL, 0x01e00000ULL), "VEUX MODEM POOL overlaps cdsp_secure_heap");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x85e00000ULL, 0x00100000ULL), "VEUX MODEM POOL overlaps dfps_data");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x86700000ULL, 0x02c00000ULL), "VEUX MODEM POOL overlaps adsp");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x89300000ULL, 0x01e00000ULL), "VEUX MODEM POOL overlaps cdsp");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x8b100000ULL, 0x00500000ULL), "VEUX MODEM POOL overlaps video");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x8b600000ULL, 0x00010000ULL), "VEUX MODEM POOL overlaps ipa_fw");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x8b610000ULL, 0x0000a000ULL), "VEUX MODEM POOL overlaps ipa_gsi");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x8b61a000ULL, 0x00002000ULL), "VEUX MODEM POOL overlaps gpu_micro_code");
++/* The live recovery boot allocated the modem-owned dynamic memshare pool here. */
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0xf5c00000ULL, 0x00800000ULL), "VEUX MODEM POOL overlaps memshare_region");
++/* Recovery /proc/iomem kernel image and live chosen initrd ranges. */
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0xa0080000ULL, 0xa2727000ULL - 0xa0080000ULL), "VEUX MODEM POOL overlaps kernel image");
++_Static_assert(!VEUX_MODEM_POOL_OVERLAPS(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x00500fa4ULL, 0xbfe06fa5ULL - 0x00500fa4ULL), "VEUX MODEM POOL overlaps recovery initrd");
++_Static_assert(VEUX_MODEM_POOL_SIZE >= 0x00400000ULL, "VEUX MODEM POOL must be at least 4 MiB");
++
++static volatile uint8_t *veux_modem_pool_mapping;
++static uint64_t veux_modem_pool_next;
++static volatile uint32_t veux_modem_pool_lock;
++
++bool veux_modem_pool_alloc(uint64_t size, uint64_t *pa);
++
++static inline void
++veux_modem_pool_barrier(void)
++{
++	__asm__ volatile("dsb sy" ::: "memory");
++}
++
++static bool
++veux_modem_pool_overlap(uint64_t a, uint64_t as, uint64_t b, uint64_t bs)
++{
++	return VEUX_MODEM_POOL_OVERLAPS(a, as, b, bs);
++}
++
++static bool
++veux_modem_pool_has_forbidden_overlap(void)
++{
++	return veux_modem_pool_overlap(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x8b800000ULL, 0x10000000ULL) ||
++	    veux_modem_pool_overlap(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x86500000ULL, 0x00200000ULL) ||
++	    veux_modem_pool_overlap(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0xd0000000ULL, 0x00200000ULL) ||
++	    veux_modem_pool_overlap(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x85200000ULL, 0x00c00000ULL) ||
++	    veux_modem_pool_overlap(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x80900000ULL, 0x00200000ULL) ||
++	    veux_modem_pool_overlap(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0xf5c00000ULL, 0x00800000ULL) ||
++	    veux_modem_pool_overlap(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0xa0080000ULL, 0xa2727000ULL - 0xa0080000ULL) ||
++	    veux_modem_pool_overlap(VEUX_MODEM_POOL_BASE, VEUX_MODEM_POOL_SIZE, 0x00500fa4ULL, 0xbfe06fa5ULL - 0x00500fa4ULL);
++}
++
++void
++veux_modem_pool_init(void)
++{
++	vm_offset_t mapping;
++	volatile uint32_t *probe;
++	uint64_t pa;
++
++	if (veux_modem_pool_mapping != NULL) {
++		return;
++	}
++	if (veux_modem_pool_has_forbidden_overlap()) {
++		panic("VEUX MODEM POOL overlaps reserved carve-out");
++	}
++	printf("VEUX MODEM POOL: 0x%llx + 0x%llx (from %s)\n",
++	    (unsigned long long)VEUX_MODEM_POOL_BASE,
++	    (unsigned long long)VEUX_MODEM_POOL_SIZE, VEUX_MODEM_POOL_NODE);
++	mapping = ml_io_map_wcomb((vm_offset_t)VEUX_MODEM_POOL_BASE,
++	    (vm_size_t)VEUX_MODEM_POOL_SIZE);
++	if (mapping == 0) {
++		printf("VEUX MODEM POOL: map failed\n");
++		return;
++	}
++	veux_modem_pool_mapping = (volatile uint8_t *)mapping;
++	veux_modem_pool_next = 0;
++	if (!veux_modem_pool_alloc(0x1000ULL, &pa)) {
++		printf("VEUX MODEM POOL: selftest FAIL (allocation)\n");
++		return;
++	}
++	probe = (volatile uint32_t *)(veux_modem_pool_mapping + (pa - VEUX_MODEM_POOL_BASE));
++	*probe = 0xdeadbeefU;
++	veux_modem_pool_barrier();
++	if (*probe == 0xdeadbeefU) {
++		printf("VEUX MODEM POOL: selftest ok\n");
++	} else {
++		printf("VEUX MODEM POOL: selftest FAIL readback=0x%08x\n", *probe);
++	}
++}
++
++bool
++veux_modem_pool_alloc(uint64_t size, uint64_t *pa)
++{
++	uint64_t offset, next;
++	volatile uint8_t *allocation;
++
++	if (pa == NULL || size == 0 || size > VEUX_MODEM_POOL_SIZE ||
++	    veux_modem_pool_mapping == NULL) {
++		return false;
++	}
++	while (__sync_lock_test_and_set(&veux_modem_pool_lock, 1u) != 0u) {
++		while (veux_modem_pool_lock != 0u) {
++			__asm__ volatile("yield" ::: "memory");
++		}
++	}
++	if (veux_modem_pool_next > UINT64_MAX - (VEUX_MODEM_POOL_ALIGNMENT - 1)) {
++		__sync_lock_release(&veux_modem_pool_lock);
++		return false;
++	}
++	offset = (veux_modem_pool_next + VEUX_MODEM_POOL_ALIGNMENT - 1) &
++	    ~(VEUX_MODEM_POOL_ALIGNMENT - 1);
++	if (offset > VEUX_MODEM_POOL_SIZE || size > VEUX_MODEM_POOL_SIZE - offset) {
++		__sync_lock_release(&veux_modem_pool_lock);
++		return false;
++	}
++	next = offset + size;
++	veux_modem_pool_next = next;
++	*pa = VEUX_MODEM_POOL_BASE + offset;
++	allocation = veux_modem_pool_mapping + offset;
++	__sync_lock_release(&veux_modem_pool_lock);
++
++	bzero((void *)allocation, (size_t)size);
++	veux_modem_pool_barrier();
++	printf("VEUX MODEM POOL: alloc 0x%llx + 0x%llx\n",
++	    (unsigned long long)*pa, (unsigned long long)size);
++	return true;
++}
++
++#endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+index 07ceb82..f2192d0 100644
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -43,6 +43,7 @@
+ osfmk/arm64/sweet_early.c	standard
+ osfmk/arm64/veux_early.c	standard
+ osfmk/arm64/veux_ipcc.c		standard
++osfmk/arm64/veux_modem_pool.c	standard
+ osfmk/arm64/arm64_hypercall.c	standard
+ osfmk/arm/io_map.c		standard
+ osfmk/arm64/loose_ends.c	standard
+-- 
+2.49.0
