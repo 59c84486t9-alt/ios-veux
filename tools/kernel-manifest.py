@@ -85,6 +85,7 @@ for patch in (
     "0149-veux-tlmm-per-read-checkpoints-and-touch-overlay.patch",
     "0150-veux-touch-gpio-i2c-when-fifo-disabled.patch",
     "0151-veux-disable-touch-lockscreen-overlay.patch",
+    "0152-veux-ipcc.patch",
 ):
     if not any(line.startswith(f"PATCH_STATUS: {patch} APPLIED") for line in status):
         raise SystemExit(f"required patch was not applied: {patch}")
@@ -157,6 +158,36 @@ needles = {
     "gpi_summary_thread_started": b"VEUX GPI SUMMARY THREAD: started; three delayed read-only reports",
 }
 checks = {name: needle in kernel for name, needle in needles.items()}
+ipcc_path = a.source_root / "osfmk/arm64/veux_ipcc.c"
+ipcc_source = ipcc_path.read_text() if ipcc_path.exists() else ""
+ipcc_init = ipcc_source.split("veux_ipcc_init(void)", 1)[-1]
+ipcc_selftest = ipcc_init.split("raw_recv =", 1)[-1] if "raw_recv =" in ipcc_init else ""
+ipcc_signal_body = ipcc_source.split("veux_ipcc_signal(uint8_t client_id, uint16_t signal_id)", 1)[-1].split("bool\nveux_ipcc_poll", 1)[0]
+ipcc_poll_body = ipcc_source.split("veux_ipcc_poll(uint8_t client_id, uint16_t signal_id)", 1)[-1].split("/* Private IOKit", 1)[0]
+ipcc_defines = {line.split()[1]: line.split()[-1] for line in ipcc_source.splitlines()
+                if line.startswith("#define VEUX_IPCC_") and len(line.split()) >= 3}
+ipcc_source_checks = {
+    "source_file_exists": ipcc_path.is_file(),
+    "signal_and_poll_functions": "veux_ipcc_signal(uint8_t client_id, uint16_t signal_id)" in ipcc_source and "veux_ipcc_poll(uint8_t client_id, uint16_t signal_id)" in ipcc_source,
+    "both_functions_log_marker": "VEUX IPCC:" in ipcc_signal_body and "VEUX IPCC:" in ipcc_poll_body,
+    "client_and_signal_constants": all(ipcc_defines.get(name) == value for name, value in (
+        ("VEUX_IPCC_CLIENT_APSS", "8u"), ("VEUX_IPCC_CLIENT_MPSS", "2u"),
+        ("VEUX_IPCC_CLIENT_AOP", "0u"), ("VEUX_IPCC_SIGNAL_SMP2P", "2u"),
+        ("VEUX_IPCC_SIGNAL_GLINK_QMP", "0u"))),
+    "base_and_registers": all(x in ipcc_source for x in (
+        "VEUX_IPCC_PA                 0x00208000u", "VEUX_IPCC_REG_SEND_ID",
+        "VEUX_IPCC_REG_RECV_ID", "VEUX_IPCC_REG_RECV_SIGNAL_CLEAR")),
+    "qualcomm_packed_order": "((uint32_t)client_id << 16) | (uint32_t)signal_id" in ipcc_source,
+    "selftest_format_and_read_only_path": "VEUX IPCC: selftest raw_recv_id=0x%08x" in ipcc_source and "VEUX IPCC: selftest raw_recv_id=0x%08x".encode() in kernel and "veux_ipcc_signal(" not in ipcc_init and "veux_ipcc_poll(" not in ipcc_init and "VEUX_IPCC_REG_RECV_SIGNAL_CLEAR] =" not in ipcc_selftest,
+    "no_apcs_legacy_mapping": not any(x in ipcc_source for x in ("APCS", "APCS_IPC", "0x0f111000")),
+    "no_interrupt_or_gic_setup": not any(x in ipcc_source for x in (
+        "register_interrupt", "irq_install", "IOInterruptEventSource", "GIC_SPI", "0x14E")),
+    "binary_marker": b"VEUX IPCC:" in kernel,
+}
+if not all(ipcc_source_checks.values()):
+    raise SystemExit("VEUX IPCC Phase-2 sub-gate failed: " + repr(ipcc_source_checks))
+print("VEUX IPCC Phase-2 source assertions: PASS " + repr(ipcc_source_checks))
+print("VEUX IPCC Phase-2 binary marker and read-only self-test string: PASS")
 modem_needles = {
     "pas_parameters": b"VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3",
     "ipcc_parameters": b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
