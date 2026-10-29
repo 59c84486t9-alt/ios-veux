@@ -5303,3 +5303,10 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Authorized write recorded before execution: partition `boot_b` only, 17,281,024 bytes from the wrapper above. No other partition is authorized for this write.
 - Phase 4.11 flash completed to `boot_b` only: `fastboot flash boot_b /home/nyra/veux-artifacts/40891013438/modem-held.img` returned Sending OKAY / Writing OKAY / Finished; `fastboot set_active b` returned OKAY; `fastboot reboot` returned OKAY. The exact wrapper SHA-256 was rechecked immediately before flashing.
 - After the three-minute observation window, both `fastboot devices` and `adb devices -l` were empty. The previous-run photo showed touch diagnostics only; awaiting the post-Phase-4.11 screen photo to read `VEUX DT: crc=` checkpoints and confirm how far modem startup progressed. No recovery return was initiated from the host.
+
+## >>> UPDATE 2026-10-29 (408589 wrapper re-verification) <<<
+
+- Rebuilt the requested run-408589 modem-held payload and wrapper from its CI kernel and `phone.adt`. The rebuilt wrapper is byte-identical to the original `/home/nyra/veux-artifacts/40858907367/modem-held.img`: SHA-256 `6a4f94457633e0e0e0f2833b6ef5afeadd422d2c89f10e8cdd0dcfb70e821101`, size 17,281,024 bytes. Wrapper verification passed 15/15 markers and payload reconstruction.
+- Extracted embedded ADT SHA-256 from the run-408589 modem-held wrapper: `c2e6d5378d53b8dccd4a289769f316df5df971244116f66596619fd5f315ed39`. The known-good GUI wrapper (403842) has the exact same embedded ADT bytes and hash. `/arm-io`, `ranges`, and GIC nodes therefore match exactly; `tools/mkadt.py` was not changed.
+- Pre-flash state on serial `4078cac030c8`: fastboot enumerates; product=`veux`; current-slot=`b`; unlocked=`yes`; `partition-size:boot_b=0x8000000`. The rebuilt wrapper hash/manifest pass. USB cable unplug/replug was not physically performed; current fastboot transport answered the device queries above.
+- Authorized write recorded before execution: `boot_b` only, exactly 17,281,024 bytes from `/home/nyra/veux-artifacts/40858907367/modem-held.rebuilt.img`. `boot_a` and all other partitions remain untouched.
