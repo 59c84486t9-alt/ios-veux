@@ -196,6 +196,17 @@ diff --git a/osfmk/arm64/veux_modem_pool.c b/osfmk/arm64/veux_modem_pool.c
 +}
 +
  #endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -44,6 +44,7 @@
+ osfmk/arm64/veux_early.c	standard
+ osfmk/arm64/veux_ipcc.c		standard
+ osfmk/arm64/veux_modem_pool.c	standard
++osfmk/arm64/veux_modem_pas.c	standard
+ osfmk/arm64/arm64_hypercall.c	standard
+ osfmk/arm/io_map.c		standard
+ osfmk/arm64/loose_ends.c		standard
 diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
 --- a/iokit/conf/files.arm64
 +++ b/iokit/conf/files.arm64
