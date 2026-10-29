@@ -1,3 +1,18 @@
+## >>> UPDATE 2026-10-29 (Phase 5.5 pre-flash checklist passed under slot override) <<<
+
+- User override for this iteration allows either current slot; the previous
+  `current-slot == a` gate is superseded. Fastboot serial `4078cac030c8` is
+  present; read-only checks returned product `veux`, unlocked `yes`,
+  `partition-size:boot_b = 0x8000000`, and current-slot `b` (accepted under
+  the override).
+- Wrapper `/home/nyra/veux-artifacts/40858907367/modem-held.img` matches its
+  manifest: CI/build ID `40858907367`, kernel SHA-256
+  `eb72771b80f3e25abba29efc225ada0cb63d1a5e94eb98af23d44a33d5c8870c`,
+  wrapper SHA-256 `6a4f94457633e0e0e0f2833b6ef5afeadd422d2c89f10e8cdd0dcfb70e821101`,
+  and size 17,281,024 bytes. The only authorized write for this attempt is
+  `boot_b`, exactly 17,281,024 bytes from that wrapper. `boot_a` and all other
+  partitions remain prohibited.
+
 ## >>> UPDATE 2026-10-29 (Phase 5.5 fastboot checklist failed) <<<
 
 - Fastboot enumerated serial `4078cac030c8`; `adb devices -l` was empty.
