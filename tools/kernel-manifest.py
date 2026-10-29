@@ -246,6 +246,7 @@ phase4_patch_names = (
     "0159-veux-dt-crc-diagnostics.patch",
     "0160-veux-ipcc-clock-note.patch",
     "0161-veux-ipcc-mapping-diagnostic.patch",
+    "0162-veux-ufs-multilun.patch",
 )
 phase4_patch_texts = {}
 phase4_status = {}
@@ -277,7 +278,7 @@ phase4_forbidden = {
         r"\bscan_\w*")),
 }
 phase4_sources = {
-    "eight_unique_patch_files": all(phase4_patch_texts.values()),
+    "nine_unique_patch_files": all(phase4_patch_texts.values()),
     "patches_applied_without_skip": all(phase4_status.values()),
     "firmware_table_116_rows": phase4_patch_texts["0155-veux-modem-firmware.patch"].count("{ \"") == 116,
     "pas_and_modem_worker_hold": "veux_modem_start(void)" in phase4_text and "veux_modem_hold(void)" in phase4_text,
@@ -288,6 +289,13 @@ phase4_sources = {
     "forbidden_apcs_host_cap_bdf_wlan_paths_absent": not any(phase4_forbidden.values()),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
     "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],
+    "modem_a_scans_luns_0_to_5_and_caches_location": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
+        "for (uint8_t lun = 0; lun <= 5; lun++)",
+        "veux_modem_a_partition_valid", "veux_modem_a_first_block", "veux_modem_a_nblocks",
+        "VEUX UFS: cached modem_a on LUN=%u")),
+    "modem_main_thread_waits_uninterruptibly": all(x in phase4_text for x in (
+        "assert_wait(&veux_modem_wait_chan,THREAD_UNINT)",
+        "thread_block(THREAD_CONTINUE_NULL)", "veux_modem_hold();")),
 }
 if not all(phase4_sources.values()):
     raise SystemExit("VEUX Phase-4 source assertions failed: " + repr(phase4_sources) + " forbidden=" + repr(phase4_forbidden))
@@ -298,6 +306,7 @@ phase4_binary = {
     "adt_crc_log_format": b"VEUX DT: crc=0x%08x stage=%s\n" in kernel,
     "adt_crc_before_after_thread": b"before_modem_thread" in kernel and b"after_modem_thread" in kernel,
     "ipcc_mapping_diagnostic": b"VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\n" in kernel,
+    "modem_a_multilun_cache": b"VEUX UFS: cached modem_a on LUN=%u first=0x%llx blocks=0x%llx\n" in kernel,
 }
 if not all(phase4_binary.values()):
     raise SystemExit("VEUX Phase-4 binary marker checks failed: " + repr(phase4_binary))

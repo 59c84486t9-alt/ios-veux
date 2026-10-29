@@ -116,6 +116,7 @@ if a.variant == "modem-held":
         b"VEUX WLFW: cap ok", b"VEUX WLFW: chip_id",
         b"VEUX MODEM HOLD: wfe",
         b"VEUX MODEM FW:", b"VEUX PDMAP:",
+        b"VEUX UFS: cached modem_a on LUN=%u first=0x%llx blocks=0x%llx\n",
     )
     missing = [marker.decode("ascii") for marker in required if marker not in kernel]
     if missing:
@@ -130,6 +131,7 @@ if a.variant == "modem-held":
         repo_root / "xnu/osfmk/arm64/veux_modem_pool.c",
         *(repo_root / "xnu/patches" / f"015{i}-veux-modem-{name}.patch"
           for i, name in ((4, "pas"), (5, "firmware"), (6, "glink"), (7, "pdmapper"), (8, "wlfw"))),
+        repo_root / "xnu/patches/0162-veux-ufs-multilun.patch",
     ]
     absent_tokens = (b"APCS", b"APCS_IPC", b"0x0f111000", b"0xe0000000")
     # This repository stores these implementation files as unapplied XNU

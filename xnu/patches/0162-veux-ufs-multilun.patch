@@ -1,0 +1,82 @@
+From 0000000000000000000000000000000000000012 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Scan VEUX UFS LUNs for modem_a
+
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -411,19 +411,60 @@
+ }
+ 
+ /* Read-only byte access to a named GPT partition for modem firmware. */
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++static bool veux_modem_a_partition_valid;
++static uint8_t veux_modem_a_lun;
++static uint64_t veux_modem_a_first_block;
++static uint64_t veux_modem_a_nblocks;
++#endif
++
+ int64_t
+ sweet_ufs_read_part(const char *name, uint64_t off, void *dst, uint64_t len)
+ {
+-	uint64_t saved_first, saved_count, target_first, target_count;
++	uint64_t saved_first, saved_count, target_first = 0, target_count = 0;
++	uint8_t saved_lun, target_lun = 0;
+ 	int error = 0;
+ 	if (!su.ready || name == NULL || dst == NULL || len == 0 || strcmp(name, "modem_a") != 0)
+ 		return -1;
+ 	lck_mtx_lock(&sweet_ufs_lock);
++	saved_lun = su.lun;
+ 	saved_first = su.first_block;
+ 	saved_count = su.nblocks;
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	if (veux_modem_a_partition_valid) {
++		su.lun = veux_modem_a_lun;
++		su.first_block = veux_modem_a_first_block;
++		su.nblocks = veux_modem_a_nblocks;
++	} else {
++		error = ENOENT;
++		for (uint8_t lun = 0; lun <= 5; lun++) {
++			su.lun = lun;
++			su.first_block = saved_first;
++			su.nblocks = saved_count;
++			printf("VEUX UFS: searching modem_a on LUN=%u\n", lun);
++			error = ufs_find_partition(name);
++			if (error == 0) {
++				veux_modem_a_partition_valid = true;
++				veux_modem_a_lun = lun;
++				veux_modem_a_first_block = su.first_block;
++				veux_modem_a_nblocks = su.nblocks;
++				printf("VEUX UFS: cached modem_a on LUN=%u first=0x%llx blocks=0x%llx\n",
++				    lun, veux_modem_a_first_block, veux_modem_a_nblocks);
++				break;
++			}
++		}
++	}
++	if (error == 0) {
++		target_lun = su.lun;
++		target_first = su.first_block;
++		target_count = su.nblocks;
++	}
++#else
+ 	error = ufs_find_partition(name);
++	target_lun = su.lun;
+ 	target_first = su.first_block;
+ 	target_count = su.nblocks;
++#endif
+ 	if (error == 0 && (off > target_count * (uint64_t)UFS_BLOCK ||
+ 	    len > target_count * (uint64_t)UFS_BLOCK - off)) error = EINVAL;
+ 	for (uint64_t done = 0; error == 0 && done < len;) {
+@@ -432,10 +473,12 @@
+ 		uint32_t skip = (uint32_t)(pos % UFS_BLOCK);
+ 		uint32_t take = (uint32_t)MIN(len - done, BOUNCE_SIZE - skip);
+ 		uint32_t blocks = (skip + take + UFS_BLOCK - 1) / UFS_BLOCK;
++		su.lun = target_lun;
+ 		error = ufs_read_blocks(target_first + lba, blocks);
+ 		if (error == 0) memcpy((uint8_t *)dst + done, (const uint8_t *)(su.dma + DMA_BOUNCE) + skip, take);
+ 		done += error == 0 ? take : 0;
+ 	}
++	su.lun = saved_lun;
+ 	su.first_block = saved_first;
+ 	su.nblocks = saved_count;
+ 	lck_mtx_unlock(&sweet_ufs_lock);
+---
