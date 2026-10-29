@@ -4985,3 +4985,20 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - QCA host-CMN configuration selects HIF_SNOC for ICNSS/Adrastea. VEUX live DT gives ICNSS membase `0xc800000` size `0x800000`, 12 direct GIC CE interrupt specifiers `0x166–0x171`, IOMMU/SMMU resources, and no PCI/SDIO endpoint. Topaz patch 0123 maps a candidate CE block at `0xc800000 + 0x240000`, with 12 4-KiB-spaced engines and shadow registers at `0xc832000`; exact offsets still need confirmation against VEUX downstream HIF config.
 - ios-topaz is structurally closer than HackiOS for this target. Its WLFW code implements the same MSA QMI messages but inserts `host_cap` before MSA; it hardcodes Topaz MSA window/VMIDs/PAS and WCN3988 CE/board configuration. The QMI flow can be adapted, not dropped in. VEUX's single largest missing piece is an Adrastea-specific SNOC/remote-WLAN platform stack: firmware service/PAS+MSA setup, CE DMA, and GIC integration.
 - Updated `docs/VEUX-WIFI-DISCOVERY.md`. No XNU code, build, CI, flash, or device state change was made. Temporary host-side image extraction was removed.
+
+### VEUX modem-held pipeline Gate 1 — 2026-10-29
+
+- Commit `8b2acb2` adds the exact `modem-held` boot-argument variant to the
+  kernel manifest and wrapper verifier, validates the forbidden argument set,
+  and makes the CI kernel manifest require all 13 modem milestone markers and
+  reject forbidden WLAN protocol markers. CI artifact upload is success-only.
+- Local repository validation, Python syntax checks, shell syntax checks, and
+  `git diff --check` passed. The existing kernel fails the manifest with
+  `missing modem markers` as intended.
+- Full baseline CI run `40804331656` compiled the current VEUX kernel and
+  passed host diagnostic checks, then failed at `Kernel feature manifest` with
+  all 13 modem markers missing. This is the expected red baseline. GitHub
+  reports zero uploaded artifacts.
+- No modem patches, IPCC driver, pool selection, wrapper, or device write was
+  made. The modem-held variant appears once; the patch queue remains 0001–0151.
+  Stop at Gate 1 as requested before Phase 2.
