@@ -5504,7 +5504,7 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `Writing 'boot_b' OKAY`, `Finished`. `fastboot set_active b` returned
   `Setting current slot to 'b' OKAY`; `fastboot reboot` returned `Rebooting
   OKAY`, `Finished`. No other partition was written.
-- Post-reboot observation window is in progress. Check Fastboot and ADB
-  enumeration at one, two, and three minutes. The host has no camera input, so
-  it cannot photograph the screen; request the user-provided screen photo for
-  confirmation of the new GLINK log and QRTR HELLO.
+- At about one and two minutes after reboot, `fastboot devices` and
+  `adb devices -l` both returned empty. Per the user's instruction, stop further
+  post-reboot checks; the three-minute check and on-screen confirmation were
+  skipped. The host has no camera input, so no screen photo is available.
