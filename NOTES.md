@@ -17,6 +17,24 @@
   written or activated. Stop here pending a corrected gate that distinguishes
   unrelated networking code from forbidden modem code.
 
+- DeepSeek corrected the absence-check scope. Updated
+  `tools/verify-veux-wrapper.py` to reject APCS/APCS_IPC/0x0f111000/0xe0000000
+  only in the VEUX modem source files and patches, while preserving the
+  binary-wide forbidden modem marker checks. The verifier now explicitly
+  reports 15/15 required markers, source-token absence, binary marker absence,
+  and byte-for-byte payload reconstruction; it passes on the same wrapper.
+- Pre-flash checklist passed on fastboot serial `4078cac030c8`:
+  `product: veux`, `current-slot: a`, `unlocked: yes`, and
+  `partition-size:boot_b: 0x8000000`. Manifest CI run is `40853717857`, kernel
+  SHA-256 is
+  `3f957a29b32738c5d151f556076757d3b1602fd2cb3109502b866b072ac189d7`, the
+  DTB SHA-256 is
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`, the
+  boot args match exactly, and patches 0154–0158 are APPLIED with zero skips.
+  Immediately before flash, the authorized write is `boot_b` only, exactly
+  17,281,024 bytes from `modem-held.img`, SHA-256
+  `86847f28f6207ace9a16a592d769b7740a74f5e843e060a087aeac6ebfec39b1`.
+
 ## >>> UPDATE 2026-10-29 (Adrastea modem/WLAN gate follow-up) <<<
 
 - Rechecked live recovery read-only on device `4078cac030c8`, slot `_a`: recovery kernel is Linux 5.4.292-Paimon. `/proc/config.gz` reports built-in ICNSS2, WLAN/CLD LL, PIL, subsystem restart, SMP2P, GLINK, and QRTR; `/proc/kallsyms` contains `icnss_probe`, `icnss_wpss_load`, `subsystem_get`, `pil_boot`, and `wlan_hdd_*` symbols. No `.ko` or module load lists are present in the live vendor/system/odm trees. Checked physical GPT and super inventories have no vendor_dlkm/odm_dlkm/system_dlkm carriers. See `docs/VEUX-WIFI-ADRASTEA-PORT-AUDIT.md` for the evidence and limitations.

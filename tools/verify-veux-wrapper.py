@@ -115,10 +115,36 @@ if a.variant == "modem-held":
         b"VEUX WLFW: msa_info ok", b"VEUX WLFW: msa_ready ok",
         b"VEUX WLFW: cap ok", b"VEUX WLFW: chip_id",
         b"VEUX MODEM HOLD: wfe",
+        b"VEUX MODEM FW:", b"VEUX PDMAP:",
     )
     missing = [marker.decode("ascii") for marker in required if marker not in kernel]
     if missing:
         raise SystemExit("CI kernel lacks modem markers: " + ", ".join(missing))
+
+    # These strings are forbidden in the VEUX modem implementation, but some
+    # (notably 0xe0000000) also occur in unrelated XNU networking code. Check
+    # the modem source and patch inputs rather than scanning the whole kernel.
+    repo_root = Path(__file__).resolve().parent.parent
+    modem_paths = [
+        repo_root / "xnu/osfmk/arm64/veux_ipcc.c",
+        repo_root / "xnu/osfmk/arm64/veux_modem_pool.c",
+        *(repo_root / "xnu/patches" / f"015{i}-veux-modem-{name}.patch"
+          for i, name in ((4, "pas"), (5, "firmware"), (6, "glink"), (7, "pdmapper"), (8, "wlfw"))),
+    ]
+    absent_tokens = (b"APCS", b"APCS_IPC", b"0x0f111000", b"0xe0000000")
+    # This repository stores these implementation files as unapplied XNU
+    # patches; include materialized source files when a checkout has them.
+    required_patch_paths = modem_paths[2:]
+    missing_patches = [str(path) for path in required_patch_paths if not path.is_file()]
+    if missing_patches:
+        raise SystemExit("missing VEUX modem patch inputs: " + ", ".join(missing_patches))
+    absent_sources = [path for path in modem_paths if path.is_file()]
+    source_hits = [f"{path.relative_to(repo_root)}:{token.decode()}"
+                   for path in absent_sources for token in absent_tokens
+                   if token.lower() in path.read_bytes().lower()]
+    if source_hits:
+        raise SystemExit("forbidden legacy modem source tokens: " + ", ".join(source_hits))
+
     forbidden_markers = (
         b"VEUX WLFW: host_cap sent", b"VEUX WLFW: bdf", b"VEUX WLFW: cal_report",
         b"VEUX WLFW: wlan_cfg", b"VEUX WLFW: wlan_mode", b"VEUX CE:",
@@ -127,6 +153,10 @@ if a.variant == "modem-held":
     present = [marker.decode("ascii") for marker in forbidden_markers if marker in kernel]
     if present:
         raise SystemExit("CI kernel contains forbidden modem markers: " + ", ".join(present))
+    print("modem source absence checks: APCS/APCS_IPC/0x0f111000/0xe0000000 absent from VEUX sources and patches")
+    print(f"modem milestone markers: {len(required) - len(missing)}/{len(required)} present (13 milestone + 2 Phase-4)")
+    print("binary-wide forbidden modem markers: absent")
+    print("payload reconstruction: byte-for-byte match")
 status = a.patch_status.read_text().splitlines()
 manifest_path = a.manifest or a.image.with_suffix(a.image.suffix + ".manifest.json")
 manifest = {
