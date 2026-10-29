@@ -439,6 +439,34 @@ jobs:
           grep -Fxq 'missing modem markers: pas_parameters, smp2p_ready, glink_version_ack, glink_open_ack_ipcrtr, qrtr_hello, qrtr_wlfw_server, wlfw_ind_register, wlfw_msa_info, wlfw_msa_ready, wlfw_cap, wlfw_chip_id, modem_hold' out/ipcc-subgate.log
           echo 'Phase-2 IPCC gate passed; full milestone manifest is red only for its 12 not-yet-implemented modem markers.'
 
+      - name: Phase 3 modem pool sub-gate (expected modem-manifest red)
+        id: pool_gate
+        if: always() && steps.build.outcome == 'success' && env.MACHINE_CONFIG == 'VEUX'
+        run: |
+          KERNEL=$(find dxb/fakeroot/System/Library/Kernels -type f -name '*development*veux*' -print -quit)
+          test -n "$KERNEL"
+          mkdir -p out
+          set +e
+          python3 tools/kernel-manifest.py \
+            --kernel "$KERNEL" \
+            --patch-status patch-status.txt \
+            --build-id "$VEUX_BUILD_ID" \
+            --boot-args "$VEUX_BOOT_ARGS" \
+            --held-boot-args "$VEUX_HELD_BOOT_ARGS" \
+            --modem-held-boot-args "$VEUX_MODEM_HELD_BOOT_ARGS" \
+            --source-root dxb/xnu \
+            --output out/pool-subgate-manifest.json > out/pool-subgate.log 2>&1
+          manifest_status=$?
+          set -e
+          cat out/pool-subgate.log
+          test "$manifest_status" -eq 1
+          grep -Fq 'VEUX IPCC Phase-2 source assertions: PASS' out/pool-subgate.log
+          grep -Fq 'VEUX IPCC Phase-2 binary marker and read-only self-test string: PASS' out/pool-subgate.log
+          grep -Fq 'VEUX MODEM POOL Phase-3 source assertions: PASS' out/pool-subgate.log
+          grep -Fq 'VEUX MODEM POOL Phase-3 binary marker/selftest strings: PASS' out/pool-subgate.log
+          grep -Fxq 'missing modem markers: pas_parameters, smp2p_ready, glink_version_ack, glink_open_ack_ipcrtr, qrtr_hello, qrtr_wlfw_server, wlfw_ind_register, wlfw_msa_info, wlfw_msa_ready, wlfw_cap, wlfw_chip_id, modem_hold' out/pool-subgate.log
+          echo 'Phase-3 modem pool gate passed; full milestone manifest remains red only for its 12 not-yet-implemented modem markers.'
+
       - name: Package build tree for local compiles
         if: always()
         run: |
@@ -455,7 +483,7 @@ jobs:
           ls -la buildtree.tgz
 
       - uses: actions/upload-artifact@v4
-        if: always() && steps.build.outcome == 'success' && steps.ipcc_gate.outcome == 'success'
+        if: always() && steps.build.outcome == 'success' && steps.ipcc_gate.outcome == 'success' && steps.pool_gate.outcome == 'success'
         with:
           name: xnu-buildtree
           path: buildtree.tgz
@@ -483,7 +511,7 @@ jobs:
           (cd out && shasum -a 256 kernel.* > SHA256SUMS) || true
 
       - uses: actions/upload-artifact@v4
-        if: always() && steps.build.outcome == 'success' && steps.ipcc_gate.outcome == 'success'
+        if: always() && steps.build.outcome == 'success' && steps.ipcc_gate.outcome == 'success' && steps.pool_gate.outcome == 'success'
         with:
           name: xnu-kernel
           path: out/
