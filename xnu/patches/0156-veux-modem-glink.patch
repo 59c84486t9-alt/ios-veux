@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000003 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] veux-modem-glink
+
+diff --git a/osfmk/arm64/veux_modem_glink.c b/osfmk/arm64/veux_modem_glink.c
+new file mode 100644
+--- /dev/null
++++ b/osfmk/arm64/veux_modem_glink.c
+@@ -0,0 +1,65 @@
++#include <pexpert/arm64/board_config.h>
++#include <kern/debug.h>
++#include <kern/kalloc.h>
++#include <stdint.h>
++#include <string.h>
++#include "veux_modem.h"
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++#define ITEM_DESC 478
++#define ITEM_TX 479
++#define ITEM_RX 480
++#define TX_SIZE 0x4000U
++#define LCID 1
++#define CMD_VERSION 0
++#define CMD_VERSION_ACK 1
++#define CMD_OPEN 2
++#define CMD_CLOSE 3
++#define CMD_OPEN_ACK 4
++#define CMD_INTENT 5
++#define CMD_RX_DONE 6
++#define CMD_RX_INTENT_REQ 7
++#define CMD_RX_INTENT_REQ_ACK 8
++#define CMD_TX_DATA 9
++#define CMD_CLOSE_ACK 11
++#define CMD_READ_NOTIF 13
++#define CMD_RX_DONE_REUSE 14
++#define Q_HELLO 2
++#define Q_NEW_SERVER 4
++#define Q_DATA 1
++#define Q_CTRL 0xfffffffeU
++struct gmsg { uint16_t cmd,ch; uint32_t p; } __attribute__((packed));
++struct gdata { struct gmsg m; uint32_t chunk,left; } __attribute__((packed));
++struct qrtr1 { uint32_t version,type,src_node,src_port,confirm,size,dst_node,dst_port; } __attribute__((packed));
++struct qrtr2 { uint8_t version,type,flags,optlen; uint32_t size; uint16_t src_node,src_port,dst_node,dst_port; } __attribute__((packed));
++struct qctrl { uint32_t cmd,a,b,c,d; } __attribute__((packed));
++static volatile uint32_t *gd;static uint8_t *gtx,*grx,*asm_buf;static uint32_t rxlen,asm_len,rcid=0,next_intent=1;
++static bool remote_open,open_sent,open_ack,intents_sent,hello_sent;static uint32_t qrtr_version=1,modem_node=0xffffffffU;
++static struct {uint32_t id,size;bool used;} intents[64];static unsigned intent_count;
++static unsigned poll_count;
++static inline void mb(void){__asm__ volatile("dsb sy" ::: "memory");}
++static uint32_t avail(void){uint32_t h=gd[3],t=gd[2];return h>=t?h-t:rxlen-t+h;}
++static void peek(uint32_t off,void *dst,uint32_t n){uint32_t t=gd[2]+off;if(t>=rxlen)t-=rxlen;uint32_t a=n<rxlen-t?n:rxlen-t;memcpy(dst,grx+t,a);if(n>a)memcpy((uint8_t*)dst+a,grx,n-a);}
++static void advance(uint32_t n){uint32_t t=gd[2]+n;if(t>=rxlen)t-=rxlen;mb();gd[2]=t;}
++static uint32_t put(uint32_t h,const void *p,uint32_t n){uint32_t a=n<TX_SIZE-h?n:TX_SIZE-h;memcpy(gtx+h,p,a);if(n>a)memcpy(gtx,(const uint8_t*)p+a,n-a);h=(h+n)%TX_SIZE;return h;}
++static bool tx(const void *h,uint32_t hn,const void *d,uint32_t dn){uint32_t head=gd[1],tail=gd[0],free=tail<=head?TX_SIZE-head+tail:tail-head;free=free<8?0:free-8;if(free<((hn+dn+7)&~7U))return false;head=put(head,h,hn);if(dn)head=put(head,d,dn);head=(head+7)&~7U;if(head>=TX_SIZE)head-=TX_SIZE;mb();gd[1]=head;mb();veux_ipcc_signal(2,0);return true;}
++static void cmd(uint16_t c,uint16_t ch,uint32_t p){struct gmsg m={c,ch,p};(void)tx(&m,sizeof(m),NULL,0);}
++static void open_chan(void){struct {struct gmsg h;char n[8];} __attribute__((packed)) q={{CMD_OPEN,LCID,7},"IPCRTR"};if(tx(&q,sizeof(q),NULL,0))open_sent=true;}
++void veux_qrtr_send(uint32_t typ,uint32_t sport,uint32_t node,uint32_t dport,const void *data,uint32_t len){uint8_t b[8192];uint32_t n;if(len>sizeof(b)-sizeof(struct qrtr1))return;memset(b,0,sizeof(b));if(qrtr_version==2){struct qrtr2 *h=(void*)b;h->version=2;h->type=typ;h->flags=typ==Q_DATA;h->size=len;h->src_node=1;h->src_port=sport;h->dst_node=node;h->dst_port=dport;n=sizeof(*h);}else{struct qrtr1 *h=(void*)b;h->version=1;h->type=typ;h->src_node=1;h->src_port=sport;h->confirm=typ==Q_DATA;h->size=len;h->dst_node=node;h->dst_port=dport;n=sizeof(*h);}memcpy(b+n,data,len);(void)tx(b,(n+len+3)&~3U,NULL,0);}
++static void qrtr_rx(const uint8_t *p,uint32_t n){uint32_t typ,node,port,dport,size,hlen;if(n>=sizeof(struct qrtr1)&&*(const uint32_t*)p==1){const struct qrtr1*h=(const void*)p;typ=h->type;node=h->src_node;port=h->src_port;dport=h->dst_port;size=h->size;hlen=sizeof(*h);qrtr_version=1;}else if(n>=sizeof(struct qrtr2)&&p[0]==2){const struct qrtr2*h=(const void*)p;typ=h->type;node=h->src_node;port=h->src_port;dport=h->dst_port;size=h->size;hlen=sizeof(*h)+h->optlen*4;qrtr_version=2;}else return;if(hlen>n||size>n-hlen)return;
++ if(typ==Q_HELLO){modem_node=node;printf("VEUX QRTR: HELLO node=0x%x version=%u\n",node,qrtr_version);}
++ else if(typ==Q_NEW_SERVER&&size>=sizeof(struct qctrl)){const struct qctrl*c=(const void*)(p+hlen);printf("VEUX QRTR: NEW_SERVER svc=0x%x inst=0x%x node=0x%x port=0x%x\n",c->a,c->b,c->c,c->d);if(c->a==0x40)veux_pdmap_dispatch();if(c->a==0x45){ printf("VEUX QRTR: NEW_SERVER 0x45 svc=0x45 inst=0x%x node=0x%x port=0x%x\n",c->b,c->c,c->d);veux_wlfw_dispatch(c->c,c->d);}}
++ else if(typ==Q_DATA){ if(dport==0x4001){uint16_t txn=0,msg=0;if(size>=7){memcpy(&txn,p+hlen+1,2);memcpy(&msg,p+hlen+3,2);veux_pdmap_rx(node,port,txn,msg,p+hlen,size);}}else if(dport==0x4004)veux_wlfw_rx(node,port,dport,p+hlen,size); }
++}
++static bool rx_one(void){struct gmsg m;if(avail()<8)return false;peek(0,&m,8);uint32_t n;
++ switch(m.cmd){case CMD_VERSION:advance(8);cmd(CMD_VERSION_ACK,1,1);break;
++ case CMD_VERSION_ACK:advance(8);printf("VEUX GLINK: VERSION_ACK\n");break;
++ case CMD_OPEN:{char name[16]={0};n=(8+m.p+7)&~7U;if(avail()<n)return false;peek(8,name,m.p<15?m.p:15);advance(n);if(!strcmp(name,"IPCRTR")){rcid=m.ch;remote_open=true;cmd(CMD_OPEN_ACK,(uint16_t)rcid,0);if(!open_sent)open_chan();}break;}
++ case CMD_OPEN_ACK:advance(8);if(m.ch==LCID){open_ack=true;printf("VEUX GLINK: OPEN_ACK IPCRTR\n");}break;
++ case CMD_INTENT:n=(8+8*m.p+7)&~7U;if(avail()<n)return false;for(uint32_t i=0;i<m.p&&intent_count<64;i++){uint32_t pair[2];peek(8+8*i,pair,8);intents[intent_count].id=pair[1];intents[intent_count].size=pair[0];intents[intent_count].used=false;intent_count++;}advance(n);break;
++ case CMD_RX_INTENT_REQ:{advance(8);struct {struct gmsg h;uint32_t pairs[2];} __attribute__((packed)) q={{CMD_INTENT,LCID,1},{0x4400,next_intent++}};(void)tx(&q,sizeof(q),NULL,0);cmd(CMD_RX_INTENT_REQ_ACK,LCID,1);break;}
++ case CMD_RX_DONE:case CMD_RX_DONE_REUSE:case CMD_CLOSE_ACK:advance(8);break;case CMD_CLOSE:advance(8);cmd(CMD_CLOSE_ACK,m.ch,0);break;case CMD_READ_NOTIF:advance(8);veux_ipcc_signal(2,0);break;
++ case CMD_TX_DATA:{uint32_t hdr[2];if(avail()<16)return false;peek(8,hdr,8);n=(16+hdr[0]+7)&~7U;if(avail()<n)return false;if(asm_len+hdr[0]<=0x4400){peek(16,asm_buf+asm_len,hdr[0]);asm_len+=hdr[0];}advance(n);if(!hdr[1]){qrtr_rx(asm_buf,asm_len);asm_len=0;cmd(CMD_RX_DONE_REUSE,LCID,m.p);}break;}
++ default:advance(8);break;}return true;}
++void veux_glink_init(void){uint64_t pa;asm_buf=NULL;if(veux_modem_pool_alloc(0x4400,&pa))asm_buf=veux_modem_pool_va(pa,0x4400);gd=veux_smem_alloc(ITEM_DESC,32);gtx=veux_smem_alloc(ITEM_TX,TX_SIZE);grx=veux_smem_alloc(ITEM_RX,TX_SIZE);if(!gd||!gtx||!grx||!asm_buf){printf("VEUX GLINK: SMEM allocation failed\n");return;}rxlen=TX_SIZE;gd[1]=gd[2]=0;mb();cmd(CMD_VERSION,1,1);}
++void veux_glink_poll(void){if(!gd||!grx)return;poll_count++;for(unsigned i=0;i<64&&rx_one();i++);if(remote_open&&open_ack&&!intents_sent){struct {struct gmsg h;uint32_t pairs[16];} __attribute__((packed)) q={{5,LCID,8},{0}};for(unsigned i=0;i<8;i++){q.pairs[2*i]=0x4400;q.pairs[2*i+1]=next_intent++;}(void)tx(&q,sizeof(q.h)+64,NULL,0);intents_sent=true;}if(!open_sent&&poll_count>=10000){printf("VEUX GLINK: forcing open\n");open_chan();}if(remote_open&&open_ack&&!hello_sent){struct qctrl q={Q_HELLO,0,0,0,0};veux_qrtr_send(Q_HELLO,Q_CTRL,modem_node,Q_CTRL,&q,sizeof(q));hello_sent=true;veux_pdmap_dispatch();}veux_wlfw_poll();}
++#endif
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -46,6 +46,7 @@
+ osfmk/arm64/veux_modem_pool.c	standard
+ osfmk/arm64/veux_modem_pas.c	standard
+ osfmk/arm64/veux_modem_fw.c	standard
++osfmk/arm64/veux_modem_glink.c	standard
+ osfmk/arm64/arm64_hypercall.c	standard
+ osfmk/arm/io_map.c		standard
+ osfmk/arm64/loose_ends.c	standard
+-- 
+2.49.0

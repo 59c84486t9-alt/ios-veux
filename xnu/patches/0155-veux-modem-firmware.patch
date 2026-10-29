@@ -1,0 +1,209 @@
+From 0000000000000000000000000000000000000002 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] veux-modem-firmware
+
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -48,6 +48,7 @@
+ extern kern_return_t kernel_thread_start(thread_continue_t, void *, thread_t *);
+ extern void thread_deallocate(thread_t);
+ extern int hz;
++int64_t sweet_ufs_read_part(const char *name, uint64_t off, void *dst, uint64_t len);
+ static void sweet_log_start(void);
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ static void veux_log_start(bool userdata_partition);
+@@ -407,6 +408,38 @@
+ 	}
+ 	printf("SWEET/VEUX UFS: no GPT partition named \"%s\"\n", want);
+ 	return ENOENT;
++}
++
++/* Read-only byte access to a named GPT partition for modem firmware. */
++int64_t
++sweet_ufs_read_part(const char *name, uint64_t off, void *dst, uint64_t len)
++{
++	uint64_t saved_first, saved_count, target_first, target_count;
++	int error = 0;
++	if (!su.ready || name == NULL || dst == NULL || len == 0 || strcmp(name, "modem_a") != 0)
++		return -1;
++	lck_mtx_lock(&sweet_ufs_lock);
++	saved_first = su.first_block;
++	saved_count = su.nblocks;
++	error = ufs_find_partition(name);
++	target_first = su.first_block;
++	target_count = su.nblocks;
++	if (error == 0 && (off > target_count * (uint64_t)UFS_BLOCK ||
++	    len > target_count * (uint64_t)UFS_BLOCK - off)) error = EINVAL;
++	for (uint64_t done = 0; error == 0 && done < len;) {
++		uint64_t pos = off + done;
++		uint64_t lba = pos / UFS_BLOCK;
++		uint32_t skip = (uint32_t)(pos % UFS_BLOCK);
++		uint32_t take = (uint32_t)MIN(len - done, BOUNCE_SIZE - skip);
++		uint32_t blocks = (skip + take + UFS_BLOCK - 1) / UFS_BLOCK;
++		error = ufs_read_blocks(target_first + lba, blocks);
++		if (error == 0) memcpy((uint8_t *)dst + done, (const uint8_t *)(su.dma + DMA_BOUNCE) + skip, take);
++		done += error == 0 ? take : 0;
++	}
++	su.first_block = saved_first;
++	su.nblocks = saved_count;
++	lck_mtx_unlock(&sweet_ufs_lock);
++	return error == 0 ? (int64_t)len : -1;
+ }
+ 
+ static int
+diff --git a/osfmk/arm64/veux_modem_fw.c b/osfmk/arm64/veux_modem_fw.c
+new file mode 100644
+--- /dev/null
++++ b/osfmk/arm64/veux_modem_fw.c
+@@ -0,0 +1,137 @@
++#include <pexpert/arm64/board_config.h>
++#include <kern/debug.h>
++#include <stdint.h>
++#include <string.h>
++#include "veux_modem.h"
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++static const struct fw_file fw_files[] = {
++	{ "bdwlan.102", 0xbd9b000U, 26328U, 0x35941d83U },
++	{ "bdwlan.104", 0xbda3000U, 26328U, 0x2b1feacbU },
++	{ "bdwlan.105", 0xbdab000U, 26328U, 0x8ff0bd2eU },
++	{ "bdwlan.106", 0xbdb3000U, 26328U, 0x3be59bddU },
++	{ "bdwlan.107", 0xbdbb000U, 26328U, 0xc7a3cdbaU },
++	{ "bdwlan.108", 0xbdc3000U, 26328U, 0x223f13deU },
++	{ "bdwlan.109", 0xbdcb000U, 26328U, 0xc7a3cdbaU },
++	{ "bdwlan.10b", 0xbdd3000U, 26328U, 0x43f00b19U },
++	{ "bdwlan.10c", 0xbddb000U, 26328U, 0x1d3f55b2U },
++	{ "bdwlan.10e", 0xbde3000U, 26328U, 0xe33df49eU },
++	{ "bdwlan.10f", 0xbdeb000U, 26328U, 0x33d907e6U },
++	{ "bdwlan.111", 0xbdf3000U, 26328U, 0x8e536a78U },
++	{ "bdwlan.201", 0xbdfb000U, 26328U, 0xcea8d404U },
++	{ "bdwlan.202", 0xbe03000U, 26328U, 0x85887366U },
++	{ "bdwlan.203", 0xbe0b000U, 26328U, 0xa272d0bU },
++	{ "bdwlan.204", 0xbe13000U, 26328U, 0x3a0ef884U },
++	{ "bdwlan.205", 0xbe1b000U, 26328U, 0x476b899fU },
++	{ "bdwlan.b04", 0xbe23000U, 26328U, 0x6c7f752eU },
++	{ "bdwlan.b07", 0xbe2b000U, 26328U, 0x4bc59cf8U },
++	{ "bdwlan.b09", 0xbe33000U, 26328U, 0x4c73cd7bU },
++	{ "bdwlan.b0a", 0xbe3b000U, 26328U, 0xcc26ee4aU },
++	{ "bdwlan.b0b", 0xbe43000U, 26328U, 0x349f3afeU },
++	{ "bdwlan.b0d", 0xbe4b000U, 26328U, 0xbdf7ed64U },
++	{ "bdwlan.b0e", 0xbe53000U, 26328U, 0xf681bdbU },
++	{ "bdwlan.b0f", 0xbe5b000U, 26328U, 0x39ff389eU },
++	{ "bdwlan.b14", 0xbe63000U, 26328U, 0xbe622358U },
++	{ "bdwlan.b15", 0xbe6b000U, 26328U, 0x4564b47aU },
++	{ "bdwlan.b30", 0xbe73000U, 26328U, 0xc5be15c5U },
++	{ "bdwlan.b31", 0xbe7b000U, 26328U, 0xbdf7ed64U },
++	{ "bdwlan.b32", 0xbe83000U, 26328U, 0xf681bdbU },
++	{ "bdwlan.b33", 0xbe8b000U, 26328U, 0xb91568d2U },
++	{ "bdwlan.b34", 0xbe93000U, 26328U, 0x6a67237U },
++	{ "bdwlan.b35", 0xbe9b000U, 26328U, 0x38ef17bbU },
++	{ "bdwlan.b36", 0xbea3000U, 26328U, 0xf23919a5U },
++	{ "bdwlan.b37", 0xbeab000U, 26328U, 0xf67e8cccU },
++	{ "bdwlan.b38", 0xbeb3000U, 26328U, 0x243a30c4U },
++	{ "bdwlan.b39", 0xbebb000U, 26328U, 0x1499844cU },
++	{ "bdwlan.b3a", 0xbec3000U, 26328U, 0x9c381eb8U },
++	{ "bdwlan.b3c", 0xbecb000U, 26328U, 0xe8e8092fU },
++	{ "bdwlan.b3d", 0xbed3000U, 26328U, 0xf723cfceU },
++	{ "bdwlan.b3e", 0xbedb000U, 26328U, 0xeb0f96d5U },
++	{ "bdwlan.b3f", 0xbee3000U, 26328U, 0x6ffcd36bU },
++	{ "bdwlan.b41", 0xbeeb000U, 26328U, 0x519b591fU },
++	{ "bdwlan.b42", 0xbef3000U, 26328U, 0x91f48aadU },
++	{ "bdwlan.b44", 0xbefb000U, 26328U, 0xe1d87df3U },
++	{ "bdwlan.b45", 0xbf03000U, 26328U, 0xbfea0862U },
++	{ "bdwlan.b46", 0xbf0b000U, 26328U, 0x94c1f66cU },
++	{ "bdwlan.b47", 0xbf13000U, 26328U, 0x19fb0141U },
++	{ "bdwlan.b48", 0xbf1b000U, 26328U, 0x7e404443U },
++	{ "bdwlan.b49", 0xbf23000U, 26328U, 0xb6b308f9U },
++	{ "bdwlan.b4a", 0xbf2b000U, 26328U, 0x1f8d4b98U },
++	{ "bdwlan.b4b", 0xbf33000U, 26328U, 0x13f2bea3U },
++	{ "bdwlan.b4c", 0xbf3b000U, 26328U, 0x2dc10039U },
++	{ "bdwlan.b4d", 0xbf43000U, 26328U, 0xa2295f8dU },
++	{ "bdwlan.b4e", 0xbf4b000U, 26328U, 0x3b728214U },
++	{ "bdwlan.b4f", 0xbf53000U, 26328U, 0x3b728214U },
++	{ "bdwlan.b52", 0xbf5b000U, 26328U, 0xc2a55813U },
++	{ "bdwlan.b53", 0xbf63000U, 26328U, 0x99f071dfU },
++	{ "bdwlan.b55", 0xbf6b000U, 26328U, 0x2b30e402U },
++	{ "bdwlan.b57", 0xbf73000U, 26328U, 0xd59849d0U },
++	{ "bdwlan.b58", 0xbf7b000U, 26328U, 0x425219cbU },
++	{ "bdwlan.b59", 0xbf83000U, 26328U, 0x7b4c36a6U },
++	{ "bdwlan.b5a", 0xbf8b000U, 26328U, 0x8d4901a6U },
++	{ "bdwlan.b5b", 0xbf93000U, 26328U, 0x616bf80dU },
++	{ "bdwlan.b5c", 0xbf9b000U, 26328U, 0xff3ce5ecU },
++	{ "bdwlan.b5d", 0xbfa3000U, 26328U, 0x48cd97e3U },
++	{ "bdwlan.b5f", 0xbfab000U, 26328U, 0xe416224eU },
++	{ "bdwlan.b61", 0xbfb3000U, 26328U, 0x42ef44d5U },
++	{ "bdwlan.b63", 0xbfbb000U, 26328U, 0x4c1af940U },
++	{ "bdwlan.b64", 0xbfc3000U, 26328U, 0xef2f6844U },
++	{ "bdwlan.b65", 0xbfcb000U, 26328U, 0xf6d96d78U },
++	{ "bdwlan.b66", 0xbfd3000U, 26328U, 0x9c35a608U },
++	{ "bdwlan.b68", 0xbfdb000U, 26328U, 0x8a67cd0cU },
++	{ "bdwlan.b69", 0xbfe3000U, 26328U, 0xc37bb15cU },
++	{ "bdwlan.b70", 0xbfeb000U, 26328U, 0x3534c8b4U },
++	{ "bdwlan.b71", 0xbff3000U, 26328U, 0x8ef1447cU },
++	{ "bdwlan.bin", 0xbffb000U, 26328U, 0x12e93877U },
++	{ "bdwlanu.b65", 0xc003000U, 26328U, 0xe6f2d3f2U },
++	{ "bdwlanu.b69", 0xc00b000U, 26328U, 0x6c21b665U },
++	{ "modem.b00", 0x5c13000U, 1204U, 0x17e6d7b5U },
++	{ "modem.b01", 0x5c17000U, 8296U, 0x302dc268U },
++	{ "modem.b02", 0x5c1b000U, 10544U, 0x9f077c74U },
++	{ "modem.b03", 0x5c1f000U, 9312U, 0xe74bb96dU },
++	{ "modem.b04", 0x5c23000U, 244416U, 0xfc599b67U },
++	{ "modem.b05", 0x5c5f000U, 180384U, 0x9d59417cU },
++	{ "modem.b06", 0x5c8f000U, 255168U, 0xfeceee09U },
++	{ "modem.b07", 0x5ccf000U, 58432U, 0x33b01895U },
++	{ "modem.b08", 0x5cdf000U, 147052U, 0x1eed476bU },
++	{ "modem.b09", 0x5d03000U, 393316U, 0xf0ed8802U },
++	{ "modem.b10", 0x5d67000U, 2733260U, 0x82c2c7dbU },
++	{ "modem.b11", 0x6003000U, 37184U, 0x506bacb1U },
++	{ "modem.b12", 0x600f000U, 24576U, 0xf5766e40U },
++	{ "modem.b13", 0x6017000U, 2793008U, 0x2d939941U },
++	{ "modem.b14", 0x62c3000U, 262144U, 0x9c73796eU },
++	{ "modem.b15", 0x6303000U, 3850240U, 0x243bc5f1U },
++	{ "modem.b17", 0x66af000U, 2335960U, 0x4f87dbacU },
++	{ "modem.b18", 0x68eb000U, 695344U, 0x3d4fee6cU },
++	{ "modem.b19", 0x6997000U, 2449408U, 0x76847043U },
++	{ "modem.b20", 0x6bef000U, 10035592U, 0x1d704114U },
++	{ "modem.b21", 0x7583000U, 13695284U, 0x4c11a73eU },
++	{ "modem.b22", 0x8293000U, 45U, 0xfba3b301U },
++	{ "modem.b23", 0x8297000U, 8030971U, 0x7b85e062U },
++	{ "modem.b25", 0x8a43000U, 101184U, 0x321a6e3eU },
++	{ "modem.b26", 0x8a5f000U, 38035520U, 0x65d811d0U },
++	{ "modem.b27", 0xaea7000U, 1134455U, 0x296e600U },
++	{ "modem.b28", 0xafbf000U, 110592U, 0x79e482a1U },
++	{ "modem.b29", 0xafdb000U, 4008U, 0x80898f15U },
++	{ "modem.b30", 0xafdf000U, 81988U, 0x779552c3U },
++	{ "modem.b31", 0xaff7000U, 4984U, 0xeb90404aU },
++	{ "modem.b32", 0xaffb000U, 176U, 0x20591a18U },
++	{ "modem.b33", 0xafff000U, 470856U, 0xe9b2ae73U },
++	{ "modem.b34", 0xb073000U, 284U, 0x51ec58d3U },
++	{ "modem.mdt", 0xb077000U, 9500U, 0xd4116f84U },
++	{ "modemr.jsn", 0x5e7000U, 719U, 0x94bf3c44U },
++	{ "modemuw.jsn", 0xbcf7000U, 713U, 0x28100814U },
++	{ "wlanmdsp.mbn", 0xb92b000U, 3970288U, 0x190e2194U },
++};
++static uint32_t fw_crc32(const uint8_t *p, uint64_t n) {
++	uint32_t c=0xffffffffU; for(uint64_t i=0;i<n;i++){ c^=p[i]; for(unsigned b=0;b<8;b++) c=(c>>1)^(0xedb88320U&(0U-(c&1U))); } return ~c;
++}
++const struct fw_file *veux_fw_find(const char *name) {
++	for(unsigned i=0;i<sizeof(fw_files)/sizeof(fw_files[0]);i++) if(strcmp(fw_files[i].name,name)==0)return &fw_files[i]; return NULL;
++}
++int64_t veux_fw_read(const char *name,uint64_t off,void *dst,uint64_t len) {
++	const struct fw_file *f=veux_fw_find(name); if(!f||off>f->size||len>(uint64_t)f->size-off||(!dst&&len))return -1;
++	if(sweet_ufs_read_part("modem_a",(uint64_t)f->offset+off,dst,len)!=(int64_t)len){ printf("VEUX MODEM FW: %s read failed\n",name); return -1; }
++	if(off==0&&len==f->size){ uint32_t got=fw_crc32(dst,len); if(got!=f->crc32)printf("VEUX MODEM FW: %s crc mismatch got=0x%08x want=0x%08x\n",name,got,f->crc32); printf("VEUX MODEM FW: %s 0x%x %u %s\n",name,f->offset,f->size,got==f->crc32?"crc-ok":"crc-warning"); }
++	return (int64_t)len;
++}
++#endif
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -45,6 +45,7 @@
+ osfmk/arm64/veux_ipcc.c		standard
+ osfmk/arm64/veux_modem_pool.c	standard
+ osfmk/arm64/veux_modem_pas.c	standard
++osfmk/arm64/veux_modem_fw.c	standard
+ osfmk/arm64/arm64_hypercall.c	standard
+ osfmk/arm/io_map.c		standard
+ osfmk/arm64/loose_ends.c	standard
+-- 
+2.49.0

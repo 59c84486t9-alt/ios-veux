@@ -1,0 +1,209 @@
+From 0000000000000000000000000000000000000001 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] veux-modem-pas
+
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -1069,6 +1069,11 @@
+ 			return error;
+ 		}
+ 	}
++	/* modem=1 holds before root mount; start checks the boot argument. */
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++	extern void veux_modem_start(void);
++	veux_modem_start();
++#endif
+ 	*dev = su.bdev;
+ 	return 0;
+ }
+diff --git a/osfmk/arm64/veux_modem.h b/osfmk/arm64/veux_modem.h
+new file mode 100644
+--- /dev/null
++++ b/osfmk/arm64/veux_modem.h
+@@ -0,0 +1,25 @@
++#ifndef _ARM64_VEUX_MODEM_H_
++#define _ARM64_VEUX_MODEM_H_
++#include <stdbool.h>
++#include <stdint.h>
++struct fw_file { const char *name; uint32_t offset, size, crc32; };
++bool veux_modem_pool_alloc(uint64_t size, uint64_t *pa);
++void *veux_modem_pool_va(uint64_t pa, uint64_t size);
++void veux_ipcc_signal(uint8_t client_id, uint16_t signal_id);
++bool veux_ipcc_poll(uint8_t client_id, uint16_t signal_id);
++const struct fw_file *veux_fw_find(const char *name);
++int64_t veux_fw_read(const char *name, uint64_t off, void *dst, uint64_t len);
++int64_t sweet_ufs_read_part(const char *name, uint64_t off, void *dst, uint64_t len);
++void *veux_smem_alloc(uint32_t item, uint32_t size);
++void veux_glink_init(void);
++void veux_glink_poll(void);
++void veux_qrtr_send(uint32_t type,uint32_t src_port,uint32_t node,uint32_t dst_port,const void *data,uint32_t len);
++void veux_pdmap_dispatch(void);
++void veux_pdmap_rx(uint32_t node,uint32_t port,uint16_t txn,uint16_t msg,const uint8_t *data,uint32_t len);
++void veux_wlfw_dispatch(uint32_t node, uint32_t port);
++void veux_wlfw_rx(uint32_t node, uint32_t src_port, uint32_t dst_port, const uint8_t *data, uint32_t len);
++void veux_modem_start(void);
++uint64_t veux_scm_assign(uint64_t addr,uint64_t size,const uint32_t *vmids,unsigned count);
++void veux_wlfw_poll(void);
++void veux_modem_hold(void);
++#endif
+diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
+new file mode 100644
+--- /dev/null
++++ b/osfmk/arm64/veux_modem_pas.c
+@@ -0,0 +1,115 @@
++#include <pexpert/arm64/board_config.h>
++#include <kern/debug.h>
++#include <kern/kalloc.h>
++#include <libkern/libkern.h>
++#include <pexpert/arm/protos.h>
++extern kern_return_t kernel_thread_start(thread_continue_t, void *, thread_t *);
++extern void thread_deallocate(thread_t);
++#include <kern/clock.h>
++#include <kern/thread.h>
++#include <kern/sched_prim.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++#include <stdint.h>
++#include <string.h>
++#include "veux_modem.h"
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++#define PAS_ID_MODEM 4
++#define SCM_FN(s,c) (0x42000000U | ((uint32_t)(s)<<8) | (uint32_t)(c))
++#define SCM_SVC_PIL 2
++#define PIL_INIT_IMAGE 1
++#define PIL_MEM_SETUP 2
++#define PIL_AUTH_RESET 5
++#define SCM_ARG_RW 2
++#define PT_LOAD 1
++#define MDT_TYPE_MASK (7U<<24)
++#define MDT_TYPE_HASH (2U<<24)
++#define MDT_RELOCATABLE (1U<<27)
++#define MODEM_PA 0x8b800000ULL
++#define MODEM_SIZE 0x10000000ULL
++#define SMEM_PA 0x80900000ULL
++#define SMEM_SIZE 0x00200000U
++#define TCSR_PA 0x00340000ULL
++#define ITEM_OUT 428
++#define ITEM_IN 435
++#define SMP_MAGIC 0x504d5324U
++#define SMP2P_MAX 16
++struct elf32_ehdr { uint8_t id[16]; uint16_t type,machine; uint32_t ver,entry,phoff,shoff,flags; uint16_t ehsize,phentsize,phnum,shentsize,shnum,shstr; } __attribute__((packed));
++struct elf32_phdr { uint32_t type,offset,vaddr,paddr,filesz,memsz,flags,align; } __attribute__((packed));
++struct smem_pt_entry { uint32_t offset,size,flags; uint16_t host0,host1; uint32_t cacheline,rsvd[7]; } __attribute__((packed));
++struct smem_pt { char magic[4]; uint32_t version,num_entries,rsvd[5]; } __attribute__((packed));
++struct smem_part { char magic[4]; uint16_t h0,h1; uint32_t size,free_uncached,free_cached,rsvd[3]; } __attribute__((packed));
++struct smem_entry { uint16_t canary,item; uint32_t size; uint16_t pad_data,pad_hdr; uint32_t rsvd; } __attribute__((packed));
++struct smp_hdr { uint32_t magic; uint8_t version,features[3]; uint16_t local,remote,total,valid; uint32_t flags; } __attribute__((packed));
++struct smp_ent { char name[16]; uint32_t value; } __attribute__((packed));
++static uint8_t *smem; static volatile uint8_t *tcsr; static struct smem_part *part;
++static inline void barrier(void){ __asm__ volatile("dsb sy" ::: "memory"); }
++static struct smem_part *find_part(uint16_t a,uint16_t b){
++ struct smem_pt *pt=(void *)(smem+SMEM_SIZE-0x1000); struct smem_pt_entry *e=(void *)(pt+1);
++ if(memcmp(pt->magic,"$TOC",4)||pt->num_entries>64)return NULL;
++ for(uint32_t i=0;i<pt->num_entries;i++)if(e[i].offset&&e[i].size&&e[i].offset<SMEM_SIZE&&((e[i].host0==a&&e[i].host1==b)||(e[i].host0==b&&e[i].host1==a)))return (void *)(smem+e[i].offset);
++ return NULL;
++}
++static void *smem_find(uint16_t item,uint32_t *sz){
++ if(!part||memcmp(part->magic,"$PRT",4)||part->free_uncached>part->size)return NULL;
++ uint8_t *p=(uint8_t *)(part+1),*end=(uint8_t *)part+part->free_uncached;
++ while(p+sizeof(struct smem_entry)<=end){struct smem_entry *h=(void *)p;if(h->canary!=0xa5a5)return NULL;if(h->item==item){if(sz)*sz=h->size-h->pad_data;return p+sizeof(*h)+h->pad_hdr;}p+=sizeof(*h)+h->pad_hdr+h->size;}return NULL;
++}
++void *veux_smem_alloc(uint32_t item,uint32_t size){
++ void *v=smem_find(item,NULL); if(v)return v; volatile uint32_t *lock=(void *)(tcsr+3*0x1000);
++ for(unsigned i=0;i<100000;i++){*lock=1;barrier();if(*lock==1)break;IODelay(10);if(i==99999)return NULL;}
++ v=smem_find(item,NULL);uint32_t n=(size+7)&~7U,need=sizeof(struct smem_entry)+n;
++ if(!v&&part->free_uncached+need<=part->free_cached){struct smem_entry *h=(void *)((uint8_t *)part+part->free_uncached);h->canary=0xa5a5;h->item=item;h->size=n;h->pad_data=n-size;h->pad_hdr=0;h->rsvd=0;v=h+1;bzero(v,n);barrier();part->free_uncached+=need;barrier();}
++ *lock=0;barrier();return v;
++}
++static uint64_t smc(uint32_t fn,uint64_t arg,uint64_t a,uint64_t b,uint64_t c,uint64_t *res){
++ register uint64_t x0 __asm__("x0")=fn,x1 __asm__("x1")=arg,x2 __asm__("x2")=a,x3 __asm__("x3")=b,x4 __asm__("x4")=c,x5 __asm__("x5")=0,x6 __asm__("x6")=0,x7 __asm__("x7")=0;
++ __asm__ volatile("smc #0":"+r"(x0),"+r"(x1),"+r"(x2),"+r"(x3),"+r"(x4),"+r"(x5),"+r"(x6),"+r"(x7)::"x8","x9","x10","x11","x12","x13","x14","x15","x16","x17","memory");
++ for(unsigned i=0;x0==1&&i<100000;i++){x0=1;x1=arg;x2=a;x3=b;x4=c;x5=0;x7=0;__asm__ volatile("smc #0":"+r"(x0),"+r"(x1),"+r"(x2),"+r"(x3),"+r"(x4),"+r"(x5),"+r"(x6),"+r"(x7)::"x8","x9","x10","x11","x12","x13","x14","x15","x16","x17","memory");}
++ if(res)*res=x1;return x0;
++}
++uint64_t veux_scm_assign(uint64_t addr,uint64_t size,const uint32_t *vmids,unsigned count){
++ uint64_t pa,res=0; if(count>8||!veux_modem_pool_alloc(0x1000,&pa))return ~0ULL;uint64_t *p=veux_modem_pool_va(pa,0x1000);if(!p)return ~0ULL;
++ p[0]=addr;p[1]=size;uint32_t *src=(uint32_t *)(p+8);src[0]=3;uint32_t *dst=(uint32_t *)(p+16);for(unsigned i=0;i<count;i++){dst[6*i]=vmids[i];dst[6*i+1]=6;}
++ p[32]=4;p[33]=pa+0x80;p[34]=count*24;p[35]=0;barrier();uint64_t r=smc(0x42000c16,7|(1<<4)|(1<<8)|(1<<12),pa,16,pa+0x40,&res);printf("VEUX MODEM PAS: scm_assign ret=%llx res=%llx\n",r,res);return r?r:res;
++}
++static bool load_modem(void){
++ int64_t n=veux_fw_find("modem.mdt")?veux_fw_find("modem.mdt")->size:-1; if(n<=sizeof(struct elf32_ehdr)||n>0x100000)return false;
++ uint8_t *mdt=kalloc_data((vm_size_t)n,Z_WAITOK|Z_ZERO);if(!mdt)return false;
++ printf("VEUX MODEM PAS: read modem.mdt\n");if(veux_fw_read("modem.mdt",0,mdt,n)!=n){kfree_data(mdt,n);return false;}
++ struct elf32_ehdr *eh=(void *)mdt;if(memcmp(eh->id,"\177ELF",4)||eh->phoff+(uint64_t)eh->phnum*sizeof(struct elf32_phdr)>(uint64_t)n){kfree_data(mdt,n);return false;}
++ struct elf32_phdr *ph=(void *)(mdt+eh->phoff);uint32_t hash=~0U,min=~0U,max=0;bool reloc=false;
++ for(uint32_t i=0;i<eh->phnum;i++){if((ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)hash=i;if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;if(ph[i].flags&MDT_RELOCATABLE)reloc=true;if(ph[i].paddr<min)min=ph[i].paddr;if(ph[i].paddr+ph[i].memsz>max)max=ph[i].paddr+ph[i].memsz;}
++ if(hash==~0U||min<MODEM_PA||max>MODEM_PA+MODEM_SIZE){kfree_data(mdt,n);return false;}
++ struct elf32_phdr *hp=&ph[hash];uint64_t hdr=eh->phoff+(uint64_t)eh->phnum*sizeof(*ph),ms=hdr+hp->filesz,mpa;
++ if(!veux_modem_pool_alloc(ms,&mpa)){kfree_data(mdt,n);return false;}uint8_t *meta=veux_modem_pool_va(mpa,ms);if(!meta){kfree_data(mdt,n);return false;}memcpy(meta,mdt,hdr);
++ if(hp->offset+(uint64_t)hp->filesz<=(uint64_t)n)memcpy(meta+hdr,mdt+hp->offset,hp->filesz);else{char name[20];snprintf(name,sizeof(name),"modem.b%02u",hash);if(veux_fw_read(name,0,meta+hdr,hp->filesz)!=hp->filesz){kfree_data(mdt,n);return false;}}
++ barrier();uint64_t res=0,st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,mpa,0,&res);printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
++ if(reloc){st=smc(SCM_FN(SCM_SVC_PIL,PIL_MEM_SETUP),3,PAS_ID_MODEM,min,(max-min+0xfff)&~0xfffULL,&res);printf("VEUX MODEM PAS: mem_setup ret=%llx res=%llx\n",st,res);if(st||res)goto fail;}
++ printf("VEUX MODEM PAS: load segments\n");for(uint32_t i=0;i<eh->phnum;i++){if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;char name[20];snprintf(name,sizeof(name),"modem.b%02u",i);uint64_t map_pa=ph[i].paddr&~0x3fffULL,offset=ph[i].paddr-map_pa;uint64_t map_len=(offset+ph[i].memsz+0x3fffULL)&~0x3fffULL;uint64_t va=ml_io_map_wcomb(map_pa,map_len);if(!va)goto fail;uint8_t *dst=(uint8_t *)(va+offset);if(ph[i].filesz&&!veux_fw_find(name)){printf("VEUX MODEM PAS: segment %s absent, skip\n",name);continue;}if(ph[i].filesz&&veux_fw_read(name,0,dst,ph[i].filesz)!=ph[i].filesz)goto fail;if(ph[i].memsz>ph[i].filesz)bzero(dst+ph[i].filesz,ph[i].memsz-ph[i].filesz);barrier();}
++ st=smc(SCM_FN(SCM_SVC_PIL,PIL_AUTH_RESET),1,PAS_ID_MODEM,0,0,&res);printf("VEUX MODEM PAS: auth_reset ret=%llx res=%llx\n",st,res);kfree_data(mdt,n);return st==0&&res==0;
++fail: kfree_data(mdt,n);return false;
++}
++static volatile uint32_t *smp_find(struct smp_hdr *h,const char *n){struct smp_ent *e=(void *)(h+1);for(uint32_t i=0;i<h->valid&&i<SMP2P_MAX;i++)if(!strncmp(e[i].name,n,16))return &e[i].value;return NULL;}
++static void add_out(uint32_t item){struct smp_hdr *h=veux_smem_alloc(item,sizeof(*h)+SMP2P_MAX*sizeof(struct smp_ent));if(!h)return;if(!h->version){h->magic=SMP_MAGIC;h->local=0;h->remote=1;h->total=SMP2P_MAX;h->features[0]=1;h->valid=0;barrier();h->version=1;}volatile uint32_t *ipa=NULL;struct smp_ent *e=(void *)(h+1);for(uint32_t i=0;i<h->valid&&i<SMP2P_MAX;i++)if(!strncmp(e[i].name,"ipa",16))ipa=&e[i].value;if(!ipa&&h->valid<h->total){strlcpy(e[h->valid].name,"ipa",sizeof(e[h->valid].name));e[h->valid].value=0;barrier();h->valid++;}barrier();veux_ipcc_signal(2,2);}
++void veux_modem_hold(void){printf("VEUX MODEM HOLD: wfe\n");for(;;)__asm__ volatile("dsb sy; wfe" ::: "memory");}
++static int veux_modem_wait_chan;
++static void veux_modem_run(void){
++ uint32_t watch=180;PE_parse_boot_argn("modem_watch",&watch,sizeof(watch));
++ printf("VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3\n");
++ smem=(uint8_t *)ml_io_map_wcomb(SMEM_PA,SMEM_SIZE);tcsr=(volatile uint8_t *)ml_io_map(TCSR_PA,0x20000);if(!smem||!tcsr){printf("VEUX MODEM PAS: map failed\n");veux_modem_hold();}part=find_part(0,1);if(!part){printf("VEUX MODEM PAS: SMEM partition missing\n");veux_modem_hold();}
++ if(!load_modem()){printf("VEUX MODEM PAS: modem_boot failed\n");veux_modem_hold();}add_out(ITEM_OUT);
++ printf("VEUX MODEM PAS: auth_reset complete; waiting SMP2P\n");uint32_t last=~0U;for(uint32_t ms=0;ms<watch*1000;ms++){(void)veux_ipcc_poll(2,2);struct smp_hdr *in=smem_find(ITEM_IN,NULL);if(in&&in->magic==SMP_MAGIC){volatile uint32_t *sk=smp_find(in,"slave-kernel"),*ipa=smp_find(in,"ipa");if(ipa&&*ipa==1)printf("VEUX MODEM: ipa_query_seen\n");if(sk&&*sk!=last){last=*sk;if(*sk&1){printf("VEUX MODEM: FATAL slave-kernel=0x%x\n",*sk);veux_modem_hold();}if(*sk&2){printf("VEUX MODEM: SMP2P READY\n");veux_glink_init();for(uint32_t g=0;g<watch*1000;g++){(void)veux_ipcc_poll(2,0);veux_glink_poll();delay(1000);}printf("VEUX MODEM PAS: modem_watch expired after READY\n");veux_modem_hold();}}}delay(1000);}
++ printf("VEUX MODEM PAS: modem_watch timeout\n");veux_modem_hold();
++}
++static void veux_modem_thread(void *arg __unused, wait_result_t wr __unused){veux_modem_run();veux_modem_hold();}
++void veux_modem_start(void){
++ uint32_t on=0;thread_t t;
++ if(!PE_parse_boot_argn("modem",&on,sizeof(on))||on!=1)return;
++ if(kernel_thread_start(veux_modem_thread,NULL,&t)!=KERN_SUCCESS){printf("VEUX MODEM PAS: worker creation failed\n");veux_modem_hold();}
++ thread_deallocate(t);
++ (void)assert_wait(&veux_modem_wait_chan,THREAD_UNINT);
++ thread_block(THREAD_CONTINUE_NULL);
++ veux_modem_hold();
++}
++#endif
+diff --git a/osfmk/arm64/veux_modem_pool.c b/osfmk/arm64/veux_modem_pool.c
+--- a/osfmk/arm64/veux_modem_pool.c
++++ b/osfmk/arm64/veux_modem_pool.c
+@@ -53,6 +53,7 @@
+ 
+ bool veux_modem_pool_alloc(uint64_t size, uint64_t *pa);
+ void veux_modem_pool_init(void);
++void *veux_modem_pool_va(uint64_t pa, uint64_t size);
+ 
+ static inline void
+ veux_modem_pool_barrier(void)
+@@ -157,4 +158,15 @@
+ 	return true;
+ }
+ 
++
++void *
++veux_modem_pool_va(uint64_t pa, uint64_t size)
++{
++	uint64_t offset;
++	if (veux_modem_pool_mapping == NULL || pa < VEUX_MODEM_POOL_BASE) return NULL;
++	offset = pa - VEUX_MODEM_POOL_BASE;
++	if (offset > VEUX_MODEM_POOL_SIZE || size > VEUX_MODEM_POOL_SIZE - offset) return NULL;
++	return (void *)((volatile uint8_t *)veux_modem_pool_mapping + offset);
++}
++
+ #endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -44,6 +44,7 @@
+ osfmk/arm64/veux_early.c	standard
+ osfmk/arm64/veux_ipcc.c		standard
+ osfmk/arm64/veux_modem_pool.c	standard
++osfmk/arm64/veux_modem_pas.c	standard
+ osfmk/arm64/arm64_hypercall.c	standard
+ osfmk/arm/io_map.c		standard
+ osfmk/arm64/loose_ends.c	standard
+-- 
+2.49.0

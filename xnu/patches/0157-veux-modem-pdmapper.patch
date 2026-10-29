@@ -1,0 +1,58 @@
+From 0000000000000000000000000000000000000004 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] veux-modem-pdmapper
+
+diff --git a/osfmk/arm64/veux_modem_pdmap.c b/osfmk/arm64/veux_modem_pdmap.c
+new file mode 100644
+--- /dev/null
++++ b/osfmk/arm64/veux_modem_pdmap.c
+@@ -0,0 +1,36 @@
++#include <pexpert/arm64/board_config.h>
++#include <kern/debug.h>
++#include <stdint.h>
++#include <string.h>
++#include "veux_modem.h"
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++#define PDM_PORT 0x4001
++#define QRTR_DATA 1
++static bool announced;
++static const struct {const char *svc,*domain;} pd_map[]={
++ {"kernel/elf_loader","msm/modem/wlan_pd"},{"tms/servreg","msm/modem/wlan_pd"},{"wlan/fw","msm/modem/wlan_pd"},
++ {"tms/servreg","msm/modem/root_pd"},{"tms/pdr_enabled","msm/modem/root_pd"},{"gps/gps_service","msm/modem/root_pd"}};
++static void tlv(uint8_t *b,uint32_t *n,uint8_t t,const void *v,uint16_t l){b[(*n)++]=t;memcpy(b+*n,&l,2);*n+=2;memcpy(b+*n,v,l);*n+=l;}
++void veux_pdmap_dispatch(void){
++ if(announced)return;
++ char uw[1024]={0},root[1024]={0};const struct fw_file *u=veux_fw_find("modemuw.jsn"),*r=veux_fw_find("modemr.jsn");int64_t a=u?veux_fw_read("modemuw.jsn",0,uw,u->size):-1,b=r?veux_fw_read("modemr.jsn",0,root,r->size):-1;
++ if(a>0)uw[a]=0;if(b>0)root[b]=0;
++ bool uw_maps=a>0&&strstr(uw,"kernel/elf_loader")&&strstr(uw,"wlan/fw");
++ bool root_maps=b>0&&strstr(root,"tms/pdr_enabled")&&strstr(root,"gps/gps_service");
++ if(!uw_maps||!root_maps)printf("VEUX PDMAP: JSON mapping verification incomplete uw=%lld root=%lld\n",a,b);
++ struct {uint32_t cmd,svc,inst,node,port;} c={4,0x40,0x101,1,PDM_PORT};
++ veux_qrtr_send(4,0xfffffffeU,1,0xfffffffeU,&c,sizeof(c));announced=true;
++}
++void veux_pdmap_rx(uint32_t node,uint32_t port,uint16_t txn,uint16_t msg,const uint8_t *data,uint32_t len){
++ uint8_t out[1024]={0},name[96]={0},list[768]={0};uint16_t name_len=0;uint32_t n=7,ln=1,count=0;
++ if(len>=7){for(uint32_t o=7;o+3<=len;){uint16_t l;memcpy(&l,data+o+1,2);if(o+3+l>len)break;if(data[o]==1){name_len=l<95?l:95;memcpy(name,data+o+3,name_len);break;}o+=3+l;}}
++ name[name_len]=0;out[0]=2;memcpy(out+1,&txn,2);memcpy(out+3,&msg,2);
++ uint32_t okerr[2]={0,0};tlv(out,&n,2,okerr,4);
++ for(unsigned i=0;i<sizeof(pd_map)/sizeof(pd_map[0]);i++)if(!strcmp((char*)name,pd_map[i].svc)){
++  uint8_t dl=(uint8_t)strlen(pd_map[i].domain);list[ln++]=dl;memcpy(list+ln,pd_map[i].domain,dl);ln+=dl;uint32_t inst=180,zero=0;memcpy(list+ln,&inst,4);ln+=4;list[ln++]=0;memcpy(list+ln,&zero,4);ln+=4;count++;
++ }
++ list[0]=(uint8_t)count;uint16_t c16=(uint16_t)count,one=1;tlv(out,&n,0x10,&c16,2);tlv(out,&n,0x11,&one,2);if(count)tlv(out,&n,0x12,list,(uint16_t)ln);
++ uint16_t plen=(uint16_t)(n-7);memcpy(out+5,&plen,2);veux_qrtr_send(QRTR_DATA,PDM_PORT,node,port,out,n);
++ for(unsigned i=0;i<sizeof(pd_map)/sizeof(pd_map[0]);i++)if(!strcmp((char*)name,pd_map[i].svc))printf("VEUX PDMAP: %s -> %s (1 instances)\n",pd_map[i].svc,pd_map[i].domain);
++}
++#endif
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -47,6 +47,7 @@
+ osfmk/arm64/veux_modem_pas.c	standard
+ osfmk/arm64/veux_modem_fw.c	standard
+ osfmk/arm64/veux_modem_glink.c	standard
++osfmk/arm64/veux_modem_pdmap.c	standard
+ osfmk/arm64/arm64_hypercall.c	standard
+ osfmk/arm/io_map.c		standard
+ osfmk/arm64/loose_ends.c	standard
+-- 
+2.49.0
