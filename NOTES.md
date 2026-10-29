@@ -5490,3 +5490,21 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   no fallback partition is needed. Before issuing the flash, repeat the device
   variables and wrapper hash, then record command outputs and post-boot USB
   enumeration.
+
+## >>> UPDATE 2026-10-30 (Phase 4.18 boot_b flash completed; observation pending) <<<
+
+- Immediately before writing, Fastboot serial `4078cac030c8` again returned
+  product `veux`, current-slot `b` (permitted by the user's override), unlocked
+  `yes`, and `partition-size:boot_b = 0x8000000`. The wrapper SHA-256 remained
+  `047696879a35e45512e22b4be769953cd87dae9f397caea631ba29bce589f2c5`; its
+  manifest and full wrapper verification passed for CI run `40973920077`.
+- The only partition written was `boot_b`, exactly 17,281,024 bytes from
+  `/home/nyra/veux-artifacts/40973920077/xnu-kernel/modem-held.img`.
+  `fastboot flash boot_b` returned `Sending 'boot_b' (16876 KB) OKAY`,
+  `Writing 'boot_b' OKAY`, `Finished`. `fastboot set_active b` returned
+  `Setting current slot to 'b' OKAY`; `fastboot reboot` returned `Rebooting
+  OKAY`, `Finished`. No other partition was written.
+- Post-reboot observation window is in progress. Check Fastboot and ADB
+  enumeration at one, two, and three minutes. The host has no camera input, so
+  it cannot photograph the screen; request the user-provided screen photo for
+  confirmation of the new GLINK log and QRTR HELLO.
