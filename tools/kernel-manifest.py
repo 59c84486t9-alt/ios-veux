@@ -285,7 +285,16 @@ phase4_sources = {
     "modem_a_read_only_api": "sweet_ufs_read_part(\"modem_a\"" in phase4_text,
     "glink_qrtr_pdm_wlfw_functions": all(x in phase4_text for x in (
         "veux_glink_poll", "veux_pdmap_rx", "veux_wlfw_rx", "veux_scm_assign")),
-    "pas_allocates_pool_buffers_and_uses_va_accessor": "veux_modem_pool_alloc(ms,&mpa)" in phase4_text.replace(" ", "") and "veux_modem_pool_va(mpa,ms)" in phase4_text.replace(" ", ""),
+    "pas_metadata_uses_contiguous_standard_ram": all(x in phase4_text for x in (
+        "IOMallocContiguous((vm_size_t)ms,0x1000,&meta_pa)",
+        "(uint64_t)meta_pa", "VEUX MODEM PAS: copying mdt metadata",
+        "VEUX MODEM PAS: metadata copied", "VEUX MODEM PAS: calling init_image")) and
+        "veux_modem_pool_alloc(ms,&mpa)" not in phase4_text.replace(" ", ""),
+    "pas_scm_pool_buffers_still_use_pool_va": "veux_modem_pool_alloc(0x1000,&pa)" in phase4_text.replace(" ", "") and "veux_modem_pool_va(pa,0x1000)" in phase4_text.replace(" ", ""),
+    "pas_segments_map_physical_carveout_with_iomemorydescriptor": all(x in phase4_text for x in (
+        "IOMemoryDescriptor::withPhysicalAddress", "descriptor->map(kIOMapWriteCombineCache)",
+        "veux_modem_map_phys(map_pa,map_len)", "veux_modem_segment_maps")) and
+        "ml_io_map_wcomb(map_pa,map_len)" not in phase4_text.replace(" ", ""),
     "forbidden_apcs_host_cap_bdf_wlan_paths_absent": not any(phase4_forbidden.values()),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
     "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],
@@ -307,12 +316,19 @@ phase4_binary = {
     "adt_crc_before_after_thread": b"before_modem_thread" in kernel and b"after_modem_thread" in kernel,
     "ipcc_mapping_diagnostic": b"VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\n" in kernel,
     "modem_a_multilun_cache": b"VEUX UFS: cached modem_a on LUN=%u first=0x%llx blocks=0x%llx\n" in kernel,
+    "pas_metadata_copy_checkpoints": all(x in kernel for x in (
+        b"VEUX MODEM PAS: copying mdt metadata\n",
+        b"VEUX MODEM PAS: metadata copied\n",
+        b"VEUX MODEM PAS: calling init_image\n")),
 }
 if not all(phase4_binary.values()):
     raise SystemExit("VEUX Phase-4 binary marker checks failed: " + repr(phase4_binary))
 print("VEUX MODEM Phase-4 binary markers: PASS " + repr(phase4_binary))
 modem_needles = {
     "pas_parameters": b"VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3",
+    "pas_mdt_copying": b"VEUX MODEM PAS: copying mdt metadata\n",
+    "pas_metadata_copied": b"VEUX MODEM PAS: metadata copied\n",
+    "pas_calling_init_image": b"VEUX MODEM PAS: calling init_image\n",
     "ipcc_parameters": b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
     "smp2p_ready": b"VEUX MODEM: SMP2P READY",
     "glink_version_ack": b"VEUX GLINK: VERSION_ACK",

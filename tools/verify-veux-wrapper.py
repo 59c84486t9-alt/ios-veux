@@ -108,6 +108,9 @@ if build_marker not in kernel:
 if a.variant == "modem-held":
     required = (
         b"VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3",
+        b"VEUX MODEM PAS: copying mdt metadata\n",
+        b"VEUX MODEM PAS: metadata copied\n",
+        b"VEUX MODEM PAS: calling init_image\n",
         b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
         b"VEUX MODEM: SMP2P READY", b"VEUX GLINK: VERSION_ACK",
         b"VEUX GLINK: OPEN_ACK IPCRTR", b"VEUX QRTR: HELLO",
@@ -156,7 +159,7 @@ if a.variant == "modem-held":
     if present:
         raise SystemExit("CI kernel contains forbidden modem markers: " + ", ".join(present))
     print("modem source absence checks: APCS/APCS_IPC/0x0f111000/0xe0000000 absent from VEUX sources and patches")
-    print(f"modem milestone markers: {len(required) - len(missing)}/{len(required)} present (13 milestone + 2 Phase-4)")
+    print(f"modem milestone markers: {len(required) - len(missing)}/{len(required)} present (13 milestone plus Phase-4 diagnostics)")
     print("binary-wide forbidden modem markers: absent")
     print("payload reconstruction: byte-for-byte match")
 status = a.patch_status.read_text().splitlines()

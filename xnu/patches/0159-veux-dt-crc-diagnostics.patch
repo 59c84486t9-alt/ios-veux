@@ -50,14 +50,15 @@ diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
  #define TCSR_PA 0x00340000ULL
  #define ITEM_OUT 428
  #define ITEM_IN 435
-@@ -83,7 +116,7 @@
-  struct elf32_phdr *hp=&ph[hash];uint64_t hdr=eh->phoff+(uint64_t)eh->phnum*sizeof(*ph),ms=hdr+hp->filesz,mpa;
-  if(!veux_modem_pool_alloc(ms,&mpa)){kfree_data(mdt,n);return false;}uint8_t *meta=veux_modem_pool_va(mpa,ms);if(!meta){kfree_data(mdt,n);return false;}memcpy(meta,mdt,hdr);
-  if(hp->offset+(uint64_t)hp->filesz<=(uint64_t)n)memcpy(meta+hdr,mdt+hp->offset,hp->filesz);else{char name[20];snprintf(name,sizeof(name),"modem.b%02u",hash);if(veux_fw_read(name,0,meta+hdr,hp->filesz)!=hp->filesz){kfree_data(mdt,n);return false;}}
-- barrier();uint64_t res=0,st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,mpa,0,&res);printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
-+ barrier();veux_dt_crc_log("before_pil_init_image");uint64_t res=0,st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,mpa,0,&res);veux_dt_crc_log("after_pil_init_image");printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
+@@ -83,8 +116,8 @@
+  struct elf32_phdr *hp=&ph[hash];uint64_t hdr=eh->phoff+(uint64_t)eh->phnum*sizeof(*ph),ms=hdr+hp->filesz;IOPhysicalAddress meta_pa=0;uint8_t *meta=NULL;
+  meta=IOMallocContiguous((vm_size_t)ms,0x1000,&meta_pa);if(!meta){kfree_data(mdt,n);return false;}bzero(meta,ms);
+  printf("VEUX MODEM PAS: copying mdt metadata\n");memcpy(meta,mdt,hdr);
+  if(hp->offset+(uint64_t)hp->filesz<=(uint64_t)n)memcpy(meta+hdr,mdt+hp->offset,hp->filesz);else{char name[20];snprintf(name,sizeof(name),"modem.b%02u",hash);if(veux_fw_read(name,0,meta+hdr,hp->filesz)!=hp->filesz){IOFreeContiguous(meta,(vm_size_t)ms);kfree_data(mdt,n);return false;}}
+- printf("VEUX MODEM PAS: metadata copied\n");barrier();uint64_t res=0,st=0;printf("VEUX MODEM PAS: calling init_image\n");st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,(uint64_t)meta_pa,0,&res);IOFreeContiguous(meta,(vm_size_t)ms);meta=NULL;printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
++ printf("VEUX MODEM PAS: metadata copied\n");barrier();veux_dt_crc_log("before_pil_init_image");printf("VEUX MODEM PAS: calling init_image\n");uint64_t res=0,st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,(uint64_t)meta_pa,0,&res);veux_dt_crc_log("after_pil_init_image");IOFreeContiguous(meta,(vm_size_t)ms);meta=NULL;printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
   if(reloc){st=smc(SCM_FN(SCM_SVC_PIL,PIL_MEM_SETUP),3,PAS_ID_MODEM,min,(max-min+0xfff)&~0xfffULL,&res);printf("VEUX MODEM PAS: mem_setup ret=%llx res=%llx\n",st,res);if(st||res)goto fail;}
-  printf("VEUX MODEM PAS: load segments\n");for(uint32_t i=0;i<eh->phnum;i++){if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;char name[20];snprintf(name,sizeof(name),"modem.b%02u",i);uint64_t map_pa=ph[i].paddr&~0x3fffULL,offset=ph[i].paddr-map_pa;uint64_t map_len=(offset+ph[i].memsz+0x3fffULL)&~0x3fffULL;uint64_t va=ml_io_map_wcomb(map_pa,map_len);if(!va)goto fail;uint8_t *dst=(uint8_t *)(va+offset);if(ph[i].filesz&&!veux_fw_find(name)){printf("VEUX MODEM PAS: segment %s absent, skip\n",name);continue;}if(ph[i].filesz&&veux_fw_read(name,0,dst,ph[i].filesz)!=ph[i].filesz)goto fail;if(ph[i].memsz>ph[i].filesz)bzero(dst+ph[i].filesz,ph[i].memsz-ph[i].filesz);barrier();}
+  printf("VEUX MODEM PAS: load segments\n");for(uint32_t i=0;i<eh->phnum;i++){if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;char name[20];snprintf(name,sizeof(name),"modem.b%02u",i);uint64_t map_pa=ph[i].paddr&~0x3fffULL,offset=ph[i].paddr-map_pa;uint64_t map_len=(offset+ph[i].memsz+0x3fffULL)&~0x3fffULL;uint8_t *map=veux_modem_map_phys(map_pa,map_len);if(!map)goto fail;uint8_t *dst=map+offset;if(ph[i].filesz&&!veux_fw_find(name)){printf("VEUX MODEM PAS: segment %s absent, skip\n",name);continue;}if(ph[i].filesz&&veux_fw_read(name,0,dst,ph[i].filesz)!=ph[i].filesz)goto fail;if(ph[i].memsz>ph[i].filesz)bzero(dst+ph[i].filesz,ph[i].memsz-ph[i].filesz);barrier();}
   st=smc(SCM_FN(SCM_SVC_PIL,PIL_AUTH_RESET),1,PAS_ID_MODEM,0,0,&res);printf("VEUX MODEM PAS: auth_reset ret=%llx res=%llx\n",st,res);kfree_data(mdt,n);return st==0&&res==0;
 @@ -94,10 +127,11 @@
  void veux_modem_hold(void){printf("VEUX MODEM HOLD: wfe\n");for(;;)__asm__ volatile("dsb sy; wfe" ::: "memory");}
