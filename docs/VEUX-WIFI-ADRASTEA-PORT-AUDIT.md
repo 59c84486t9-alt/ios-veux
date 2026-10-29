@@ -3,6 +3,34 @@
 **Date:** 2026-10-29  
 **Scope:** read-only recovery ADB and host-side firmware/partition copies. No source, build, or device changes.
 
+## Follow-up evidence — recovery built-ins, GLINK IDs, and milestone gate
+
+**Evidence classes:** the Adrastea device selection and WLFW state sequence remain source-derived; recovery kernel configuration and symbols are runtime-confirmed; no modem/WLFW transaction or radio interface has been runtime-confirmed. GLINK SMEM item numbers below are confirmed by public Qualcomm Linux source, but not by a VEUX runtime trace. The exact Adrastea CE target and service arrays are still not conclusively sourced.
+
+### Recovery kernel and module locations
+
+The connected recovery remains on slot `_a` (`4078cac030c8`), running Linux `5.4.292-Paimon`. Its live `/proc/config.gz` reports `CONFIG_ICNSS2=y`, `CONFIG_ICNSS2_QMI=y`, `CONFIG_CLD_LL_CORE=y`, `CONFIG_WLAN=y`, `CONFIG_MSM_PIL=y`, `CONFIG_MSM_SUBSYSTEM_RESTART=y`, `CONFIG_QCOM_SMP2P=y`, `CONFIG_QCOM_GLINK=y`, and `CONFIG_QRTR=y`. `/proc/kallsyms` exposes built-in symbols including `icnss_probe`, `icnss_wpss_load`, `subsystem_get`, `subsystem_get_with_fwname`, `pil_boot`, and numerous `wlan_hdd_*` functions (addresses are masked to zero). The boot_a kernel's embedded config was also previously checked and matches these built-in selections.
+
+The repeated read-only inventory found no `.ko`, `modules.load`, or `modules.dep` under the live `/vendor`, `/system`, `/odm`, or `/lib/modules` trees. The checked GPT has no physical `vendor_dlkm`, `odm_dlkm`, or `system_dlkm`; the `super` logical partition inventory likewise had no DLKM logical partition. This settles the module-location question for the inspected images: the ICNSS2, PIL, GLINK/QRTR, and WLAN host stack are built into the vendor recovery kernel, not shipped as separate modules in those carriers. Consequently there is no module ELF to open in REA; the source tree and live kallsyms/config are the available evidence. This does not identify the external component that asks PIL to start the modem.
+
+Recovery reports `/sys/bus/msm_subsys/devices/subsys2/name` as `modem` and its `state` as `OFFLINING`. The state attribute is mode `0444`; it is not a writable trigger in this recovery. No write or other modem-start operation was attempted. A stock Android run is still required to see the modem/WLAN-PD service arrival and runtime WLFW order.
+
+### GLINK SMEM IDs
+
+The VEUX DT does not encode the GLINK SMEM item numbers as properties. The standard Qualcomm GLINK-over-SMEM transport source does define them: item `478` is `SMEM_GLINK_NATIVE_XPRT_DESCRIPTOR`, `479` is `SMEM_GLINK_NATIVE_XPRT_FIFO_0`, and `480` is `SMEM_GLINK_NATIVE_XPRT_FIFO_1` ([Qualcomm kernel `qcom_glink_smem.c`](https://android.googlesource.com/kernel/msm/%2B/19181fc386f3789282f70790bdd3d05eb63a8db4/drivers/rpmsg/qcom_glink_smem.c), [SMEM enum](https://android.googlesource.com/kernel/msm/%2B/d5d2256a441456eb3548ee03b95323f111732bb5/include/soc/qcom/smem.h)). Those numbers are source-confirmed standard transport IDs, but the local VEUX kernel snapshot omits the GLINK-SMEM implementation/header and recovery has not booted the modem, so their use by the VEUX modem channel remains unverified at runtime. The SMP2P item indices 435/428 are separately declared by VEUX DT and must not be conflated with GLINK's 478–480 items.
+
+### CE source search result
+
+The public Android `drivers/net/wireless/ath/ath10k/snoc.c` source contains a 12-engine generic ath10k `target_ce_config_wlan`, a service map, and an empty `target_shadow_reg_cfg_map`; it also defines Adrastea source/destination write-index offsets `0x3c`/`0x40` ([source](https://android.googlesource.com/kernel/msm/%2B/748b6dc2a170e75f816e5734e94c74f236a02aa2/drivers/net/wireless/ath/ath10k/snoc.c)). Its candidate target table, in CE order 0–11, is: `(OUT,32,2048)`, `(IN,32,2048)`, `(IN,64,2048)`, `(OUT,32,2048)`, `(OUT,256,256)`, `(OUT,1024,64)`, `(INOUT,32,16384)`, `(4,0,0)`, `(IN,32,2048)`, `(IN,32,2048)`, `(IN,32,2048)`, `(IN,32,2048)` for direction, entries, and max bytes. CE4/CE5 disable interrupts; CE8 has flags zero. The service map uses VO/BK/BE/VI/control uplink CE3 and downlink CE2; reserved-control uplink CE0/downlink CE2; raw-stream uplink CE0/downlink CE2; HTT data uplink CE4/downlink CE1; IPA uplink CE5; HTT data2/data3/log downlinks CE9/10/11; then a zero terminator. The shadow map is empty.
+
+This is a **candidate reference, not a proven Adrastea target table**: the file is ath10k SNOC rather than the downstream QCA host-CMN target-specific source selected by the VEUX vendor build, and its target association to the VEUX `0xabcd` ICNSS path is not established. Do not insert these candidate rows into patch 0123. The exact Adrastea target/service/shadow arrays requested in the gate remain unknown. The earlier descriptor finding remains: QCA_WIFI_3_0 uses four 32-bit words (16 bytes), while Topaz's 16-byte packed record places its fields differently, so equal size does not establish layout compatibility.
+
+### Milestone image status
+
+No milestone XNU image was built or staged. The local XNU patch queue contains no modem PAS/GLINK/QRTR/WLFW implementation corresponding to Topaz 0113/0115/0118/0121/0122; only ordinary VEUX diagnostic patches are present. A reliable staged image still needs that platform code and a verified transport/service-discovery path. The requested `veuxlog=1` argument is also rejected by the strict manifest because its persistent UFS tail may overlap the HFS+ root; the existing logger must not be enabled until that range is proved safe or moved to a separately reserved region. Therefore there is no wrapper hash, manifest, or flash plan to approve from this follow-up. No partition was flashed and neither boot slot was changed.
+
+The recovery modem state sysfs file is read-only, so the permitted recovery trigger is unavailable here. Runtime observation should use a stock Android boot and collect modem/ICNSS/WLFW logs, remoteproc/subsystem state, GLINK/QRTR service arrival, and the WLFW CAP response. Any future recovery trigger requires explicit user approval if a writable supported control is found.
+
 ## Decision
 
 **Architecture prototype: go. Parameter-only Topaz copy: no-go.** VEUX's live DT selects the Adrastea ICNSS path (`qcom,icnss` → `0xabcd` in the SM6375 ICNSS2 source), and the modem image contains a WLAN protection-domain declaration and WLAN firmware. This does not confirm a physical WLAN chip ID or prove that the WLAN-PD starts during recovery.

@@ -1,3 +1,11 @@
+## >>> UPDATE 2026-10-29 (Adrastea modem/WLAN gate follow-up) <<<
+
+- Rechecked live recovery read-only on device `4078cac030c8`, slot `_a`: recovery kernel is Linux 5.4.292-Paimon. `/proc/config.gz` reports built-in ICNSS2, WLAN/CLD LL, PIL, subsystem restart, SMP2P, GLINK, and QRTR; `/proc/kallsyms` contains `icnss_probe`, `icnss_wpss_load`, `subsystem_get`, `pil_boot`, and `wlan_hdd_*` symbols. No `.ko` or module load lists are present in the live vendor/system/odm trees. Checked physical GPT and super inventories have no vendor_dlkm/odm_dlkm/system_dlkm carriers. See `docs/VEUX-WIFI-ADRASTEA-PORT-AUDIT.md` for the evidence and limitations.
+- `/sys/bus/msm_subsys/devices/subsys2/state` is mode 0444 and reads `OFFLINING` for `modem`; no modem start was attempted. Recovery modem trigger remains unavailable through this node; stock Android is the safe runtime observation path.
+- Public Qualcomm kernel sources confirm standard GLINK SMEM item IDs 478 (descriptor), 479 (FIFO_0), 480 (FIFO_1). VEUX DT does not list those IDs, and no live modem transport was observed, so use on the VEUX modem channel is not runtime-confirmed.
+- Found a public ath10k SNOC candidate CE map with 12 entries and empty shadow table; it is not proven to be the target-specific Adrastea configuration for VEUX. Exact Adrastea CE/service/shadow arrays remain unknown; do not add 0123/CE code.
+- No milestone XNU build was staged: the VEUX XNU patch queue lacks the modem PAS/GLINK/QRTR/WLFW implementation required by 0113/0115/0118/0121/0122. Strict manifest still rejects `veuxlog=1` because its UFS-tail region may overlap HFS+. No image hash or manifest exists; no flash, boot-slot write, or recovery modem trigger occurred.
+
 ## >>> UPDATE 2026-10-29 (Adrastea WLAN firmware image audit) <<<
 
 - Audited only host-side copies of vendor_a, modem_a, vendor_boot_a, and
