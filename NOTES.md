@@ -5461,3 +5461,32 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   SMEM/TCSR map statement. Updated that patch's context to the new successful
   SMEM-map diagnostic sequence. No kernel artifact was accepted and no flash
   was attempted. A clean CI rerun is required.
+
+## >>> UPDATE 2026-10-30 (Phase 4.18 wrapper verified; pre-flash checklist passed) <<<
+
+- Phase 4.18 code is committed in `82b3420` (QRTR unaligned-safe load and
+  requested logs); `704b8b7` updates the subsequent DT CRC patch context. CI run
+  `40973491933` failed at the stale `0159` context before compiling. Rerun
+  `40973920077` is green: build, host diagnostics, kernel feature manifest,
+  Phase 2, Phase 3, Phase 4, artifact packaging and upload all passed.
+- Kernel SHA-256:
+  `1d50b3211ced030bfe9dd26b66e0da11a6050e41fb0178033ddab9a1be543983`.
+  Patches `0152`–`0162` are each `APPLIED`; no skips. The kernel contains the
+  `memcpy`-based unaligned QRTR loader and both requested GLINK markers.
+- Built and verified
+  `/home/nyra/veux-artifacts/40973920077/xnu-kernel/modem-held.img`; wrapper
+  SHA-256 `047696879a35e45512e22b4be769953cd87dae9f397caea631ba29bce589f2c5`,
+  size exactly 17,281,024 bytes. Manifest records CI/build ID `40973920077`,
+  kernel SHA above, DTB SHA
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`, and the
+  exact modem-held boot args. Wrapper verification passed 27/27 markers,
+  source absence checks, and byte-for-byte payload reconstruction.
+- Pre-flash checklist passed on Fastboot serial `4078cac030c8`: `fastboot
+  devices` listed that serial; `getvar product` returned `veux`; `getvar
+  current-slot` returned `b` (accepted under the user's slot override);
+  `getvar unlocked` returned `yes`; `getvar partition-size:boot_b` returned
+  `0x8000000`. Wrapper SHA and manifest match as recorded above. The only
+  authorized write is `boot_b`, exactly 17,281,024 bytes from this wrapper;
+  no fallback partition is needed. Before issuing the flash, repeat the device
+  variables and wrapper hash, then record command outputs and post-boot USB
+  enumeration.
