@@ -297,7 +297,7 @@ phase4_sources = {
         "VEUX GLINK: polling loop entered",
         "ml_io_map_wcomb(SMEM_PA,SMEM_SIZE)")) and
         (lambda line: line.find("if(!gd||!gtx||!grx)") < line.find("panic(\"GLINK SMEM alloc failed\")") < line.find("gd[1]=gd[2]=0"))(
-            phase4_text.split("void veux_glink_init(void)", 1)[1].splitlines()[0]),
+            phase4_text.split("void veux_glink_init(void){", 1)[1].splitlines()[0]),
     "pas_metadata_uses_contiguous_standard_ram": all(x in phase4_text for x in (
         "IOMallocContiguous((vm_size_t)ms,0x1000,&meta_pa)",
         "(uint64_t)meta_pa", "VEUX MODEM PAS: copying mdt metadata",
