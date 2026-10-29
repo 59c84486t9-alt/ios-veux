@@ -4943,6 +4943,32 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - HackiOS's WCN6750 implementation is only useful if runtime evidence overturns the Adrastea-style DT; its LinuxKPI ath11k layer depends on substantial WPSS/SMEM/SMP2P/GLINK/QRTR/QMI/WLFW support. ios-topaz is a closer protocol architecture reference for a modem-hosted radio but targets SM6225. VEUX lacks the Qualcomm remote WLAN boot/control stack and any APSS PCI/SDIO host support in XNU.
 - Updated `docs/VEUX-WIFI-DISCOVERY.md` with live evidence. No Wi-Fi driver code, diagnostic build, CI run, or flash was made. Device left in root recovery ADB on slot A.
 
+### VEUX Adrastea modem/WLAN and ios-topaz port gate — 2026-10-29
+
+- Read-only audit report: `docs/VEUX-WIFI-ADRASTEA-PORT-AUDIT.md`; exact
+  modem_a FAT file table: `docs/VEUX-MODEM-FW-TABLE.csv` (116 firmware/JSON
+  rows, including all present modem.bNN, BDF, `modem.mdt`, and
+  `wlanmdsp.mbn` files). `modem.b16` and `modem.b24` are absent.
+- Live recovery remains root on slot A. Modem subsystem is `OFFLINING`;
+  `adsp` is `ONLINE`; no recovery WLAN QMI/WLFW arrival or WLAN interface was
+  observed. Live DT resolves the ICNSS MSA phandle to `0x86500000 + 0x200000`.
+- No `.ko` was found in inspected slot-A logical partitions or boot/rescue
+  ramdisks. Therefore no `icnss2.ko` reverse engineering/modinfo or APSS
+  modem loader call chain is available from these copies.
+- Source-level host-cap answer: Adrastea (`qcom,icnss` → `0xabcd`) skips
+  HOST_CAP and sends MSA_INFO directly after IND_REGISTER. Topaz is an
+  SM6225/WCN3988 design, so its HOST_CAP and WCN3990-style CE tables do not
+  establish VEUX protocol/CE behavior. Corrected 0122 state ordering is
+  documented.
+- PAS, MPSS carveout, SMEM, TCSR, IPCC/SMP2P, MSA and VMID substitutions are
+  mapped in the audit. Adrastea CE target/service/shadow arrays and GLINK
+  SMEM IDs remain unavailable; do not implement CE or reuse Topaz tables
+  until those are sourced.
+- No source code, XNU driver, build, CI run, partition write, `wpss_boot`
+  write, or flash was made. The recovery device remains on slot A. Next useful
+  evidence is a stock Android run capturing modem state, GLINK/QRTR and WLFW
+  service arrival/CAP, plus the target Adrastea host-CMN CE arrays.
+
 ### VEUX Wi-Fi Adrastea/SNOC follow-up — 2026-10-29
 
 - Kept recovery read-only; did not write the `wpss_boot` sysfs attribute. Rechecked ICNSS2 sysfs and `/vendor`; the recovery's `/vendor` only has Goodix files. Android `vendor_a` is a logical partition inside `super` and is not mounted in recovery.
