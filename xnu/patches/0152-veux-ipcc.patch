@@ -1,0 +1,206 @@
+From acb78feee841127eb8edbe75aa6641b6702acb11 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Date: Thu, 29 Oct 2026 03:36:51 +0100
+Subject: [PATCH] Add VEUX polling IPCC transport
+
+---
+ iokit/Kernel/arm/VeuxPlatformExpert.cpp |   4 +
+ osfmk/arm64/veux_ipcc.c                 | 151 ++++++++++++++++++++++++
+ osfmk/conf/files.arm64                  |   1 +
+ 3 files changed, 156 insertions(+)
+ create mode 100644 osfmk/arm64/veux_ipcc.c
+
+diff --git a/iokit/Kernel/arm/VeuxPlatformExpert.cpp b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+index a98b9d9..b1facee 100644
+--- a/iokit/Kernel/arm/VeuxPlatformExpert.cpp
++++ b/iokit/Kernel/arm/VeuxPlatformExpert.cpp
+@@ -14,6 +14,9 @@
+ #include <string.h>
+ #include <pexpert/pexpert.h>
+ 
++/* Private init hook for the VEUX polling-only IPCC transport. */
++extern "C" void veux_ipcc_init(void);
++
+ class VeuxPlatformExpert : public IODTPlatformExpert {
+ 	OSDeclareDefaultStructors(VeuxPlatformExpert);
+ 
+@@ -106,6 +109,7 @@ VeuxPlatformExpert::start(IOService *provider)
+ 	if (!IODTPlatformExpert::start(provider)) {
+ 		return false;
+ 	}
++	veux_ipcc_init();
+ 	registerService();
+ 	IOLog("VEUX: platform expert registered\n");
+ 	return true;
+diff --git a/osfmk/arm64/veux_ipcc.c b/osfmk/arm64/veux_ipcc.c
+new file mode 100644
+index 0000000..a9b4271
+--- /dev/null
++++ b/osfmk/arm64/veux_ipcc.c
+@@ -0,0 +1,151 @@
++/*
++ * VEUX Qualcomm IPCC polling transport.
++ *
++ * Register definitions follow the downstream kernel's drivers/soc/qcom/
++ * qcom_ipcc.c (research/kernel_xiaomi_sm6375 commit f4b8a13) and upstream
++ * kernel/common drivers/mailbox/qcom-ipcc.c at
++ * https://android.googlesource.com/kernel/common/+/b2426b5bc9b062c2d87d00ca37c9215a80701e42/drivers/mailbox/qcom-ipcc.c:
++ *   CONFIG                 +0x08
++ *   SEND_ID                +0x0c
++ *   RECV_ID                +0x10
++ *   RECV_SIGNAL_ENABLE     +0x14
++ *   RECV_SIGNAL_DISABLE    +0x18
++ *   RECV_SIGNAL_CLEAR      +0x1c
++ * Linux packs client_id into bits 31:16 and signal_id into bits 15:0
++ * (qcom_ipcc_get_packed_id); this deliberately follows that source ordering.
++ *
++ * VEUX's downstream blair.dtsi qcom,ipcc@208000 node maps
++ * 0x00208000+0x1000 with GIC SPI 334; its qcom,ipcc.h names the clients
++ * and MPROC signals (both in the same research tree/commit above).
++ * This phase only polls the register window: no IRQ/GIC state is touched.
++ */
++#include <arm/machine_routines.h>
++#include <pexpert/arm/protos.h>
++#include <stdbool.h>
++#include <stdint.h>
++
++#if defined(ARM64_BOARD_CONFIG_VEUX)
++
++#define VEUX_IPCC_PA                 0x00208000u
++#define VEUX_IPCC_SIZE               0x1000u
++#define VEUX_IPCC_REG_CONFIG         0x08u
++#define VEUX_IPCC_REG_SEND_ID        0x0cu
++#define VEUX_IPCC_REG_RECV_ID        0x10u
++#define VEUX_IPCC_REG_RECV_ENABLE    0x14u
++#define VEUX_IPCC_REG_RECV_DISABLE   0x18u
++#define VEUX_IPCC_REG_RECV_SIGNAL_CLEAR 0x1cu
++#define VEUX_IPCC_CLEAR_ON_RECV_RD   0x1u
++#define VEUX_IPCC_NO_PENDING         0xffffffffu
++
++#define VEUX_IPCC_CLIENT_AOP         0u
++#define VEUX_IPCC_CLIENT_APSS        8u
++#define VEUX_IPCC_CLIENT_MPSS        2u
++#define VEUX_IPCC_SIGNAL_SMP2P       2u
++#define VEUX_IPCC_SIGNAL_GLINK_QMP   0u
++
++static volatile uint32_t *veux_ipcc_regs;
++static volatile uint32_t veux_ipcc_signal_calls;
++static volatile uint32_t veux_ipcc_poll_calls;
++
++static inline void
++veux_ipcc_barrier(void)
++{
++	__asm__ volatile("dsb sy" ::: "memory");
++}
++
++static inline uint32_t
++veux_ipcc_pack(uint8_t client_id, uint16_t signal_id)
++{
++	/* Match qcom_ipcc_get_packed_id(): client in high half, signal in low. */
++	return ((uint32_t)client_id << 16) | (uint32_t)signal_id;
++}
++
++static bool
++veux_ipcc_valid_pair(uint8_t client_id, uint16_t signal_id)
++{
++	bool client_ok = client_id == VEUX_IPCC_CLIENT_AOP ||
++	    client_id == VEUX_IPCC_CLIENT_APSS || client_id == VEUX_IPCC_CLIENT_MPSS;
++	bool signal_ok = signal_id == VEUX_IPCC_SIGNAL_SMP2P ||
++	    signal_id == VEUX_IPCC_SIGNAL_GLINK_QMP;
++	return client_ok && signal_ok;
++}
++
++void
++veux_ipcc_signal(uint8_t client_id, uint16_t signal_id)
++{
++	uint32_t call = __sync_fetch_and_add(&veux_ipcc_signal_calls, 1);
++	if (call < 8 || (call & 63u) == 0) {
++		printf("VEUX IPCC: signal call=%u client=%u signal=%u\n",
++		    call + 1, client_id, signal_id);
++	}
++	if (veux_ipcc_regs == NULL || !veux_ipcc_valid_pair(client_id, signal_id)) {
++		if (call < 8 || (call & 63u) == 0) {
++			printf("VEUX IPCC: signal skipped (unmapped or unsupported pair)\n");
++		}
++		return;
++	}
++	veux_ipcc_barrier();
++	veux_ipcc_regs[VEUX_IPCC_REG_SEND_ID / sizeof(uint32_t)] =
++	    veux_ipcc_pack(client_id, signal_id);
++	veux_ipcc_barrier();
++}
++
++bool
++veux_ipcc_poll(uint8_t client_id, uint16_t signal_id)
++{
++	uint32_t call = __sync_fetch_and_add(&veux_ipcc_poll_calls, 1);
++	uint32_t received;
++	if (call < 8 || (call & 63u) == 0) {
++		printf("VEUX IPCC: poll call=%u client=%u signal=%u\n",
++		    call + 1, client_id, signal_id);
++	}
++	if (veux_ipcc_regs == NULL || !veux_ipcc_valid_pair(client_id, signal_id)) {
++		return false;
++	}
++	veux_ipcc_barrier();
++	received = veux_ipcc_regs[VEUX_IPCC_REG_RECV_ID / sizeof(uint32_t)];
++	if (received != VEUX_IPCC_NO_PENDING &&
++	    received == veux_ipcc_pack(client_id, signal_id)) {
++		veux_ipcc_regs[VEUX_IPCC_REG_RECV_SIGNAL_CLEAR / sizeof(uint32_t)] = received;
++		veux_ipcc_barrier();
++		if (call < 8 || (call & 63u) == 0) {
++			printf("VEUX IPCC: poll matched raw=0x%08x\n", received);
++		}
++		return true;
++	}
++	return false;
++}
++
++/* Private IOKit platform-start hook; not part of the two-function transport API. */
++void
++veux_ipcc_init(void)
++{
++	uint32_t config, raw_recv;
++	if (veux_ipcc_regs != NULL) {
++		return;
++	}
++	veux_ipcc_regs = (volatile uint32_t *)ml_io_map(VEUX_IPCC_PA, VEUX_IPCC_SIZE);
++	if (veux_ipcc_regs == NULL) {
++		printf("VEUX IPCC: mapping failed pa=0x%08x size=0x%x\n",
++		    VEUX_IPCC_PA, VEUX_IPCC_SIZE);
++		return;
++	}
++	/* Upstream qcom-ipcc.c clears CONFIG.CLEAR_ON_RECV_RD at probe; otherwise
++	 * reading RECV_ID can consume an event. Preserve this safe polling behavior. */
++	config = veux_ipcc_regs[VEUX_IPCC_REG_CONFIG / sizeof(uint32_t)];
++	if (config & VEUX_IPCC_CLEAR_ON_RECV_RD) {
++		veux_ipcc_regs[VEUX_IPCC_REG_CONFIG / sizeof(uint32_t)] =
++		    config & ~VEUX_IPCC_CLEAR_ON_RECV_RD;
++		veux_ipcc_barrier();
++		printf("VEUX IPCC: disabled clear-on-recv-read config=0x%08x\n",
++		    config & ~VEUX_IPCC_CLEAR_ON_RECV_RD);
++	}
++	/* blair.dtsi: IPCC PA/length/summary SPI; qcom,ipcc.h: client/signal IDs. */
++	printf("VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334\n");
++	/* Read-only self-test: never write SEND_ID or RECV_SIGNAL_CLEAR here. */
++	veux_ipcc_barrier();
++	raw_recv = veux_ipcc_regs[VEUX_IPCC_REG_RECV_ID / sizeof(uint32_t)];
++	printf("VEUX IPCC: selftest raw_recv_id=0x%08x\n", raw_recv);
++}
++
++#endif /* ARM64_BOARD_CONFIG_VEUX */
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+index ae37c4f..07ceb82 100644
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -42,6 +42,7 @@ osfmk/arm/arm_init.c	optional config_pmap_ppl
+ osfmk/arm64/arm_vm_init.c	optional config_pmap_ppl
+ osfmk/arm64/sweet_early.c	standard
+ osfmk/arm64/veux_early.c	standard
++osfmk/arm64/veux_ipcc.c		standard
+ osfmk/arm64/arm64_hypercall.c	standard
+ osfmk/arm/io_map.c		standard
+ osfmk/arm64/loose_ends.c	standard
+-- 
+2.56.0
+
