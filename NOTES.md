@@ -5455,3 +5455,9 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   patch syntax, commit/push, dispatch CI, verify the kernel and modem-held
   wrapper, then re-check all authorized `boot_b` flash gates. Do not flash if CI
   or any pre-flash checklist item fails.
+
+- CI run `40973491933` failed before compilation: `0154` and `0156` applied,
+  but the later `0159-veux-dt-crc-diagnostics.patch` still expected the old
+  SMEM/TCSR map statement. Updated that patch's context to the new successful
+  SMEM-map diagnostic sequence. No kernel artifact was accepted and no flash
+  was attempted. A clean CI rerun is required.
