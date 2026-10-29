@@ -179,6 +179,11 @@ ipcc_source_checks = {
     "base_and_registers": all(x in ipcc_source for x in (
         "VEUX_IPCC_PA                 0x00208000u", "VEUX_IPCC_REG_SEND_ID",
         "VEUX_IPCC_REG_RECV_ID", "VEUX_IPCC_REG_RECV_SIGNAL_CLEAR")),
+    "verified_mmio_layout": all(x in ipcc_source for x in (
+        "VEUX_IPCC_SIZE               0x1000u",
+        "VEUX_IPCC_REG_RECV_ID        0x10u",
+        "VEUX_IPCC_NO_PENDING         0xffffffffu",
+        "ml_io_map(VEUX_IPCC_PA, VEUX_IPCC_SIZE)")),
     "qualcomm_packed_order": "((uint32_t)client_id << 16) | (uint32_t)signal_id" in ipcc_source,
     "selftest_format_and_read_only_path": "VEUX IPCC: selftest raw_recv_id=0x%08x" in ipcc_source and "VEUX IPCC: selftest raw_recv_id=0x%08x".encode() in kernel and "veux_ipcc_signal(" not in ipcc_init and "veux_ipcc_poll(" not in ipcc_init and "VEUX_IPCC_REG_RECV_SIGNAL_CLEAR] =" not in ipcc_selftest,
     "no_apcs_legacy_mapping": not any(x in ipcc_source for x in ("APCS", "APCS_IPC", "0x0f111000")),
@@ -240,6 +245,7 @@ phase4_patch_names = (
     "0158-veux-modem-wlfw.patch",
     "0159-veux-dt-crc-diagnostics.patch",
     "0160-veux-ipcc-clock-note.patch",
+    "0161-veux-ipcc-mapping-diagnostic.patch",
 )
 phase4_patch_texts = {}
 phase4_status = {}
@@ -271,7 +277,7 @@ phase4_forbidden = {
         r"\bscan_\w*")),
 }
 phase4_sources = {
-    "seven_unique_patch_files": all(phase4_patch_texts.values()),
+    "eight_unique_patch_files": all(phase4_patch_texts.values()),
     "patches_applied_without_skip": all(phase4_status.values()),
     "firmware_table_116_rows": phase4_patch_texts["0155-veux-modem-firmware.patch"].count("{ \"") == 116,
     "pas_and_modem_worker_hold": "veux_modem_start(void)" in phase4_text and "veux_modem_hold(void)" in phase4_text,
@@ -281,6 +287,7 @@ phase4_sources = {
     "pas_allocates_pool_buffers_and_uses_va_accessor": "veux_modem_pool_alloc(ms,&mpa)" in phase4_text.replace(" ", "") and "veux_modem_pool_va(mpa,ms)" in phase4_text.replace(" ", ""),
     "forbidden_apcs_host_cap_bdf_wlan_paths_absent": not any(phase4_forbidden.values()),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
+    "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],
 }
 if not all(phase4_sources.values()):
     raise SystemExit("VEUX Phase-4 source assertions failed: " + repr(phase4_sources) + " forbidden=" + repr(phase4_forbidden))
@@ -290,6 +297,7 @@ phase4_binary = {
     "pdmapper_marker": b"VEUX PDMAP:" in kernel,
     "adt_crc_log_format": b"VEUX DT: crc=0x%08x stage=%s\n" in kernel,
     "adt_crc_before_after_thread": b"before_modem_thread" in kernel and b"after_modem_thread" in kernel,
+    "ipcc_mapping_diagnostic": b"VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\n" in kernel,
 }
 if not all(phase4_binary.values()):
     raise SystemExit("VEUX Phase-4 binary marker checks failed: " + repr(phase4_binary))

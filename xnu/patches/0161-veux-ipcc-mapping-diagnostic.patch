@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000011 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Log the VEUX IPCC MMIO mapping
+
+diff --git a/osfmk/arm64/veux_ipcc.c b/osfmk/arm64/veux_ipcc.c
+--- a/osfmk/arm64/veux_ipcc.c
++++ b/osfmk/arm64/veux_ipcc.c
+@@ -125,10 +125,12 @@ veux_ipcc_init(void)
+ 		return;
+ 	}
+ 	veux_ipcc_regs = (volatile uint32_t *)ml_io_map(VEUX_IPCC_PA, VEUX_IPCC_SIZE);
+ 	if (veux_ipcc_regs == NULL) {
+ 		printf("VEUX IPCC: mapping failed pa=0x%08x size=0x%x\n",
+ 		    VEUX_IPCC_PA, VEUX_IPCC_SIZE);
+ 		return;
+ 	}
++	printf("VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\n",
++	    VEUX_IPCC_PA, (void *)veux_ipcc_regs, VEUX_IPCC_SIZE);
+ 	/* Upstream qcom-ipcc.c clears CONFIG.CLEAR_ON_RECV_RD at probe; otherwise
+ 	 * reading RECV_ID can consume an event. Preserve this safe polling behavior. */
+---
