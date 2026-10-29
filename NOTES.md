@@ -5232,5 +5232,7 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `reg` entries, added standard GICv3 interrupt properties, and added
   `tools/test-veux-gic-adt.py` to verify the generated node and address mapping.
 - Local checks so far: GIC ADT check, Python syntax checks, patch parsing for
-  0152–0154, and `git diff --check` passed. CI, wrapper rebuild/verification,
-  device checklist, and boot_b flash are pending.
+  0152–0154, and `git diff --check` passed. Initial CI run 40870510906 was
+  cancelled after detecting a stale workflow grep for the removed self-test
+  label; the gate is corrected in the follow-up commit. Wrapper rebuild,
+  verification, device checklist, and boot_b flash are pending.

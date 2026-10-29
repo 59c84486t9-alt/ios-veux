@@ -471,7 +471,7 @@ jobs:
           grep -Fq 'VEUX IPCC Phase-2 source assertions: PASS' out/pool-subgate.log
           grep -Fq 'VEUX IPCC Phase-2 binary marker and read-only self-test string: PASS' out/pool-subgate.log
           grep -Fq 'VEUX MODEM POOL Phase-3 source assertions: PASS' out/pool-subgate.log
-          grep -Fq 'VEUX MODEM POOL Phase-3 binary marker/selftest strings: PASS' out/pool-subgate.log
+          grep -Fq 'VEUX MODEM POOL read-only init/allocation binary markers: PASS' out/pool-subgate.log
           echo 'Phase-3 modem pool source and binary sub-gates passed.'
 
       - name: Phase 4 modem milestone sub-gate
