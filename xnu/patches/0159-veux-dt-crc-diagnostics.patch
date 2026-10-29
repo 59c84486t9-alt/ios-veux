@@ -5,11 +5,12 @@ Subject: [PATCH] Add VEUX ADT CRC breadcrumbs around modem startup
 diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
 --- a/osfmk/arm64/veux_modem_pas.c
 +++ b/osfmk/arm64/veux_modem_pas.c
-@@ -1,4 +1,5 @@
+@@ -1,5 +1,6 @@
  #include <pexpert/arm64/board_config.h>
 +#include <pexpert/arm64/boot.h>
  #include <kern/debug.h>
  #include <kern/kalloc.h>
+ #include <IOKit/IOLib.h>
  #include <pexpert/arm/protos.h>
 @@ -28,6 +29,38 @@
  #define MODEM_SIZE 0x10000000ULL
