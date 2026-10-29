@@ -105,17 +105,22 @@ bound via `qcom,icnss`, which the local source maps to Adrastea ID `0xabcd`;
 this is strong DT/driver-match evidence against standard WCN6750, not a
 runtime silicon ID read.
 
-The recovery image has no `/vendor/firmware_mnt/image` directory. Its visible
-`/vendor/firmware` contains Goodix touchscreen files only; no `qca6750`,
-`wpss.mdt`, `bdwlan.*`, or `regdb.bin` files were found there. The Android
-`vendor_a` logical partition is inside `super` and is not mounted in this
-recovery; it was not mistaken for the recovery `/vendor`. The separate
-`modem_a` partition is mounted read-only at `/firmware`. Its `/firmware/image`
-contains `wlanmdsp.mbn`, `bdwlan.bin`, numerous `bdwlan.<board-id>` and
-`bdwlan.b<board-id>` files, plus `bdwlanu.*`; no `adrastea/` or `wpss.mdt`
-path was found. These files show a WLAN firmware/BDF package is present in
-the modem partition, but do not establish which chip uses it or that it has
-loaded. No `/sys/class/remoteproc` is exposed.
+The recovery image has no `/vendor/firmware_mnt/image` directory. I extracted
+the contiguous `vendor_a` logical-partition extent from `super` to a host file
+using read-only `adb exec-out dd`, then inspected its ext4 directory tree with
+read-only `debugfs`; no device partition was mounted or changed. In `vendor_a`,
+`/firmware_mnt` is empty (there is no `image/` or `adrastea/` directory), and
+the only WLAN-specific vendor firmware entry is
+`/firmware/wlan/qca_cld/WCNSS_qcom_cfg.ini`. No `wpss.mdt`, `wlanmdsp.mbn`,
+`bdwlan.*`, `regdb.bin`, or `qca6750/` payload is present in that vendor
+firmware tree. The separate `modem_a` partition is mounted read-only at
+`/firmware`; its `/firmware/image` contains `wlanmdsp.mbn`, `bdwlan.bin`,
+numerous `bdwlan.<board-id>` and `bdwlan.b<board-id>` files, plus
+`bdwlanu.b65` and `bdwlanu.b69`. This confirms the image placement, not that
+the Adrastea ICNSS path consumes or has loaded those modem-partition files.
+The vendor boot DTB and both dtbo_a overlays were also inspected read-only:
+they contain no WPSS/remoteproc node or Adrastea rproc handle. No
+`/sys/class/remoteproc` is exposed in recovery.
 
 Recovery has no `/sys/bus/pci/devices` directory; `/sys/bus/mmc/devices` is
 empty. The two SDHCI hosts exist but declare `no-sdio` in the live DT. There
@@ -212,16 +217,22 @@ also distinguish APSS shadow/RRI registers and their exact offsets, so XNU
 must use the Adrastea-specific register table rather than treating the whole
 window as a generic shadow page.
 
-On this phone the read-only modem partition supplies
-`/firmware/image/wlanmdsp.mbn` and board-data `bdwlan.*` files. That placement
-alone does not identify their consumer or prove that they boot Adrastea. In
-the inspected newer source, the optional Adrastea WPSS route is remoteproc-
-based and takes its firmware name from the separate rproc node/backend; the
-VEUX live DT has no such node. Recovery emitted no `wlanmdsp.mbn`, `wlanfw`,
-or board-data load message. The image location and loader for VEUX therefore
-remain unresolved. The single clean runtime identity evidence would be the
-WLFW capability response's reported chip ID/family (and board ID); the
-`wlanfw` service name is shared and is not identifying by itself.
+On this phone, `/firmware/image/wlanmdsp.mbn` and the BDF family live in the
+read-only `modem_a` partition, not the extracted `vendor_a` firmware tree.
+Source inspection does not show ICNSS2 directly requesting `wlanmdsp.mbn` or
+`wpss.mdt`: ICNSS2 requests BDF/QDSS files over `request_firmware()` and the
+Adrastea BDF branch is disabled by the live DT; the optional WPSS path obtains
+its image through the remoteproc/subsystem backend. The local SM6375 branch's
+`wpss_boot` path calls `subsystem_get("wpss")` and is guarded for WCN6750;
+the newer ICNSS2 source has a separate Adrastea remoteproc option gated by
+`wpss-support-enable`, reading `qcom,rproc-handle` literally and calling
+`rproc_get_by_phandle()`/`rproc_boot()`. VEUX's live DT, vendor boot DTB, and
+overlays do not wire up that path. Recovery emitted no `wlanmdsp.mbn`,
+`wlanfw`, or board-data load message. Thus the *file placement* is now
+runtime-confirmed, but which component loads `wlanmdsp.mbn` for this target
+remains unresolved. The clean runtime identity evidence would be the WLFW
+capability response's chip/family ID and board ID; the shared `wlanfw`
+service name is not identifying by itself.
 
 For comparison, the separate WCN6750 path powers the platform, obtains device
 info and maps firmware-returned BAR/MHI state, then sends `regdb.bin` and the

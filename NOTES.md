@@ -1,3 +1,25 @@
+## >>> UPDATE 2026-10-29 (Adrastea vendor_a and WPSS image audit) <<<
+
+- Recovery remained root ADB on VEUX slot A. Read-only `adb exec-out dd` copied
+  the vendor_a logical partition's contiguous super extent to a host file; no
+  mount, partition write, boot, or flash occurred. `debugfs` (read-only) shows
+  vendor_a `/firmware_mnt` is empty and has no `image/` or `adrastea/`; the
+  only WLAN-specific vendor firmware file found is
+  `/firmware/wlan/qca_cld/WCNSS_qcom_cfg.ini`. No `wpss.mdt`, `wlanmdsp.mbn`,
+  BDF, `regdb.bin`, or qca6750 payload is in that vendor firmware tree.
+- The separate read-only modem_a mount `/firmware/image` contains
+  `wlanmdsp.mbn`, `bdwlan.bin`, board-ID `bdwlan.*` variants, and
+  `bdwlanu.b65`/`bdwlanu.b69`. This confirms placement only; no loader/consumer
+  or successful firmware boot is proven.
+- Read-only copies/decompilation of vendor_boot_a's DTB and both dtbo_a
+  entries show no WPSS/remoteproc node or ICNSS rproc handle. Recovery has no
+  `/sys/class/remoteproc`; PCI sysfs is absent and MMC devices are empty. Do
+  not write `wpss_boot`; the recovery remains on slot A.
+- Updated `docs/VEUX-WIFI-DISCOVERY.md` with this evidence and retained the
+  distinction between observed file placement and unresolved firmware loader.
+  No XNU code, build, or flash was attempted; the source/runtime findings do
+  not support claiming a powered/running radio or endpoint enumeration.
+
 ## >>> UPDATE 2026-10-29 (Adrastea firmware/WPSS source audit) <<<
 
 - Recovery is attached as root ADB on the known VEUX device. All commands in
