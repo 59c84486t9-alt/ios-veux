@@ -35,7 +35,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem_pool.c
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,159 @@
 +/*
 + * VEUX modem transport and metadata pool.
 + *
@@ -46,7 +46,7 @@ index 0000000..0000000
 + */
 +#include <arm/machine_routines.h>
 +#include <kern/debug.h>
-+#include <libkern/libkern.h>
++#include <pexpert/arm/protos.h>
 +#include <stdbool.h>
 +#include <stdint.h>
 +
@@ -138,13 +138,13 @@ index 0000000..0000000
 +		printf("VEUX MODEM POOL: map failed\n");
 +		return;
 +	}
-+	veux_modem_pool_mapping = (volatile uint8_t *)mapping;
++	veux_modem_pool_mapping = (volatile uint32_t *)mapping;
 +	veux_modem_pool_next = 0;
 +	if (!veux_modem_pool_alloc(0x1000ULL, &pa)) {
 +		printf("VEUX MODEM POOL: selftest FAIL (allocation)\n");
 +		return;
 +	}
-+	probe = (volatile uint32_t *)(veux_modem_pool_mapping + (pa - VEUX_MODEM_POOL_BASE));
++	probe = veux_modem_pool_mapping + ((pa - VEUX_MODEM_POOL_BASE) / sizeof(uint32_t));
 +	*probe = 0xdeadbeefU;
 +	veux_modem_pool_barrier();
 +	if (*probe == 0xdeadbeefU) {
@@ -164,28 +164,30 @@ index 0000000..0000000
 +	    veux_modem_pool_mapping == NULL) {
 +		return false;
 +	}
-+	while (__sync_lock_test_and_set(&veux_modem_pool_lock, 1u) != 0u) {
-+		while (veux_modem_pool_lock != 0u) {
++	while (__atomic_exchange_n(&veux_modem_pool_lock, 1u, __ATOMIC_ACQUIRE) != 0u) {
++		while (__atomic_load_n(&veux_modem_pool_lock, __ATOMIC_RELAXED) != 0u) {
 +			__asm__ volatile("yield" ::: "memory");
 +		}
 +	}
 +	if (veux_modem_pool_next > UINT64_MAX - (VEUX_MODEM_POOL_ALIGNMENT - 1)) {
-+		__sync_lock_release(&veux_modem_pool_lock);
++		__atomic_store_n(&veux_modem_pool_lock, 0u, __ATOMIC_RELEASE);
 +		return false;
 +	}
 +	offset = (veux_modem_pool_next + VEUX_MODEM_POOL_ALIGNMENT - 1) &
 +	    ~(VEUX_MODEM_POOL_ALIGNMENT - 1);
 +	if (offset > VEUX_MODEM_POOL_SIZE || size > VEUX_MODEM_POOL_SIZE - offset) {
-+		__sync_lock_release(&veux_modem_pool_lock);
++		__atomic_store_n(&veux_modem_pool_lock, 0u, __ATOMIC_RELEASE);
 +		return false;
 +	}
 +	next = offset + size;
 +	veux_modem_pool_next = next;
 +	*pa = VEUX_MODEM_POOL_BASE + offset;
-+	allocation = veux_modem_pool_mapping + offset;
-+	__sync_lock_release(&veux_modem_pool_lock);
++	allocation = (volatile uint8_t *)veux_modem_pool_mapping + offset;
++	__atomic_store_n(&veux_modem_pool_lock, 0u, __ATOMIC_RELEASE);
 +
-+	bzero((void *)allocation, (size_t)size);
++	for (uint64_t i = 0; i < size; i++) {
++		allocation[i] = 0;
++	}
 +	veux_modem_pool_barrier();
 +	printf("VEUX MODEM POOL: alloc 0x%llx + 0x%llx\n",
 +	    (unsigned long long)*pa, (unsigned long long)size);

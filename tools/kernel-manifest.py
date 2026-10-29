@@ -200,7 +200,7 @@ pool_source_checks = {
         "VEUX_MODEM_POOL_BASE                 0xc0000000ULL",
         "VEUX_MODEM_POOL_SIZE                 0x05100000ULL",
         "removed_region@c0000000")),
-    "write_combined_mapping_alignment_and_zeroing": "ml_io_map_wcomb" in pool_source and "VEUX_MODEM_POOL_ALIGNMENT" in pool_source and "bzero((void *)allocation" in pool_source,
+    "write_combined_mapping_alignment_and_zeroing": "ml_io_map_wcomb" in pool_source and "VEUX_MODEM_POOL_ALIGNMENT" in pool_source and "allocation[i] = 0" in pool_source,
     "static_asserts_cover_required_regions": all(x in pool_assertions for x in (
         "overlaps pil_mpss_wlan_mem", "overlaps wlan_msa", "overlaps ramoops",
         "overlaps framebuffer", "overlaps smem", "overlaps kernel image",
