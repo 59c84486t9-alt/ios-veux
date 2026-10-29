@@ -285,6 +285,19 @@ phase4_sources = {
     "modem_a_read_only_api": "sweet_ufs_read_part(\"modem_a\"" in phase4_text,
     "glink_qrtr_pdm_wlfw_functions": all(x in phase4_text for x in (
         "veux_glink_poll", "veux_pdmap_rx", "veux_wlfw_rx", "veux_scm_assign")),
+    "glink_smem_null_range_and_init_diagnostics": all(x in phase4_text for x in (
+        "veux_smem_contains(const void *ptr, uint32_t size)",
+        "VEUX GLINK: requesting SMEM items 478, 479, 480",
+        "VEUX GLINK: desc va=0x%llx tx_va=0x%llx rx_va=0x%llx",
+        'panic(\"GLINK SMEM alloc failed\")',
+        'panic(\"GLINK SMEM range invalid\")',
+        'panic(\"GLINK assembly buffer alloc failed\")',
+        "VEUX GLINK: SMEM mapped write-combine",
+        "VEUX GLINK: sending VERSION",
+        "VEUX GLINK: polling loop entered",
+        "ml_io_map_wcomb(SMEM_PA,SMEM_SIZE)")) and
+        (lambda line: line.find("if(!gd||!gtx||!grx)") < line.find("panic(\"GLINK SMEM alloc failed\")") < line.find("gd[1]=gd[2]=0"))(
+            phase4_text.split("void veux_glink_init(void)", 1)[1].splitlines()[0]),
     "pas_metadata_uses_contiguous_standard_ram": all(x in phase4_text for x in (
         "IOMallocContiguous((vm_size_t)ms,0x1000,&meta_pa)",
         "(uint64_t)meta_pa", "VEUX MODEM PAS: copying mdt metadata",
@@ -326,6 +339,12 @@ phase4_binary = {
     "pas_segment_copy_checkpoints": all(x in kernel for x in (
         b"VEUX MODEM PAS: loading segments\n",
         b"VEUX MODEM PAS: segments loaded\n")),
+    "glink_startup_diagnostics": all(x in kernel for x in (
+        b"VEUX GLINK: requesting SMEM items 478, 479, 480\n",
+        b"VEUX GLINK: desc va=0x%llx tx_va=0x%llx rx_va=0x%llx\n",
+        b"VEUX GLINK: SMEM mapped write-combine\n",
+        b"VEUX GLINK: sending VERSION\n",
+        b"VEUX GLINK: polling loop entered\n")),
 }
 if not all(phase4_binary.values()):
     raise SystemExit("VEUX Phase-4 binary marker checks failed: " + repr(phase4_binary))
@@ -340,6 +359,11 @@ modem_needles = {
     "ipcc_parameters": b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
     "smp2p_ready": b"VEUX MODEM: SMP2P READY",
     "glink_version_ack": b"VEUX GLINK: VERSION_ACK",
+    "glink_smem_request": b"VEUX GLINK: requesting SMEM items 478, 479, 480",
+    "glink_smem_addresses": b"VEUX GLINK: desc va=0x%llx tx_va=0x%llx rx_va=0x%llx",
+    "glink_send_version": b"VEUX GLINK: sending VERSION",
+    "glink_poll_loop_entered": b"VEUX GLINK: polling loop entered",
+    "glink_smem_map_attr": b"VEUX GLINK: SMEM mapped write-combine",
     "glink_open_ack_ipcrtr": b"VEUX GLINK: OPEN_ACK IPCRTR",
     "qrtr_hello": b"VEUX QRTR: HELLO",
     "qrtr_wlfw_server": b"VEUX QRTR: NEW_SERVER 0x45",

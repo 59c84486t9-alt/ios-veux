@@ -21,7 +21,7 @@ diff --git a/osfmk/arm64/veux_modem.h b/osfmk/arm64/veux_modem.h
 new file mode 100644
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem.h
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,27 @@
 +#ifndef _ARM64_VEUX_MODEM_H_
 +#define _ARM64_VEUX_MODEM_H_
 +#include <stdbool.h>
@@ -35,6 +35,7 @@ new file mode 100644
 +int64_t veux_fw_read(const char *name, uint64_t off, void *dst, uint64_t len);
 +int64_t sweet_ufs_read_part(const char *name, uint64_t off, void *dst, uint64_t len);
 +void *veux_smem_alloc(uint32_t item, uint32_t size);
++bool veux_smem_contains(const void *ptr, uint32_t size);
 +void veux_glink_init(void);
 +void veux_glink_poll(void);
 +void veux_qrtr_send(uint32_t type,uint32_t src_port,uint32_t node,uint32_t dst_port,const void *data,uint32_t len);
@@ -52,7 +53,7 @@ diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
 new file mode 100644
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem_pas.c
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,120 @@
 +#include <pexpert/arm64/board_config.h>
 +#include <kern/debug.h>
 +#include <kern/kalloc.h>
@@ -116,6 +117,10 @@ new file mode 100644
 + v=smem_find(item,NULL);uint32_t n=(size+7)&~7U,need=sizeof(struct smem_entry)+n;
 + if(!v&&part->free_uncached+need<=part->free_cached){struct smem_entry *h=(void *)((uint8_t *)part+part->free_uncached);h->canary=0xa5a5;h->item=item;h->size=n;h->pad_data=n-size;h->pad_hdr=0;h->rsvd=0;v=h+1;bzero(v,n);barrier();part->free_uncached+=need;barrier();}
 + *lock=0;barrier();return v;
++}
++bool veux_smem_contains(const void *ptr,uint32_t size){
++ uintptr_t base=(uintptr_t)smem,addr=(uintptr_t)ptr;
++ return smem&&ptr&&addr>=base&&addr-base<=SMEM_SIZE&&size<=SMEM_SIZE-(addr-base);
 +}
 +static uint64_t smc(uint32_t fn,uint64_t arg,uint64_t a,uint64_t b,uint64_t c,uint64_t *res){
 + register uint64_t x0 __asm__("x0")=fn,x1 __asm__("x1")=arg,x2 __asm__("x2")=a,x3 __asm__("x3")=b,x4 __asm__("x4")=c,x5 __asm__("x5")=0,x6 __asm__("x6")=0,x7 __asm__("x7")=0;
