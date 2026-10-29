@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
@@ -192,6 +193,7 @@ print("VEUX IPCC Phase-2 binary marker and read-only self-test string: PASS")
 pool_path = a.source_root / "osfmk/arm64/veux_modem_pool.c"
 pool_source = pool_path.read_text() if pool_path.exists() else ""
 pool_assertions = "\n".join(line for line in pool_source.splitlines() if "_Static_assert" in line)
+pool_heap_calls = re.findall(r"\b(?:kmem_alloc|IOMalloc)\s*\(", pool_source)
 pool_patch_lines = [line for line in status if line.startswith("PATCH_STATUS: 0153-veux-modem-pool.patch")]
 pool_patch_results = [line for line in pool_patch_lines if line.endswith((" APPLIED", " ALLOWLISTED_SKIP"))]
 pool_source_checks = {
@@ -202,6 +204,8 @@ pool_source_checks = {
         "VEUX_MODEM_POOL_SIZE                 0x05100000ULL",
         "removed_region@c0000000")),
     "write_combined_mapping_alignment_and_zeroing": "ml_io_map_wcomb" in pool_source and "VEUX_MODEM_POOL_ALIGNMENT" in pool_source and "allocation[i] = 0" in pool_source,
+    "early_startup_maps_pool_before_io_submap": "STARTUP(KMEM, STARTUP_RANK_FIRST, veux_modem_pool_init);" in pool_source and "#include <kern/startup.h>" in pool_source,
+    "no_direct_heap_allocator_calls_for_reserved_pool": not pool_heap_calls,
     "static_asserts_cover_required_regions": all(x in pool_assertions for x in (
         "overlaps pil_mpss_wlan_mem", "overlaps wlan_msa", "overlaps ramoops",
         "overlaps framebuffer", "overlaps smem", "overlaps kernel image",
@@ -245,7 +249,6 @@ for name in phase4_patch_names:
     phase4_status[name] = len(terminal) == 1 and terminal[0].endswith(" APPLIED")
 phase4_text = "\n".join(phase4_patch_texts.values())
 phase4_lower = phase4_text.lower()
-import re
 phase4_forbidden = {
     "legacy_apcs_or_topaz_pool": any(x in phase4_lower for x in ("apcs", "0x0f111000", "0xe0000000")),
     "host_cap_path": re.search(r"\bhost_cap\b", phase4_lower) is not None,
@@ -262,6 +265,7 @@ phase4_sources = {
     "modem_a_read_only_api": "sweet_ufs_read_part(\"modem_a\"" in phase4_text,
     "glink_qrtr_pdm_wlfw_functions": all(x in phase4_text for x in (
         "veux_glink_poll", "veux_pdmap_rx", "veux_wlfw_rx", "veux_scm_assign")),
+    "pas_allocates_pool_buffers_and_uses_va_accessor": "veux_modem_pool_alloc(ms,&mpa)" in phase4_text.replace(" ", "") and "veux_modem_pool_va(mpa,ms)" in phase4_text.replace(" ", ""),
     "forbidden_apcs_host_cap_bdf_wlan_paths_absent": not any(phase4_forbidden.values()),
 }
 if not all(phase4_sources.values()):

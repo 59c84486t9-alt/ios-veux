@@ -1,3 +1,27 @@
+## >>> UPDATE 2026-10-29 (modem pool early-map panic fix) <<<
+
+- The Phase-5 photo shows `VEUX MODEM POOL: 0xc0000000 + 0x5100000`, then
+  `PANIC: kmem_alloc(..., 84934656, ...): failed with 3`; no
+  `VEUX MODEM PAS:` line appears. The size is exactly the 81 MiB pool.
+- Source inspection does not show a direct `kmem_alloc`/`IOMalloc` in
+  `veux_modem_pool.c`. The actual path is `ml_io_map_wcomb()` -> XNU `io_map()`:
+  after `STARTUP_SUB_KMEM`, `io_map()` obtains VA from its 8 MiB `io_submap` via
+  `kmem_alloc`; the whole-pool mapping is 81 MiB and cannot fit. Thus the
+  reserved physical memory was mapped, but too late for the early VA mapping
+  path. Phase-4 `modem_boot()` already allocates only metadata/SMP2P buffers
+  from the pool and gets their VA through `veux_modem_pool_va()`.
+- Fix in progress: initialize the pool at `STARTUP(KMEM, STARTUP_RANK_FIRST)`.
+  The startup dispatcher sets `startup_phase` to immediately before KMEM while
+  each KMEM callback runs; this makes `ml_io_map_wcomb()` use `virtual_space_start`
+  and `pmap_map_bd_with_options()` before `io_map_init()` creates the 8 MiB
+  submap. The patch removes the later IOKit platform-expert initialization.
+  Added manifest assertions for early startup mapping and absence of direct
+  `kmem_alloc`/`IOMalloc` calls in the pool source, plus a Phase-4 assertion
+  that PAS uses pool allocation and its VA accessor for internal buffers.
+- Rebuild CI and wrapper are required before retrying. The next flash remains
+  `boot_b` only and must pass the then-current fastboot checklist; no other
+  partition or region is authorized.
+
 ## >>> UPDATE 2026-10-29 (Phase 5 wrapper gate stopped before flash) <<<
 
 - Built `/home/nyra/veux-artifacts/40853717857/modem-held.img` from CI run
