@@ -5294,3 +5294,10 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   GCC SE8, and I2C diagnostic lines; no `VEUX DT:` or modem PAS marker is
   legible. User has returned the phone to fastboot (serial previously observed
   as `4078cac030c8`).
+
+## >>> UPDATE 2026-10-29 (Phase 4.11 pre-flash record) <<<
+
+- CI run `40891013438` on commit `b94a7c2bb109d9189d5cbb5316484973b335c490` is green. Patch `0159-veux-dt-crc-diagnostics.patch` is `APPLIED`; Phase 4.11 source assertions and compiled CRC markers pass; the modem milestone is green at 15/15 markers. Kernel SHA-256: `732e10c576925733b54caabb6d1afdab4230603c850c6cc4c5d3a2b1d20b2d9e`.
+- Wrapper `/home/nyra/veux-artifacts/40891013438/modem-held.img` verifies against its manifest, reconstructs from the CI kernel and embedded ADT, and is exactly 17,281,024 bytes. Wrapper SHA-256: `d96ffd9b6c834b2086f83e22fcfab62ed5eea56c0c7ca20c5d097f62eb1e108f`. Manifest: `/home/nyra/veux-artifacts/40891013438/modem-held.img.manifest.json`.
+- Pre-flash checklist on fastboot serial `4078cac030c8`: `fastboot devices` sees the phone; product=`veux`; current-slot=`b` (accepted by the user's explicit slot override); unlocked=`yes`; `partition-size:boot_b=0x8000000`; wrapper SHA and manifest pass. Wrapper size is below the boot_b partition size.
+- Authorized write recorded before execution: partition `boot_b` only, 17,281,024 bytes from the wrapper above. No other partition is authorized for this write.
