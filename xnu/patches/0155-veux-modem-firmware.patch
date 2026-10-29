@@ -56,9 +56,10 @@ diff --git a/osfmk/arm64/veux_modem_fw.c b/osfmk/arm64/veux_modem_fw.c
 new file mode 100644
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem_fw.c
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,138 @@
 +#include <pexpert/arm64/board_config.h>
 +#include <kern/debug.h>
++#include <pexpert/arm/protos.h>
 +#include <stdint.h>
 +#include <string.h>
 +#include "veux_modem.h"

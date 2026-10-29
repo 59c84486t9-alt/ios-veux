@@ -51,11 +51,10 @@ diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
 new file mode 100644
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem_pas.c
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,114 @@
 +#include <pexpert/arm64/board_config.h>
 +#include <kern/debug.h>
 +#include <kern/kalloc.h>
-+#include <libkern/libkern.h>
 +#include <pexpert/arm/protos.h>
 +extern kern_return_t kernel_thread_start(thread_continue_t, void *, thread_t *);
 +extern void thread_deallocate(thread_t);
@@ -111,7 +110,7 @@ new file mode 100644
 +}
 +void *veux_smem_alloc(uint32_t item,uint32_t size){
 + void *v=smem_find(item,NULL); if(v)return v; volatile uint32_t *lock=(void *)(tcsr+3*0x1000);
-+ for(unsigned i=0;i<100000;i++){*lock=1;barrier();if(*lock==1)break;IODelay(10);if(i==99999)return NULL;}
++ for(unsigned i=0;i<100000;i++){*lock=1;barrier();if(*lock==1)break;delay(10);if(i==99999)return NULL;}
 + v=smem_find(item,NULL);uint32_t n=(size+7)&~7U,need=sizeof(struct smem_entry)+n;
 + if(!v&&part->free_uncached+need<=part->free_cached){struct smem_entry *h=(void *)((uint8_t *)part+part->free_uncached);h->canary=0xa5a5;h->item=item;h->size=n;h->pad_data=n-size;h->pad_hdr=0;h->rsvd=0;v=h+1;bzero(v,n);barrier();part->free_uncached+=need;barrier();}
 + *lock=0;barrier();return v;

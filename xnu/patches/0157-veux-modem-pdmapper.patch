@@ -6,9 +6,10 @@ diff --git a/osfmk/arm64/veux_modem_pdmap.c b/osfmk/arm64/veux_modem_pdmap.c
 new file mode 100644
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem_pdmap.c
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,37 @@
 +#include <pexpert/arm64/board_config.h>
 +#include <kern/debug.h>
++#include <pexpert/arm/protos.h>
 +#include <stdint.h>
 +#include <string.h>
 +#include "veux_modem.h"
@@ -22,10 +23,10 @@ new file mode 100644
 +static void tlv(uint8_t *b,uint32_t *n,uint8_t t,const void *v,uint16_t l){b[(*n)++]=t;memcpy(b+*n,&l,2);*n+=2;memcpy(b+*n,v,l);*n+=l;}
 +void veux_pdmap_dispatch(void){
 + if(announced)return;
-+ char uw[1024]={0},root[1024]={0};const struct fw_file *u=veux_fw_find("modemuw.jsn"),*r=veux_fw_find("modemr.jsn");int64_t a=u?veux_fw_read("modemuw.jsn",0,uw,u->size):-1,b=r?veux_fw_read("modemr.jsn",0,root,r->size):-1;
-+ if(a>0)uw[a]=0;if(b>0)root[b]=0;
-+ bool uw_maps=a>0&&strstr(uw,"kernel/elf_loader")&&strstr(uw,"wlan/fw");
-+ bool root_maps=b>0&&strstr(root,"tms/pdr_enabled")&&strstr(root,"gps/gps_service");
++ char uw[1024]={0},root[1024]={0};const struct fw_file *u=veux_fw_find("modemuw.jsn"),*r=veux_fw_find("modemr.jsn");int64_t a=u&&u->size<sizeof(uw)?veux_fw_read("modemuw.jsn",0,uw,u->size):-1,b=r&&r->size<sizeof(root)?veux_fw_read("modemr.jsn",0,root,r->size):-1;
++ if(a>0&&a<sizeof(uw))uw[a]=0;if(b>0&&b<sizeof(root))root[b]=0;
++ bool uw_maps=a>0&&strnstr(uw,"kernel/elf_loader",(size_t)a)&&strnstr(uw,"wlan/fw",(size_t)a);
++ bool root_maps=b>0&&strnstr(root,"tms/pdr_enabled",(size_t)b)&&strnstr(root,"gps/gps_service",(size_t)b);
 + if(!uw_maps||!root_maps)printf("VEUX PDMAP: JSON mapping verification incomplete uw=%lld root=%lld\n",a,b);
 + struct {uint32_t cmd,svc,inst,node,port;} c={4,0x40,0x101,1,PDM_PORT};
 + veux_qrtr_send(4,0xfffffffeU,1,0xfffffffeU,&c,sizeof(c));announced=true;
