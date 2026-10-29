@@ -295,11 +295,19 @@ phase4_sources = {
         "VEUX GLINK: mapped SMEM",
         "load_u32_unaligned(const void *p)",
         "memcpy(&value,p,sizeof(value))",
+        "VEUX GLINK: copying RX data",
+        "VEUX QRTR: processing packet",
+        "const volatile uint8_t *src_ptr=(const volatile uint8_t *)(grx+t)",
+        "const volatile uint8_t *src_ptr=(const volatile uint8_t *)p",
+        "volatile uint8_t *dst_ptr=(volatile uint8_t *)(gtx+h)",
+        "for(uint32_t i=0;i<a;i++)dst_ptr[i]=src_ptr[i]",
         "VEUX GLINK: mapped SMEM (write-combine)",
         "VEUX GLINK: sending VERSION",
         "VEUX GLINK: poll loop entered",
         "ml_io_map_wcomb(SMEM_PA,SMEM_SIZE)")) and
         "*(const uint32_t*)p" not in phase4_text and
+        (lambda line: "memcpy(" not in line and "for(uint32_t i=0;i<a;i++)dst_ptr[i]=src_ptr[i]" in line)(phase4_text.split("static void peek(", 1)[1].splitlines()[0]) and
+        (lambda line: "memcpy(" not in line and "for(uint32_t i=0;i<a;i++)dst_ptr[i]=src_ptr[i]" in line)(phase4_text.split("static uint32_t put(", 1)[1].splitlines()[0]) and
         (lambda line: line.find("if(!gd||!gtx||!grx)") < line.find("panic(\"GLINK SMEM alloc failed\")") < line.find("gd[1]=gd[2]=0"))(
             phase4_text.split("void veux_glink_init(void){", 1)[1].splitlines()[0]),
     "pas_metadata_uses_contiguous_standard_ram": all(x in phase4_text for x in (
@@ -348,6 +356,8 @@ phase4_binary = {
         b"VEUX GLINK: desc va=0x%llx tx_va=0x%llx rx_va=0x%llx\n",
         b"VEUX GLINK: mapped SMEM\n",
         b"VEUX GLINK: mapped SMEM (write-combine)\n",
+        b"VEUX GLINK: copying RX data\n",
+        b"VEUX QRTR: processing packet\n",
         b"VEUX GLINK: sending VERSION\n",
         b"VEUX GLINK: poll loop entered\n")),
 }
@@ -369,6 +379,8 @@ modem_needles = {
     "glink_send_version": b"VEUX GLINK: sending VERSION",
     "glink_poll_loop_entered": b"VEUX GLINK: poll loop entered",
     "glink_smem_map_attr": b"VEUX GLINK: mapped SMEM",
+    "glink_copy_rx_data": b"VEUX GLINK: copying RX data",
+    "qrtr_processing_packet": b"VEUX QRTR: processing packet",
     "glink_open_ack_ipcrtr": b"VEUX GLINK: OPEN_ACK IPCRTR",
     "qrtr_hello": b"VEUX QRTR: HELLO",
     "qrtr_wlfw_server": b"VEUX QRTR: NEW_SERVER 0x45",

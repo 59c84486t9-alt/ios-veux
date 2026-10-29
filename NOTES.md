@@ -5508,3 +5508,30 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `adb devices -l` both returned empty. Per the user's instruction, stop further
   post-reboot checks; the three-minute check and on-screen confirmation were
   skipped. The host has no camera input, so no screen photo is available.
+
+## >>> UPDATE 2026-10-30 (Phase 4.20 volatile GLINK FIFO copy; CI pending) <<<
+
+- The user reports the same panic PC `0xfffffe0007b494a4` as the earlier run,
+  after SMP2P READY, GLINK polling, and before QRTR packet parsing. The register
+  dump reportedly shows a 1536-byte transfer from the SMEM FIFO. The prior QRTR
+  discriminator fix therefore did not address this reported fault.
+- In `0156-veux-modem-glink.patch`, `peek()` (RX FIFO to destination) and
+  `put()` (source to TX FIFO) used `memcpy` on SMEM-backed pointers. Replaced
+  these copies, including circular-wrap copies, with volatile byte loops to
+  prevent wide/vector accesses. `advance()` only updates the aligned descriptor
+  and does not copy FIFO bytes. Added one-shot `VEUX GLINK: copying RX data` and
+  `VEUX QRTR: processing packet` logs. Source and binary manifest gates plus
+  wrapper verification now require these markers and reject `memcpy` inside
+  `peek()`/`put()`.
+- The exact run-409739 kernel SHA is
+  `1d50b3211ced030bfe9dd26b66e0da11a6050e41fb0178033ddab9a1be543983`; the
+  prior wrapper SHA was
+  `047696879a35e45512e22b4be769953cd87dae9f397caea631ba29bce589f2c5`.
+  Attempted REA address resolution at the reported absolute PC against that
+  kernel, but the analysis request was interrupted before returning a symbol.
+  The PC-to-function attribution remains unresolved until a symbolizer result is
+  available. Do not claim it resolved to `memcpy` without evidence.
+- Local repository validation and Python syntax checks pass. Next: commit/push,
+  run CI and the Phase-4 source/binary gates, build/verify a new wrapper, then
+  re-run the authorized `boot_b` checklist before any flash. No flash has been
+  issued for Phase 4.20.

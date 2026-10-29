@@ -119,6 +119,8 @@ if a.variant == "modem-held":
         b"VEUX GLINK: desc va=0x%llx tx_va=0x%llx rx_va=0x%llx\n",
         b"VEUX GLINK: mapped SMEM\n",
         b"VEUX GLINK: mapped SMEM (write-combine)\n",
+        b"VEUX GLINK: copying RX data\n",
+        b"VEUX QRTR: processing packet\n",
         b"VEUX GLINK: sending VERSION\n",
         b"VEUX GLINK: poll loop entered\n",
         b"VEUX GLINK: OPEN_ACK IPCRTR", b"VEUX QRTR: HELLO",
