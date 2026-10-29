@@ -1,3 +1,22 @@
+## >>> UPDATE 2026-10-29 (Phase 5.5 fixed wrapper flashed to boot_b) <<<
+
+- Under the user's explicit slot override, the full remaining pre-flash checks
+  passed on Fastboot serial `4078cac030c8`: product `veux`, unlocked `yes`,
+  `boot_b` size `0x8000000`, and wrapper manifest/hash match. Current-slot was
+  `b` and was accepted for this iteration. Before writing, the target and
+  exact bytes were recorded: `boot_b`, 17,281,024 bytes, wrapper SHA-256
+  `6a4f94457633e0e0e0f2833b6ef5afeadd422d2c89f10e8cdd0dcfb70e821101`.
+- `fastboot -s 4078cac030c8 flash boot_b
+  /home/nyra/veux-artifacts/40858907367/modem-held.img` returned `Sending
+  'boot_b' (16876 KB) OKAY`, `Writing 'boot_b' OKAY`, `Finished`.
+- `fastboot -s 4078cac030c8 set_active b` returned `Setting current slot to
+  'b' OKAY`; `fastboot -s 4078cac030c8 reboot` returned `Rebooting OKAY`.
+  Fifteen seconds later `fastboot devices` and `adb devices -l` returned no
+  devices. No partition except `boot_b` was written.
+- The wrapper uses build/CI ID `40858907367` and the modem-held diagnostic boot
+  args. Waiting for the user's screen photo to assess the pool self-test, PAS,
+  SMP2P, and WLFW CAP output before any further action.
+
 ## >>> UPDATE 2026-10-29 (Phase 5.5 pre-flash checklist passed under slot override) <<<
 
 - User override for this iteration allows either current slot; the previous
