@@ -5433,3 +5433,25 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Authorized write: `boot_b` only, exactly 17,281,024 bytes, SHA-256 `18cdc7aadbffaaa4b488d8599e1ca320f35d3b54728ed36fbb0412bec5c5c19c`. No other partition is in scope. Commit this checklist before flashing.
 - Flash completed after the checklist: `fastboot flash boot_b /home/nyra/veux-artifacts/40969777982/xnu-kernel/modem-held.img` returned Sending OKAY / Writing OKAY / Finished in 0.543s; `fastboot set_active b` returned OKAY; `fastboot reboot` returned OKAY. Only `boot_b` was written, exactly 17,281,024 bytes with SHA-256 `18cdc7aadbffaaa4b488d8599e1ca320f35d3b54728ed36fbb0412bec5c5c19c`. Starting requested three-minute observation; host cannot photograph the phone display.
 - Three-minute post-flash check completed. `fastboot devices` and `adb devices -l` were empty at one, two, and three minutes. The host has no camera access, so it cannot confirm whether `VEUX GLINK: polling loop entered` appeared or capture a screen image. Since the phone is no longer connected over USB, the host cannot issue the requested hard-reset/recovery transition; screen/log confirmation is pending the user.
+
+## >>> UPDATE 2026-10-30 (Phase 4.18 GLINK unaligned QRTR access; CI pending) <<<
+
+- User's latest photo/log report shows PAS `auth_and_reset` completing, followed
+  by an unaligned data abort (ESR `0x96000061`, FAR ending `0x94a`) during GLINK
+  startup. This is consistent with the QRTR v1 discriminator's direct
+  `*(const uint32_t *)p` read when the packet begins at a non-4-byte offset;
+  the exact faulting instruction is not yet confirmed from a symbolized trace.
+- Existing VEUX SMEM is already mapped with
+  `ml_io_map_wcomb(SMEM_PA, SMEM_SIZE)`; it is not mapped with Device-memory
+  `ml_io_map()`. Phase 4.18 adds an explicit `VEUX GLINK: mapped SMEM` log
+  immediately after successful mapping and retains an attribute-specific
+  `VEUX GLINK: mapped SMEM (write-combine)` check in GLINK init.
+- Replaced the QRTR v1 direct 32-bit packet dereference with a `memcpy`-based
+  unaligned-safe scalar loader. Changed the poll-loop marker to the requested
+  exact `VEUX GLINK: poll loop entered` string. Phase-4 source and binary gates,
+  wrapper verification, and modem milestone marker names are updated to require
+  the new diagnostics and reject the old direct cast.
+- No build or device write has been performed yet. Next: validate repository and
+  patch syntax, commit/push, dispatch CI, verify the kernel and modem-held
+  wrapper, then re-check all authorized `boot_b` flash gates. Do not flash if CI
+  or any pre-flash checklist item fails.
