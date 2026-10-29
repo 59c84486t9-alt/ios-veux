@@ -11,12 +11,29 @@ ap.add_argument("--patch-status", required=True, type=Path)
 ap.add_argument("--build-id", required=True)
 ap.add_argument("--boot-args", required=True, help="full normal-variant boot args")
 ap.add_argument("--held-boot-args", required=True, help="full held-probe boot args")
+ap.add_argument("--modem-held-boot-args", required=True, help="exact modem diagnostic held boot args")
 ap.add_argument("--source-root", required=True, type=Path)
 ap.add_argument("--output", required=True, type=Path)
 a = ap.parse_args()
 
 boot_args = set(a.boot_args.split())
 held_boot_args = set(a.held_boot_args.split())
+modem_held_boot_args = a.modem_held_boot_args.split()
+expected_modem_held_boot_args = (
+    "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress "
+    "rd=ufsroot0 modem=1 modem_watch=180 veuxfbconsole=1"
+)
+if a.modem_held_boot_args != expected_modem_held_boot_args:
+    raise SystemExit("modem-held boot args must match the exact Phase-1 string")
+modem_held_set = set(modem_held_boot_args)
+if not {"modem=1", "modem_watch=180", "veuxfbconsole=1"}.issubset(modem_held_set):
+    raise SystemExit("modem-held boot args require modem=1, modem_watch=180, and veuxfbconsole=1")
+modem_forbidden_boot_args = {
+    "rootrw", "ufsrw", "veuxlog", "veux_gui", "veuxsandbox", "veuxiolog",
+    "veux_spawn_driver", "veuxgpipreflight", "veuxtouchprobe",
+}
+if any(arg.split("=", 1)[0] in modem_forbidden_boot_args for arg in modem_held_boot_args):
+    raise SystemExit("modem-held boot args contain a forbidden write, GUI, or probe argument")
 if not {"rootrw=1", "ufsrw=1", "veuxvariant=normal"}.issubset(boot_args):
     raise SystemExit("normal variant requires the explicit RW pair and veuxvariant=normal")
 if {"veuxtouchprobe=1", "veuxtouchprobehold=1", "veuxfb=1", "veuxfbconsole=1", "veuxvariant=held"} - held_boot_args:
@@ -140,6 +157,56 @@ needles = {
     "gpi_summary_thread_started": b"VEUX GPI SUMMARY THREAD: started; three delayed read-only reports",
 }
 checks = {name: needle in kernel for name, needle in needles.items()}
+modem_needles = {
+    "pas_parameters": b"VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3",
+    "ipcc_parameters": b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
+    "smp2p_ready": b"VEUX MODEM: SMP2P READY",
+    "glink_version_ack": b"VEUX GLINK: VERSION_ACK",
+    "glink_open_ack_ipcrtr": b"VEUX GLINK: OPEN_ACK IPCRTR",
+    "qrtr_hello": b"VEUX QRTR: HELLO",
+    "qrtr_wlfw_server": b"VEUX QRTR: NEW_SERVER 0x45",
+    "wlfw_ind_register": b"VEUX WLFW: ind_register ok",
+    "wlfw_msa_info": b"VEUX WLFW: msa_info ok",
+    "wlfw_msa_ready": b"VEUX WLFW: msa_ready ok",
+    "wlfw_cap": b"VEUX WLFW: cap ok",
+    "wlfw_chip_id": b"VEUX WLFW: chip_id",
+    "modem_hold": b"VEUX MODEM HOLD: wfe",
+}
+missing_modem = [name for name, marker in modem_needles.items() if marker not in kernel]
+if missing_modem:
+    raise SystemExit("missing modem markers: " + ", ".join(missing_modem))
+
+forbidden_modem_markers = (
+    b"VEUX WLFW: host_cap sent",
+    b"VEUX WLFW: bdf",
+    b"VEUX WLFW: cal_report",
+    b"VEUX WLFW: wlan_cfg",
+    b"VEUX WLFW: wlan_mode",
+    b"VEUX CE:",
+    b"VEUX HTC:",
+    b"VEUX WMI:",
+    b"VEUX SCAN:",
+)
+present_forbidden_modem = [marker.decode("ascii") for marker in forbidden_modem_markers if marker in kernel]
+if present_forbidden_modem:
+    raise SystemExit("forbidden modem/WLAN markers in kernel: " + ", ".join(present_forbidden_modem))
+
+modem_sources = [p for p in a.source_root.rglob("*") if p.is_file() and p.suffix in {".c", ".cc", ".cpp", ".h"}]
+modem_source_text = "\n".join(p.read_text(errors="replace") for p in modem_sources)
+missing_modem_source = [name for name, marker in modem_needles.items()
+                        if marker.decode("ascii") not in modem_source_text]
+if missing_modem_source:
+    raise SystemExit("missing modem source markers: " + ", ".join(missing_modem_source))
+forbidden_modem_source = (
+    "VEUX WLFW: host_cap sent", "VEUX WLFW: bdf", "VEUX WLFW: cal_report",
+    "VEUX WLFW: wlan_cfg", "VEUX WLFW: wlan_mode", "VEUX CE:", "VEUX HTC:",
+    "VEUX WMI:", "VEUX SCAN:",
+)
+present_forbidden_source = [marker for marker in forbidden_modem_source if marker in modem_source_text]
+if present_forbidden_source:
+    raise SystemExit("forbidden modem/WLAN source markers: " + ", ".join(present_forbidden_source))
+
+checks.update({f"modem_{name}": marker in kernel for name, marker in modem_needles.items()})
 source_checks = {}
 vfs = (a.source_root / "bsd/vfs/vfs_subr.c").read_text()
 ufs = (a.source_root / "bsd/dev/sweet_ufs.c").read_text()
@@ -440,9 +507,11 @@ manifest = {
     "variants": {
         "normal": {"boot_args": a.boot_args, "root_mode_requested": "rw"},
         "held": {"boot_args": a.held_boot_args, "root_mode_requested": "ro", "probe": "read-only CFG reads at PA 0x503000 and 0x513000; WFE before root mount"},
+        "modem-held": {"boot_args": a.modem_held_boot_args, "root_mode_requested": "ro", "probe": "read-only modem PAS/GLINK/QRTR/WLFW CAP diagnostic; WFE before root mount"},
     },
     "boot_args": a.boot_args,
     "held_boot_args": a.held_boot_args,
+    "modem_held_boot_args": a.modem_held_boot_args,
     "root_mode_requested": "rw",
     "wrapper": "assembled on host with the phone DTB; see adjacent wrapper manifest",
 }

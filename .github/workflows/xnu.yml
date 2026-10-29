@@ -21,6 +21,7 @@ on:
       - "xnu/patches/**"
       - "tools/kernel-manifest.py"
       - "tools/verify-veux-wrapper.py"
+      - "shim/build.sh"
       - "tools/strictify-dxb.py"
       - ".github/workflows/xnu.yml"
 
@@ -35,10 +36,10 @@ env:
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
   MACHINE_CONFIG: ${{ inputs.machine_config || 'VEUX' }}
   VEUX_BUILD_ID: ${{ github.run_id }}
-  # Two runtime variants share one kernel. The HELD image omits both RW flags,
-  # persistent logging, all active touch flags, and normal GUI startup.
+  # Runtime variants share one kernel. Diagnostic-held variants omit UFS writes.
   VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 rootrw=1 ufsrw=1 veuxsandbox=1 veuxiolog=backboardd,SpringBoard veuxgpipreflight=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128 veux_spawn_driver=1 veux_gui=1 veux_gui_noconsole=1 veuxvariant=normal"
   VEUX_HELD_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 veuxfb=1 veuxfbconsole=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128 veuxtouchprobe=1 veuxtouchprobehold=1 veuxvariant=held"
+  VEUX_MODEM_HELD_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 modem=1 modem_watch=180 veuxfbconsole=1"
 
 jobs:
   build:
@@ -67,6 +68,20 @@ jobs:
           for forbidden in rootrw=1 ufsrw=1 veuxlog=1 veuxtouchprobeactive=1; do
             case " $VEUX_HELD_BOOT_ARGS " in
               *" $forbidden "*) echo "unsafe held boot argument: $forbidden" >&2; exit 1 ;;
+              *) ;;
+            esac
+          done
+          expected_modem_held='debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 modem=1 modem_watch=180 veuxfbconsole=1'
+          test "$VEUX_MODEM_HELD_BOOT_ARGS" = "$expected_modem_held"
+          for required in modem=1 modem_watch=180 veuxfbconsole=1; do
+            case " $VEUX_MODEM_HELD_BOOT_ARGS " in
+              *" $required "*) ;;
+              *) echo "modem-held boot argument missing: $required" >&2; exit 1 ;;
+            esac
+          done
+          for forbidden in rootrw ufsrw veuxlog veux_gui veuxsandbox veuxiolog veux_spawn_driver veuxgpipreflight veuxtouchprobe; do
+            case " $VEUX_MODEM_HELD_BOOT_ARGS " in
+              *" $forbidden"*) echo "unsafe modem-held boot argument: $forbidden" >&2; exit 1 ;;
               *) ;;
             esac
           done
@@ -393,6 +408,7 @@ jobs:
             --build-id "$VEUX_BUILD_ID" \
             --boot-args "$VEUX_BOOT_ARGS" \
             --held-boot-args "$VEUX_HELD_BOOT_ARGS" \
+            --modem-held-boot-args "$VEUX_MODEM_HELD_BOOT_ARGS" \
             --source-root dxb/xnu \
             --output out/manifest.json
 
@@ -412,7 +428,7 @@ jobs:
           ls -la buildtree.tgz
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
           name: xnu-buildtree
           path: buildtree.tgz
@@ -440,7 +456,7 @@ jobs:
           (cd out && shasum -a 256 kernel.* > SHA256SUMS) || true
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: success()
         with:
           name: xnu-kernel
           path: out/

@@ -31,6 +31,11 @@ while [ $# -gt 0 ]; do
 		*) [ -z "$payload" ] || { echo "only one payload may be specified" >&2; exit 2; }; payload=$1; shift ;;
 	esac
 done
+if [ "$variant" = modem-held ]; then
+	expected='debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 modem=1 modem_watch=180 veuxfbconsole=1'
+	[ "$boot_args" = "$expected" ] || { echo "modem-held wrapper requires the exact Phase-1 boot args" >&2; exit 2; }
+	[ -n "$variants_manifest" ] || { echo "modem-held wrapper requires the three-variant kernel manifest" >&2; exit 2; }
+fi
 CFLAGS="-O2 -ffreestanding -nostdlib -fno-pic -mgeneral-regs-only -mstrict-align -fno-stack-protector -Wall -Wextra"
 [ "$mode" != veux ] || CFLAGS="$CFLAGS -DDEVICE_VEUX"
 mkdir -p out

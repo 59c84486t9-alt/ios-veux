@@ -52,7 +52,7 @@ ap.add_argument("--run-id", required=True)
 ap.add_argument("--patch-status", required=True, type=Path)
 ap.add_argument("--manifest", type=Path)
 ap.add_argument("--variants-manifest", type=Path, help="kernel manifest containing both full boot-arg strings")
-ap.add_argument("--variant", choices=("normal", "held"))
+ap.add_argument("--variant", choices=("normal", "held", "modem-held"))
 a = ap.parse_args()
 if a.build_id != a.run_id:
     raise SystemExit("build ID must equal the CI run ID")
@@ -74,12 +74,22 @@ _virt, _entry, adt_off, adt_size, _kend, _phys, _mem = struct.unpack_from("<7Q",
 payload_args = embedded_payload[0x48:0x48 + 608].split(b"\0", 1)[0].decode("utf-8", "replace")
 if payload_args != a.boot_args:
     raise SystemExit(f"payload boot args mismatch: expected {a.boot_args!r}, got {payload_args!r}")
+if a.variant == "modem-held":
+    expected = "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 modem=1 modem_watch=180 veuxfbconsole=1"
+    if payload_args != expected:
+        raise SystemExit("modem-held wrapper boot args do not match the exact Phase-1 string")
+    forbidden = {"rootrw", "ufsrw", "veuxlog", "veux_gui", "veuxsandbox", "veuxiolog",
+                 "veux_spawn_driver", "veuxgpipreflight", "veuxtouchprobe"}
+    if any(arg.split("=", 1)[0] in forbidden for arg in payload_args.split()):
+        raise SystemExit("modem-held wrapper contains a forbidden boot argument")
 variant_manifest = None
 if a.variants_manifest:
     variant_manifest = json.loads(a.variants_manifest.read_text())
     variants = variant_manifest.get("variants", {})
-    if set(variants) != {"normal", "held"}:
-        raise SystemExit("variants manifest must contain both normal and held entries")
+    if set(variants) not in ({"normal", "held"}, {"normal", "held", "modem-held"}):
+        raise SystemExit("variants manifest must contain normal, held, and optional modem-held entries")
+    if a.variant == "modem-held" and set(variants) != {"normal", "held", "modem-held"}:
+        raise SystemExit("modem-held wrapper requires the three-variant kernel manifest")
     if not a.variant:
         raise SystemExit("--variant is required with --variants-manifest")
     if variants[a.variant].get("boot_args") != payload_args:
@@ -95,6 +105,28 @@ if rebuilt != payload:
 build_marker = f"VEUX BUILD: ID={a.build_id}".encode()
 if build_marker not in kernel:
     raise SystemExit("CI kernel lacks the expected screen/ring build ID")
+if a.variant == "modem-held":
+    required = (
+        b"VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3",
+        b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
+        b"VEUX MODEM: SMP2P READY", b"VEUX GLINK: VERSION_ACK",
+        b"VEUX GLINK: OPEN_ACK IPCRTR", b"VEUX QRTR: HELLO",
+        b"VEUX QRTR: NEW_SERVER 0x45", b"VEUX WLFW: ind_register ok",
+        b"VEUX WLFW: msa_info ok", b"VEUX WLFW: msa_ready ok",
+        b"VEUX WLFW: cap ok", b"VEUX WLFW: chip_id",
+        b"VEUX MODEM HOLD: wfe",
+    )
+    missing = [marker.decode("ascii") for marker in required if marker not in kernel]
+    if missing:
+        raise SystemExit("CI kernel lacks modem markers: " + ", ".join(missing))
+    forbidden_markers = (
+        b"VEUX WLFW: host_cap sent", b"VEUX WLFW: bdf", b"VEUX WLFW: cal_report",
+        b"VEUX WLFW: wlan_cfg", b"VEUX WLFW: wlan_mode", b"VEUX CE:",
+        b"VEUX HTC:", b"VEUX WMI:", b"VEUX SCAN:",
+    )
+    present = [marker.decode("ascii") for marker in forbidden_markers if marker in kernel]
+    if present:
+        raise SystemExit("CI kernel contains forbidden modem markers: " + ", ".join(present))
 status = a.patch_status.read_text().splitlines()
 manifest_path = a.manifest or a.image.with_suffix(a.image.suffix + ".manifest.json")
 manifest = {
