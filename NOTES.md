@@ -34,6 +34,12 @@
   Immediately before flash, the authorized write is `boot_b` only, exactly
   17,281,024 bytes from `modem-held.img`, SHA-256
   `86847f28f6207ace9a16a592d769b7740a74f5e843e060a087aeac6ebfec39b1`.
+- Flash results: `fastboot flash boot_b ...` reported `Sending 'boot_b'
+  (16876 KB) OKAY`, `Writing 'boot_b' OKAY`; `fastboot set_active b` reported
+  `Setting current slot to 'b' OKAY`; `fastboot reboot` reported `Rebooting
+  OKAY`. Fifteen seconds later, both `fastboot devices` and `adb devices`
+  returned no device entries. No recovery transition or log pull was attempted;
+  the phone is left for the user's physical screen observation.
 
 ## >>> UPDATE 2026-10-29 (Adrastea modem/WLAN gate follow-up) <<<
 
