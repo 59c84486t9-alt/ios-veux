@@ -5002,3 +5002,39 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - No modem patches, IPCC driver, pool selection, wrapper, or device write was
   made. The modem-held variant appears once; the patch queue remains 0001–0151.
   Stop at Gate 1 as requested before Phase 2.
+
+### VEUX Qualcomm IPCC Phase 2 — 2026-10-29
+
+- Added patch `0152-veux-ipcc.patch` in commit `3277144` and Phase 2 manifest/
+  workflow gates in `84a3569`. The patch queue now ends at 0152, with no
+  duplicate modem-held variant or duplicate patch number. The source is
+  `osfmk/arm64/veux_ipcc.c`; private initialization is called by
+  `VeuxPlatformExpert::start()` after the base start succeeds and before
+  `registerService()`.
+- The driver exposes `veux_ipcc_signal(u8-equivalent, u16-equivalent)` and
+  `veux_ipcc_poll(...)`, uses APSS=8/AOP=0/MPSS=2 and SMP2P=2/GLINK_QMP=0,
+  maps PA `0x00208000`, and has no IRQ/GIC registration. Qualcomm's local
+  downstream header and upstream `qcom-ipcc.c` pack client in bits 31:16 and
+  signal in bits 15:0; the implementation follows that source order. Init
+  logs raw `RECV_ID` via the read-only self-test and does not signal, poll, or
+  write `RECV_SIGNAL_CLEAR`.
+- CI run `40807662052` on commit `84a3569e1ec0a68a96db6a3d986ef6e4fc55afa2`
+  built successfully. The full milestone manifest intentionally failed with
+  exactly these 12 missing modem markers: `pas_parameters`, `smp2p_ready`,
+  `glink_version_ack`, `glink_open_ack_ipcrtr`, `qrtr_hello`,
+  `qrtr_wlfw_server`, `wlfw_ind_register`, `wlfw_msa_info`,
+  `wlfw_msa_ready`, `wlfw_cap`, `wlfw_chip_id`, `modem_hold`. The dedicated
+  Phase 2 IPCC sub-gate passed all source assertions and the binary-marker /
+  read-only-self-test check. Manifest outputs were `out/manifest.json` and
+  `out/ipcc-subgate-manifest.json` in the CI workspace; the CI log contains
+  the sub-gate report.
+- Uploaded artifact `xnu-kernel` contains
+  `kernel.development.veux`, whose SHA-256 is
+  `302fe390792a2a0ca2e21aa157f0d7593649d6d6743e8cb4a23b40f372361f89`.
+  `patch-status.txt` records `0152-veux-ipcc.patch APPLIED`; it has no
+  allowlisted skip. Four pre-existing unrelated patches remain explicitly
+  allowlisted skips. The compiled image contains both `VEUX IPCC:` and the
+  exact `VEUX IPCC: selftest raw_recv_id=0x%08x` format string. No
+  `veux_ipcc.c` warning appeared in the CI build log.
+- No wrapper was built and no device/partition write was made. Stop after
+  Gate 2; do not start Phase 3 until requested.
