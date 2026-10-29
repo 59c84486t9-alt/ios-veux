@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep the generated VEUX GIC node identical to the known-good GUI ADT."""
+"""Check the VEUX GIC properties against XNU lookup and Blair physical addresses."""
 import struct
 import sys
 from pathlib import Path
@@ -24,11 +24,12 @@ assert len(gic_nodes) == 1, "XNU pe_init_fiq() requires /arm-io/gic"
 gic = gic_nodes[0]
 props = dict((key, value) for key, _flags, value in gic.props)
 assert props.get("compatible") == b"arm,gic-v3\0"
-assert props.get("interrupt-controller") == b"", "match the known-good boolean property"
+assert props.get("interrupt-controller") == b"master\0", \
+    "pe_arm_map_interrupt_controller() searches for interrupt-controller=master"
 assert struct.unpack("<QQQQ", props["reg"]) == (0x0e200000, 0x10000, 0x0e240000, 0x100000), \
     "SOC_BASE 0x01000000 resolves these to VEUX GICD/R at 0x0f200000/0x0f240000"
 assert set(props) == {"name", "AAPL,phandle", "compatible", "interrupt-controller",
                        "virtual-timer-intid", "reg"}, \
-    "do not add properties that differ from the known-good GUI GIC node"
+    "keep the minimal GIC properties required by XNU lookup"
 assert int.from_bytes(props["virtual-timer-intid"], "little") == 19
-print("VEUX GIC node matches working GUI ADT: /arm-io/gic, soc_phys=0x01000000, GICD/R=0x0f200000/0x0f240000")
+print("VEUX GIC ADT matches XNU lookup: interrupt-controller=master, soc_phys=0x01000000, GICD/R=0x0f200000/0x0f240000")

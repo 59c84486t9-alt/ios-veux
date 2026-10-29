@@ -239,6 +239,7 @@ phase4_patch_names = (
     "0157-veux-modem-pdmapper.patch",
     "0158-veux-modem-wlfw.patch",
     "0159-veux-dt-crc-diagnostics.patch",
+    "0160-veux-ipcc-clock-note.patch",
 )
 phase4_patch_texts = {}
 phase4_status = {}
@@ -270,7 +271,7 @@ phase4_forbidden = {
         r"\bscan_\w*")),
 }
 phase4_sources = {
-    "six_unique_patch_files": all(phase4_patch_texts.values()),
+    "seven_unique_patch_files": all(phase4_patch_texts.values()),
     "patches_applied_without_skip": all(phase4_status.values()),
     "firmware_table_116_rows": phase4_patch_texts["0155-veux-modem-firmware.patch"].count("{ \"") == 116,
     "pas_and_modem_worker_hold": "veux_modem_start(void)" in phase4_text and "veux_modem_hold(void)" in phase4_text,
@@ -279,6 +280,7 @@ phase4_sources = {
         "veux_glink_poll", "veux_pdmap_rx", "veux_wlfw_rx", "veux_scm_assign")),
     "pas_allocates_pool_buffers_and_uses_va_accessor": "veux_modem_pool_alloc(ms,&mpa)" in phase4_text.replace(" ", "") and "veux_modem_pool_va(mpa,ms)" in phase4_text.replace(" ", ""),
     "forbidden_apcs_host_cap_bdf_wlan_paths_absent": not any(phase4_forbidden.values()),
+    "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
 }
 if not all(phase4_sources.values()):
     raise SystemExit("VEUX Phase-4 source assertions failed: " + repr(phase4_sources) + " forbidden=" + repr(phase4_forbidden))

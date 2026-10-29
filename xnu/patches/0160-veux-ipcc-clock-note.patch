@@ -1,0 +1,11 @@
+From 0000000000000000000000000000000000000010 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Document verified VEUX IPCC clock state
+
+diff --git a/osfmk/arm64/veux_ipcc.c b/osfmk/arm64/veux_ipcc.c
+--- a/osfmk/arm64/veux_ipcc.c
++++ b/osfmk/arm64/veux_ipcc.c
+@@ -132,0 +133,3 @@
++	/* Blair's qcom,ipcc@208000 has no clocks/clock-names property, and
++	 * gcc-blair has no IPCC clock ID or branch. Do not guess a GCC write here:
++	 * RECV_ID=0xffffffff alone cannot distinguish a clock, access, or mapping issue. */

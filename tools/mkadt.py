@@ -181,7 +181,8 @@ def build(seed=None, qemu=False, highmem=False, veux=False):
     gic = node('gic', [
         ph(),
         ('compatible', cstr('arm,gic-v3')),
-        ('interrupt-controller', b''),
+        # pe_arm_map_interrupt_controller() queries this ADT property for value "master".
+        ('interrupt-controller', cstr('master')),
         ('virtual-timer-intid', u32(QEMU_VTIMER_INTID if qemu else VTIMER_INTID)),
         # XNU pe_init_fiq() looks up /arm-io/gic and adds SOC_BASE to reg.
         ('reg', u64(gicd - SOC_BASE, GICD_SIZE, gicr - SOC_BASE, GICR_SIZE)),
