@@ -5851,6 +5851,10 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - `tools/validate-repo.py`, Python syntax checks, and `git diff --check` pass.
   CI, wrapper creation, and device write are pending. Do not write until CI and
   the full `boot_b` preflash checklist pass.
+- CI run `41059808824` stopped at patch application: `0159` still matched the
+  prior `load_modem()` call and did not apply over the new immediate-start log.
+  Updated `0159` to retain that log and place its before/after CRC diagnostics
+  around the call. No kernel artifact was accepted and no device write occurred.
 
 ## >>> UPDATE 2026-10-30 (Phase 4.26 green CI; preflash checklist) <<<
 
