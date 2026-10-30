@@ -5779,3 +5779,28 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   instructions and reject the old source loops. `py_compile`,
   `tools/validate-repo.py`, and `git diff --check` pass. CI, wrapper, and flash
   are pending.
+
+## >>> UPDATE 2026-10-30 (Phase 4.25 green CI; preflash checklist) <<<
+
+- CI run `41047323635` passed on commit `e6a7c0ff9d639f178c5d2714b34c062bb1fd22f2`.
+  Build, kernel feature manifest, and Phase 2, 3, and 4 sub-gates passed.
+  `0154-veux-modem-pas.patch`, `0155-veux-modem-firmware.patch`, and
+  `0162-veux-ufs-multilun.patch` each report `APPLIED`.
+- Wrapper `/home/nyra/veux-artifacts/41047323635/xnu-kernel/modem-held.img`
+  passed `verify-veux-wrapper.py --variant modem-held`: 30/30 modem markers,
+  forbidden-marker checks, exact modem-held boot args, and payload
+  reconstruction passed. Kernel SHA-256:
+  `7c9183814fa7725c78b620c6e2a61242b5c057fe8e9b8a0e033a1db95944527b`;
+  DTB SHA-256:
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`;
+  wrapper SHA-256:
+  `92a41c94805730c70852fe8ddd8e10c701a46ed2e73eb8e04d956c6e73700d2b`.
+  Wrapper size is exactly 17,281,024 bytes. Verified manifest:
+  `/home/nyra/veux-artifacts/41047323635/xnu-kernel/phase4-manifest.json`.
+- Preflash checklist immediately before write: `fastboot devices` shows serial
+  `4078cac030c8`; `product: veux`; `current-slot: b` (accepted for this
+  iteration under the user's override); `unlocked: yes`;
+  `partition-size:boot_b: 0x8000000` (134,217,728 bytes). The wrapper is smaller
+  than `boot_b`. Checklist passed. Planned write is only `boot_b`, exactly
+  17,281,024 bytes from the verified wrapper with SHA-256 above. No write has
+  occurred at the time of this entry. No ADB command was run.
