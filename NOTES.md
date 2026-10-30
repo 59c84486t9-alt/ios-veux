@@ -5597,7 +5597,9 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `Writing 'boot_b' OKAY`, `Finished`; `fastboot set_active b` returned
   `Setting current slot to 'b' OKAY`; `fastboot reboot` returned `Rebooting
   OKAY`, `Finished`. No other partition was written.
-- Three-minute observation requested. Host camera access is unavailable; check
-  whether the phone returns on ADB for a possible screen capture. If the phone
-  stays in the kernel WFE hold without USB, screen confirmation and return to
-  recovery require the user to handle it physically.
+- Three-minute observation completed. At one, two, and three minutes,
+  `fastboot devices` and `adb devices -l` were both empty. No ADB screenshot
+  could be captured and this host has no camera input. The device did not return
+  to a host-visible bootloader/recovery interface, so a host-side hard reset or
+  recovery command could not be issued; the user must hard reset and return it
+  to recovery physically, then provide a screen photo to confirm the logs.
