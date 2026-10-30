@@ -5542,3 +5542,32 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   run CI and the Phase-4 source/binary gates, build/verify a new wrapper, then
   re-run the authorized `boot_b` checklist before any flash. No flash has been
   issued for Phase 4.20.
+
+## >>> UPDATE 2026-10-30 (Phase 4.20 CI and wrapper verified; pre-flash pending) <<<
+
+- The exact run-409739 Mach-O symbol table maps reported PC
+  `0xfffffe0007b494a4` to `_bzero`, at `+0x44` from `_bzero` entry
+  `0xfffffe0007b49460` and before `_memset` at `0xfffffe0007b494e0`. REA/Ghidra
+  import timed out at its 330-second startup deadline; the local Mach-O symbol
+  range is sufficient to identify the function, but no source line/caller was
+  obtained. The panic's reported `x2=0x600` is consistent with a 0x600-byte
+  zeroing operation but is not independent caller proof.
+- Updated `0154` so new SMEM allocations use volatile byte stores instead of
+  `bzero(v,n)`. Updated `0156` so GLINK `peek()`/`put()` use volatile byte
+  accesses instead of `memcpy` on RX/TX FIFO mappings, including ring wrap.
+  Added `VEUX GLINK: zeroing SMEM item=...`, `VEUX GLINK: copying RX data`, and
+  `VEUX QRTR: processing packet` diagnostics. Source gates require the byte
+  loops and reject `bzero(v,n)` and `memcpy` inside `peek()`/`put()`.
+- CI run `40977083696` is green: XNU build, host diagnostic bounds, Phase 2,
+  Phase 3, Phase 4 source/binary assertions, artifact package and upload passed.
+  Patches `0152`–`0162` are all `APPLIED`; none skipped. Kernel SHA-256:
+  `f4b5ffe661469402fa9d13f39cbc3e0ace79e3f421b49aae1559500317f9fc12`.
+- Built and verified
+  `/home/nyra/veux-artifacts/40977083696/xnu-kernel/modem-held.img` with exact
+  modem-held boot args and known phone DTB. Wrapper SHA-256
+  `787a4b924bca45d298fa45e4c162dbc1fa27aa46115e06c2b7f729b05f33340c`, size
+  17,281,024 bytes; DTB SHA-256
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+  `verify-veux-wrapper.py` passed 30/30 required markers, source absence
+  checks, and byte-for-byte payload reconstruction. Pre-flash device checks
+  have not yet been run; no Phase-4.20 partition write has been made.
