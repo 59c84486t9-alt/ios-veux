@@ -331,11 +331,20 @@ phase4_sources = {
         "volatile uint8_t *zero_ptr=(volatile uint8_t *)(dst+ph[i].filesz)",
         "for(uint32_t k=0;k<(ph[i].memsz-ph[i].filesz);k++)zero_ptr[k]=0")) and
         "bzero(dst+ph[i].filesz" not in phase4_patch_texts["0154-veux-modem-pas.patch"],
-    "ufs_modem_destination_copy_uses_volatile_bytes": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
+    "ufs_modem_destination_copy_uses_volatile_bytes": all(x in phase4_patch_texts["0155-veux-modem-firmware.patch"] for x in (
         "volatile uint8_t *dest = (volatile uint8_t *)((uint8_t *)dst + done)",
-        "for (uint32_t k = 0; k < take; k++) dest[k] = src[k]")) and
+        "for (uint32_t k = 0; k < take; k++) {", "dest[k] = src[k];")) and
+        not any("memcpy((uint8_t *)dst + done" in line for line in
+                phase4_patch_texts["0155-veux-modem-firmware.patch"].splitlines() if line.startswith("+")) and
+        all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
+            "volatile uint8_t *dest = (volatile uint8_t *)((uint8_t *)dst + done)",
+            "for (uint32_t k = 0; k < take; k++) {", "dest[k] = src[k];")) and
         not any("memcpy((uint8_t *)dst + done" in line for line in
                 phase4_patch_texts["0162-veux-ufs-multilun.patch"].splitlines() if line.startswith("+")),
+    "ufs_modem_read_uses_existing_bounce_without_temp_heap": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
+        "BOUNCE_SIZE - skip", "su.dma + DMA_BOUNCE", "ufs_read_blocks(target_first + lba, blocks)")) and
+        not any(re.search(r"\b(?:kalloc_data|kmem_alloc|IOMalloc|IOMallocContiguous)\s*\(", line)
+                for line in phase4_patch_texts["0162-veux-ufs-multilun.patch"].splitlines() if line.startswith("+")),
     "glink_device_fifo_writes_use_volatile_bytes": all(x in phase4_text for x in (
         "static void peek(", "static uint32_t put(",
         "volatile uint8_t *dst_ptr=(volatile uint8_t *)dst",

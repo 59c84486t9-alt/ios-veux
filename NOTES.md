@@ -5681,3 +5681,24 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   issue a host-side hard reset/recovery command; user must hard reset and
   return to recovery physically, then share a photo for the requested log
   confirmation. No other partition was written.
+
+## >>> UPDATE 2026-10-30 (Phase 4.23 source fix; CI pending) <<<
+
+- Symbolized caller address `0xfffffe0007ad42f4` against the exact flashed
+  run-`41002104784` Mach-O kernel (`20994f894bf0c306bc279e27184624c68aa7ae30709f407ae92003fda401a370`):
+  `___kmem_entry_validate_object_panic+0x88`. This is a kmem validation
+  panic helper, not enough by itself to name the original allocation site.
+- Inspected the `0162` read path: it has no temporary `kalloc_data`,
+  `kmem_alloc`, or `IOMalloc` call. It chunks reads by `BOUNCE_SIZE` through
+  the preallocated `su.dma + DMA_BOUNCE`; the UFS driver's separate startup
+  DMA allocation is `DMA_SIZE = 0x104000`. No speculative allocation was
+  removed.
+- Updated `0155`'s `sweet_ufs_read_part()` to copy into `dst` with volatile
+  byte stores. Updated `0162`'s dependent hunk to preserve that loop while
+  adding its LUN selection and restoration. Verified this hunk applies with
+  fuzz disabled against the pre-0162 source adjusted to the 0155 loop.
+  Confirmed `0154` still uses volatile byte stores for segment `.bss` zeroing.
+  Added a Phase-4 source gate for 0155/0162 byte-copy behavior and absence of
+  temporary allocations in the 0162 read patch.
+- `tools/validate-repo.py`, Python syntax validation, `git diff --check`, and
+  strict 0162 patch dry-run pass. CI, wrapper, and flash are pending.
