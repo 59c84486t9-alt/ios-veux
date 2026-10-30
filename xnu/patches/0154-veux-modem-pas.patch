@@ -115,7 +115,7 @@ new file mode 100644
 + void *v=smem_find(item,NULL); if(v)return v; volatile uint32_t *lock=(void *)(tcsr+3*0x1000);
 + for(unsigned i=0;i<100000;i++){*lock=1;barrier();if(*lock==1)break;delay(10);if(i==99999)return NULL;}
 + v=smem_find(item,NULL);uint32_t n=(size+7)&~7U,need=sizeof(struct smem_entry)+n;
-+ if(!v&&part->free_uncached+need<=part->free_cached){struct smem_entry *h=(void *)((uint8_t *)part+part->free_uncached);h->canary=0xa5a5;h->item=item;h->size=n;h->pad_data=n-size;h->pad_hdr=0;h->rsvd=0;v=h+1;bzero(v,n);barrier();part->free_uncached+=need;barrier();}
++ if(!v&&part->free_uncached+need<=part->free_cached){struct smem_entry *h=(void *)((uint8_t *)part+part->free_uncached);h->canary=0xa5a5;h->item=item;h->size=n;h->pad_data=n-size;h->pad_hdr=0;h->rsvd=0;v=h+1;printf("VEUX GLINK: zeroing SMEM item=%u size=0x%x\n",item,n);volatile uint8_t *zero_ptr=(volatile uint8_t *)v;for(uint32_t i=0;i<n;i++)zero_ptr[i]=0;barrier();part->free_uncached+=need;barrier();}
 + *lock=0;barrier();return v;
 +}
 +bool veux_smem_contains(const void *ptr,uint32_t size){

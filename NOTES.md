@@ -5519,18 +5519,25 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `put()` (source to TX FIFO) used `memcpy` on SMEM-backed pointers. Replaced
   these copies, including circular-wrap copies, with volatile byte loops to
   prevent wide/vector accesses. `advance()` only updates the aligned descriptor
-  and does not copy FIFO bytes. Added one-shot `VEUX GLINK: copying RX data` and
-  `VEUX QRTR: processing packet` logs. Source and binary manifest gates plus
-  wrapper verification now require these markers and reject `memcpy` inside
-  `peek()`/`put()`.
+  and does not copy FIFO bytes. Also replaced `bzero(v,n)` in
+  `veux_smem_alloc()` with volatile byte stores, matching the function
+  identified by the exact PC. Added one-shot `VEUX GLINK: copying RX data` and
+  `VEUX QRTR: processing packet` logs plus a new-SMEM zeroing diagnostic. Source
+  and binary gates require these markers, reject `bzero(v,n)`, and ensure
+  `peek()`/`put()` contain no `memcpy`.
 - The exact run-409739 kernel SHA is
-  `1d50b3211ced030bfe9dd26b66e0da11a6050e41fb0178033ddab9a1be543983`; the
-  prior wrapper SHA was
-  `047696879a35e45512e22b4be769953cd87dae9f397caea631ba29bce589f2c5`.
-  Attempted REA address resolution at the reported absolute PC against that
-  kernel, but the analysis request was interrupted before returning a symbol.
-  The PC-to-function attribution remains unresolved until a symbolizer result is
-  available. Do not claim it resolved to `memcpy` without evidence.
+  `1d50b3211ced030bfe9dd26b66e0da11a6050e41fb0178033ddab9a1be543983`; its
+  wrapper SHA was
+  `047696879a35e45512e22b4be769953cd87dae9f397caea631ba29bce589f2c5`. Parsed
+  the Mach-O `LC_SYMTAB` from that exact kernel: `_bzero` / `___bzero` begins at
+  `0xfffffe0007b49460`; the next symbol `_memset` begins at
+  `0xfffffe0007b494e0`. Reported PC `0xfffffe0007b494a4` is therefore inside
+  `_bzero` (offset `+0x44`), not `_memcpy`. No source-line debug information was
+  available from the local kernel artifact. In the patched sources,
+  `veux_smem_alloc()` calls `bzero(v,n)` on newly allocated SMEM, making this a
+  concrete candidate for the wide access to write-combined SMEM; the logged
+  `x2=0x600` is consistent with a 0x600-byte zero operation but does not alone
+  identify the caller.
 - Local repository validation and Python syntax checks pass. Next: commit/push,
   run CI and the Phase-4 source/binary gates, build/verify a new wrapper, then
   re-run the authorized `boot_b` checklist before any flash. No flash has been

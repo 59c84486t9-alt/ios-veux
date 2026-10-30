@@ -285,6 +285,10 @@ phase4_sources = {
     "modem_a_read_only_api": "sweet_ufs_read_part(\"modem_a\"" in phase4_text,
     "glink_qrtr_pdm_wlfw_functions": all(x in phase4_text for x in (
         "veux_glink_poll", "veux_pdmap_rx", "veux_wlfw_rx", "veux_scm_assign")),
+    "smem_allocator_zeroes_with_volatile_bytes": all(x in phase4_text for x in (
+        "VEUX GLINK: zeroing SMEM item=%u size=0x%x",
+        "volatile uint8_t *zero_ptr=(volatile uint8_t *)v",
+        "for(uint32_t i=0;i<n;i++)zero_ptr[i]=0")) and "bzero(v,n)" not in phase4_text,
     "glink_smem_null_range_and_init_diagnostics": all(x in phase4_text for x in (
         "veux_smem_contains(const void *ptr, uint32_t size)",
         "VEUX GLINK: requesting SMEM items 478, 479, 480",
@@ -338,6 +342,7 @@ if not all(phase4_sources.values()):
     raise SystemExit("VEUX Phase-4 source assertions failed: " + repr(phase4_sources) + " forbidden=" + repr(phase4_forbidden))
 print("VEUX MODEM Phase-4 source assertions: PASS " + repr(phase4_sources))
 phase4_binary = {
+    "smem_zeroing_diagnostic": b"VEUX GLINK: zeroing SMEM item=%u size=0x%x\n" in kernel,
     "firmware_marker": b"VEUX MODEM FW:" in kernel,
     "pdmapper_marker": b"VEUX PDMAP:" in kernel,
     "adt_crc_log_format": b"VEUX DT: crc=0x%08x stage=%s\n" in kernel,
@@ -381,6 +386,7 @@ modem_needles = {
     "glink_smem_map_attr": b"VEUX GLINK: mapped SMEM",
     "glink_copy_rx_data": b"VEUX GLINK: copying RX data",
     "qrtr_processing_packet": b"VEUX QRTR: processing packet",
+    "smem_zeroing": b"VEUX GLINK: zeroing SMEM item=%u size=0x%x",
     "glink_open_ack_ipcrtr": b"VEUX GLINK: OPEN_ACK IPCRTR",
     "qrtr_hello": b"VEUX QRTR: HELLO",
     "qrtr_wlfw_server": b"VEUX QRTR: NEW_SERVER 0x45",
