@@ -51,9 +51,12 @@ diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
  #define TCSR_PA 0x00340000ULL
  #define ITEM_OUT 428
  #define ITEM_IN 435
-@@ -92,1 +125,1 @@
+@@ -90,4 +123,4 @@
+  printf("VEUX MODEM PAS: copying mdt metadata\n");memcpy(meta,mdt,hdr);
+  if(hp->offset+(uint64_t)hp->filesz<=(uint64_t)n)memcpy(meta+hdr,mdt+hp->offset,hp->filesz);else{char name[20];snprintf(name,sizeof(name),"modem.b%02u",hash);if(veux_fw_read(name,0,meta+hdr,hp->filesz)!=hp->filesz){IOFreeContiguous(meta,meta_alloc_size);kfree_data(mdt,mdt_alloc_size);return false;}}
 - printf("VEUX MODEM PAS: metadata copied\n");barrier();uint64_t res=0,st=0;printf("VEUX MODEM PAS: calling init_image\n");st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,(uint64_t)meta_pa,0,&res);IOFreeContiguous(meta,meta_alloc_size);meta=NULL;printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
 + printf("VEUX MODEM PAS: metadata copied\n");barrier();veux_dt_crc_log("before_pil_init_image");printf("VEUX MODEM PAS: calling init_image\n");uint64_t res=0,st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,(uint64_t)meta_pa,0,&res);veux_dt_crc_log("after_pil_init_image");IOFreeContiguous(meta,meta_alloc_size);meta=NULL;printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
+  if(reloc){st=smc(SCM_FN(SCM_SVC_PIL,PIL_MEM_SETUP),3,PAS_ID_MODEM,min,(max-min+0xfff)&~0xfffULL,&res);printf("VEUX MODEM PAS: mem_setup ret=%llx res=%llx\n",st,res);if(st||res)goto fail;}
 @@ -100,10 +133,11 @@
  void veux_modem_hold(void){printf("VEUX MODEM HOLD: wfe\n");for(;;)__asm__ volatile("dsb sy; wfe" ::: "memory");}
  static int veux_modem_wait_chan;
