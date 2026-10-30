@@ -203,11 +203,5 @@ new file mode 100644
 +	return (int64_t)len;
 +}
 +#endif
-diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
---- a/osfmk/conf/files.arm64
-+++ b/osfmk/conf/files.arm64
-@@ -49,1 +49,2 @@
- osfmk/arm64/loose_ends.c	standard
-+osfmk/arm64/veux_modem_fw.c	standard
 -- 
 2.49.0
