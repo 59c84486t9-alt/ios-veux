@@ -5662,3 +5662,22 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Planned authorized write: `boot_b` only, exactly 17,281,024 bytes from the
   wrapper above. No write has occurred yet; repeat the device/hash/size checks
   immediately before flashing.
+
+## >>> UPDATE 2026-10-30 (Phase 4.21/4.22 boot_b flashed; 3-minute observation) <<<
+
+- Immediately before writing, wrapper verification passed again (30/30 markers,
+  forbidden markers absent, payload reconstruction matches); Fastboot serial
+  `4078cac030c8` reported product `veux`, current-slot `b`, unlocked `yes`, and
+  `boot_b` size `0x8000000`. Wrapper SHA remained
+  `26859c5c7488fce298ec676b089706ec75294da26ba6c275567cc75bb2e70558`.
+- Wrote only `boot_b`, exactly 17,281,024 bytes from
+  `/home/nyra/veux-artifacts/41002104784/xnu-kernel/modem-held.img`.
+  `fastboot flash boot_b`: `Sending 'boot_b' (16876 KB) OKAY`, `Writing
+  'boot_b' OKAY`, `Finished`. `fastboot set_active b`: `Setting current slot
+  to 'b' OKAY`. `fastboot reboot`: `Rebooting OKAY`, `Finished`.
+- After one, two, and three minutes, both `fastboot devices` and
+  `adb devices -l` were empty. The host has no camera input, so it could not
+  photograph or read the screen. No USB-visible interface was available to
+  issue a host-side hard reset/recovery command; user must hard reset and
+  return to recovery physically, then share a photo for the requested log
+  confirmation. No other partition was written.
