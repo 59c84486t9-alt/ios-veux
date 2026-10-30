@@ -5732,3 +5732,36 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `modem.b26` (38,035,520 bytes). The `modem.bxx` payloads are not available
   as host files in this workspace, so their contents/CRCs cannot be recomputed
   offline; the kernel's full-file CRC path logs each complete read.
+
+## >>> UPDATE 2026-10-30 (Phase 4.24 green build; preflash checklist) <<<
+
+- CI run `41043053743` is the latest green run on `veux-xnu-build` at commit
+  `f4a9d8fee46bcf1288411cd3e052fb2c359208db`. Build, feature manifest, and
+  Phase 2, 3, and 4 sub-gates passed. Patch status shows `0154` through `0159`
+  and `0162` as `APPLIED`, with no skips.
+- Wrapper `/home/nyra/veux-artifacts/41043053743/xnu-kernel/modem-held.img`
+  passed `verify-veux-wrapper.py --variant modem-held`: 30/30 markers,
+  forbidden-marker checks, exact modem-held boot args, and payload
+  reconstruction. Kernel SHA-256:
+  `cc6b0309f4983f0ab7e33d120e2ef03e2710f9042f170aa35622f7f4a0e6fc93`;
+  DTB SHA-256:
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`;
+  wrapper SHA-256:
+  `cb3ed126c3a8ff260b8e5bc806913254477bcdf4023c5df465c9169129c7fb85`.
+  Wrapper size is exactly 17,281,024 bytes.
+- Immediately before the planned write, Fastboot serial `4078cac030c8`
+  reported `product: veux`, `current-slot: b`, `unlocked: yes`, and
+  `partition-size:boot_b: 0x8000000` (134,217,728 bytes). All checklist items
+  pass; image fits the target. Planned write: `boot_b` only, exactly 17,281,024
+  bytes from the wrapper above. No write had occurred when this checklist was
+  recorded.
+- Flash result: `fastboot flash boot_b /home/nyra/veux-artifacts/41043053743/xnu-kernel/modem-held.img`
+  returned `Sending 'boot_b' (16876 KB) OKAY`, `Writing 'boot_b' OKAY`, and
+  `Finished. Total time: 0.547s`. `fastboot set_active b` returned
+  `Setting current slot to 'b' OKAY`; `fastboot reboot` returned
+  `Rebooting OKAY`. Only `boot_b` was written: exactly 17,281,024 bytes, SHA-256
+  `cb3ed126c3a8ff260b8e5bc806913254477bcdf4023c5df465c9169129c7fb85`.
+- `fastboot devices` and `adb devices -l` were empty immediately after reboot,
+  and at the one- and two-minute checks. Stopped further device polling at the
+  user's request after about 2m51s. The host has no camera input, so no photo
+  or screen-log confirmation is available from this machine.
