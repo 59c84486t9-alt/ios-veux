@@ -5838,6 +5838,20 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   and `git diff --check` pass. CI, wrapper, checklist, and any device write are
   pending.
 
+## >>> UPDATE 2026-10-30 (Phase 4.27 segment and pool progress markers; CI pending) <<<
+
+- The user reports the current boot stops after `keepsyms boot arg specified`;
+  the supplied second photo also shows the prior `kmem_alloc(..., 2001664, ...)`
+  panic. Added a worker checkpoint immediately before `load_modem()`, a
+  per-segment `modem.bNN` log immediately before the firmware read, and a
+  `.bss`-zeroing size/index log immediately before the existing volatile loop.
+- Added the pool virtual address log immediately after `ml_io_map_wcomb()`.
+  Extended source and binary manifest checks plus wrapper verification to require
+  all four new diagnostic strings.
+- `tools/validate-repo.py`, Python syntax checks, and `git diff --check` pass.
+  CI, wrapper creation, and device write are pending. Do not write until CI and
+  the full `boot_b` preflash checklist pass.
+
 ## >>> UPDATE 2026-10-30 (Phase 4.26 green CI; preflash checklist) <<<
 
 - CI run `41056134753` passed on code commit `9338b99881ebbf2992d0a58bea4479747c11ed49`.

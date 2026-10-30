@@ -336,6 +336,17 @@ phase4_sources = {
         "VEUX MODEM PAS: metadata copied", "VEUX MODEM PAS: calling init_image")) and
         "veux_modem_pool_alloc(ms,&mpa)" not in phase4_text.replace(" ", ""),
     "pas_scm_pool_buffers_still_use_pool_va": "veux_modem_pool_alloc(0x1000,&pa)" in phase4_text.replace(" ", "") and "veux_modem_pool_va(pa,0x1000)" in phase4_text.replace(" ", ""),
+    "modem_pool_logs_mapped_virtual_address_after_map": (
+        "mapping = ml_io_map_wcomb((vm_offset_t)VEUX_MODEM_POOL_BASE," in phase4_patch_texts["0153-veux-modem-pool.patch"] and
+        "VEUX MODEM POOL: mapped at VA 0x%llx\n" in phase4_patch_texts["0153-veux-modem-pool.patch"] and
+        phase4_patch_texts["0153-veux-modem-pool.patch"].find("mapping = ml_io_map_wcomb") <
+        phase4_patch_texts["0153-veux-modem-pool.patch"].find("VEUX MODEM POOL: mapped at VA 0x%llx")),
+    "pas_worker_start_log_immediately_before_load":
+        'printf("VEUX MODEM PAS: starting modem boot sequence\n");if(!load_modem())' in phase4_patch_texts["0154-veux-modem-pas.patch"],
+    "pas_each_segment_progress_before_read":
+        'printf("VEUX MODEM PAS: loading modem.b%02u\n",i);if(ph[i].filesz&&veux_fw_read' in phase4_patch_texts["0154-veux-modem-pas.patch"],
+    "pas_bss_progress_before_volatile_zero_loop":
+        'printf("VEUX MODEM PAS: zeroing %llu bytes for b%02u\n",(unsigned long long)(ph[i].memsz-ph[i].filesz),i);volatile uint8_t *zero_ptr=' in phase4_patch_texts["0154-veux-modem-pas.patch"],
     "pas_segments_use_per_segment_io_mapping_without_heap_alloc": all(x in phase4_text for x in (
         "veux_modem_map_phys(map_pa,map_len)", "MODEM_PA+ph[i].paddr",
         'extern "C" uintptr_t ml_io_map(uintptr_t, uintptr_t)', "ml_io_map((uintptr_t)pa,(uintptr_t)size)")) and
@@ -426,6 +437,11 @@ phase4_binary = {
     "pas_segment_copy_checkpoints": all(x in kernel for x in (
         b"VEUX MODEM PAS: loading segments\n",
         b"VEUX MODEM PAS: segments loaded\n")),
+    "pas_segment_progress_heartbeats": all(x in kernel for x in (
+        b"VEUX MODEM PAS: starting modem boot sequence\n",
+        b"VEUX MODEM PAS: loading modem.b%02u\n",
+        b"VEUX MODEM PAS: zeroing %llu bytes for b%02u\n")),
+    "modem_pool_mapping_address": b"VEUX MODEM POOL: mapped at VA 0x%llx\n" in kernel,
     "glink_startup_diagnostics": all(x in kernel for x in (
         b"VEUX GLINK: requesting SMEM items 478, 479, 480\n",
         b"VEUX GLINK: desc va=0x%llx tx_va=0x%llx rx_va=0x%llx\n",
@@ -446,6 +462,10 @@ modem_needles = {
     "pas_calling_init_image": b"VEUX MODEM PAS: calling init_image",
     "pas_loading_segments": b"VEUX MODEM PAS: loading segments",
     "pas_segments_loaded": b"VEUX MODEM PAS: segments loaded",
+    "pas_starting_modem_boot": b"VEUX MODEM PAS: starting modem boot sequence",
+    "pas_segment_progress": b"VEUX MODEM PAS: loading modem.b%02u",
+    "pas_zero_progress": b"VEUX MODEM PAS: zeroing %llu bytes for b%02u",
+    "modem_pool_mapped_va": b"VEUX MODEM POOL: mapped at VA 0x%llx",
     "ipcc_parameters": b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",
     "smp2p_ready": b"VEUX MODEM: SMP2P READY",
     "glink_version_ack": b"VEUX GLINK: VERSION_ACK",

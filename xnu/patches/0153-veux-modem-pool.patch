@@ -4,9 +4,9 @@ Date: Thu, 29 Oct 2026 04:20:00 +0100
 Subject: [PATCH] Add VEUX reserved modem memory pool
 
 ---
- osfmk/arm64/veux_modem_pool.c           | 147 +++++++++++++++++++++++++++++++
+ osfmk/arm64/veux_modem_pool.c           | 148 ++++++++++++++++++++++++++++++++
  osfmk/conf/files.arm64                  |   1 +
- 2 files changed, 148 insertions(+)
+ 2 files changed, 149 insertions(+)
  create mode 100644 osfmk/arm64/veux_modem_pool.c
 
 diff --git a/osfmk/arm64/veux_modem_pool.c b/osfmk/arm64/veux_modem_pool.c
@@ -14,7 +14,7 @@ new file mode 100644
 index 0000000..0000000
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem_pool.c
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,148 @@
 +/*
 + * VEUX modem transport and metadata pool.
 + *
@@ -117,6 +117,7 @@ index 0000000..0000000
 +	    (unsigned long long)VEUX_MODEM_POOL_SIZE, VEUX_MODEM_POOL_NODE);
 +	mapping = ml_io_map_wcomb((vm_offset_t)VEUX_MODEM_POOL_BASE,
 +	    (vm_size_t)VEUX_MODEM_POOL_SIZE);
++	printf("VEUX MODEM POOL: mapped at VA 0x%llx\n", (unsigned long long)mapping);
 +	if (mapping == 0) {
 +		printf("VEUX MODEM POOL: map failed\n");
 +		return;
