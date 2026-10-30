@@ -5622,3 +5622,8 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   no wrapper has been built and no partition has been written for this phase.
   Next: push this patch/gate update, dispatch CI, verify the uploaded kernel and
   wrapper, then repeat all `boot_b` pre-flash checks before any write.
+- CI run `40999698459` compiled the kernel but failed during strict patch
+  application: dependent `0159-veux-dt-crc-diagnostics.patch` still carried
+  the previous `bzero()` segment-loop context. No Phase-4 gates/artifact ran;
+  no wrapper or flash. Updated `0159` context to match the new volatile loop;
+  repository validation and whitespace checks pass. Rerunning CI.
