@@ -5702,3 +5702,26 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   temporary allocations in the 0162 read patch.
 - `tools/validate-repo.py`, Python syntax validation, `git diff --check`, and
   strict 0162 patch dry-run pass. CI, wrapper, and flash are pending.
+
+## >>> UPDATE 2026-10-30 (Phase 4.24 merged fix; source validation) <<<
+
+- Inspected `ufs_read_blocks()` in the applied XNU source: it rejects reads over
+  `BOUNCE_SIZE / UFS_BLOCK` and calls `ufs_scsi()` into the already allocated
+  UFS DMA bounce area. It performs no temporary heap allocation. The separate
+  startup DMA allocation remains `DMA_SIZE = DMA_BOUNCE + BOUNCE_SIZE` and is
+  not the per-segment 2 MiB temporary allocation alleged in the prompt.
+- Reviewed PAS cleanup paths. The MDT allocation used `kalloc_data(n, ...)`
+  and all exits freed `mdt` with the same unchanged `n` (9500 for the reported
+  image); metadata used `IOMallocContiguous(ms, ...)` and `IOFreeContiguous`
+  with the same unchanged `ms`. Made those allocation sizes explicit captured
+  `vm_size_t` constants and use those exact values for all corresponding frees.
+  No mismatched free size was found, so no unrelated allocator change was made.
+- Kept the volatile byte-copy in `0155` and its dependent `0162` hunk. Added
+  little-endian `safe_read_u16/u32/u64()` helpers in the shared modem header;
+  GLINK QRTR headers/control fields, PDMAP TLV lengths/name bytes, and WLFW
+  TLV/result/MSA/CAP values now read from WC packet storage byte-by-byte.
+  Outgoing message copies remain ordinary copies from local kernel buffers.
+- Added manifest source gates for the UFS bounce-only read function, matching
+  PAS allocation/free sizes, and the safe byte readers in GLINK/PDMAP/WLFW.
+  `tools/validate-repo.py`, `py_compile`, and `git diff --check` pass locally.
+  CI, wrapper verification, and device write are pending.

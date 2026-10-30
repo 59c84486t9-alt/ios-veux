@@ -277,6 +277,9 @@ phase4_forbidden = {
         r"\bwlan_mode\b", r"\bhtt\b", r"\bwmi\b", r"\bce_\w*",
         r"\bscan_\w*")),
 }
+ufs_source_path = a.source_root / "bsd/dev/sweet_ufs.c"
+ufs_source = ufs_source_path.read_text(errors="replace") if ufs_source_path.is_file() else ""
+ufs_read_body = ufs_source.split("ufs_read_blocks(uint64_t lba", 1)[-1].split("\n}", 1)[0]
 phase4_sources = {
     "nine_unique_patch_files": all(phase4_patch_texts.values()),
     "patches_applied_without_skip": all(phase4_status.values()),
@@ -298,7 +301,9 @@ phase4_sources = {
         'panic(\"GLINK assembly buffer alloc failed\")',
         "VEUX GLINK: mapped SMEM",
         "load_u32_unaligned(const void *p)",
-        "memcpy(&value,p,sizeof(value))",
+        "return safe_read_u32(p);",
+        "typ=safe_read_u32(p+4)", "node=safe_read_u32(p+8)",
+        "svc=safe_read_u32(p+hlen+4)", "txn=safe_read_u16(p+hlen+1)",
         "VEUX GLINK: copying RX data",
         "VEUX QRTR: processing packet",
         "const volatile uint8_t *src_ptr=(const volatile uint8_t *)(grx+t)",
@@ -353,6 +358,28 @@ phase4_sources = {
         not any("memcpy(" in line or "memset(" in line for line in (
             phase4_text.split("static void peek(", 1)[1].splitlines()[0],
             phase4_text.split("static uint32_t put(", 1)[1].splitlines()[0])),
+    "safe_unaligned_read_helpers_are_bytewise": all(x in phase4_patch_texts["0154-veux-modem-pas.patch"] for x in (
+        "static inline uint16_t safe_read_u16(const void *p)",
+        "static inline uint32_t safe_read_u32(const void *p)",
+        "static inline uint64_t safe_read_u64(const void *p)",
+        "const volatile uint8_t *b = (const volatile uint8_t *)p;",
+        "return (uint64_t)safe_read_u32(b) | ((uint64_t)safe_read_u32(b + 4) << 32);")),
+    "pdmap_unaligned_tlv_length_uses_safe_reader": "safe_read_u16(data+o+1)" in phase4_patch_texts["0157-veux-modem-pdmapper.patch"] and "memcpy(&l,data+o+1,2)" not in phase4_patch_texts["0157-veux-modem-pdmapper.patch"] and "((const volatile uint8_t *)(data+o+3))[k]" in phase4_patch_texts["0157-veux-modem-pdmapper.patch"] and "memcpy(name,data+o+3" not in phase4_patch_texts["0157-veux-modem-pdmapper.patch"],
+    "wlfw_unaligned_fields_use_safe_readers": all(x in phase4_patch_texts["0158-veux-modem-wlfw.patch"] for x in (
+        "safe_read_u16(d+o+1)", "safe_read_u16(v)", "safe_read_u16(v+2)",
+        "safe_read_u16(d+3)", "safe_read_u64(v+1+13*i)", "safe_read_u32(v+9+13*i)",
+        "safe_read_u32(v)", "safe_read_u32(v+4)")) and not any(
+        x in phase4_patch_texts["0158-veux-modem-wlfw.patch"] for x in (
+            "memcpy(&n,d+o+1,2)", "memcpy(&result,v,2)", "memcpy(&error,v+2,2)",
+            "memcpy(&msg,d+3,2)", "memcpy(&a,v+1+13*i,8)", "memcpy(&z,v+9+13*i,4)",
+            "memcpy(build,v,n)")) and "((const volatile uint8_t *)v)[i]" in phase4_patch_texts["0158-veux-modem-wlfw.patch"],
+    "pas_free_sizes_match_captured_allocation_sizes": all(x in phase4_patch_texts["0154-veux-modem-pas.patch"] for x in (
+        "const vm_size_t mdt_alloc_size=(vm_size_t)n;uint8_t *mdt=kalloc_data(mdt_alloc_size",
+        "kfree_data(mdt,mdt_alloc_size)",
+        "const vm_size_t meta_alloc_size=(vm_size_t)ms;",
+        "IOMallocContiguous(meta_alloc_size,0x1000,&meta_pa)",
+        "IOFreeContiguous(meta,meta_alloc_size)")),
+    "ufs_read_blocks_has_no_temporary_heap_buffer": bool(ufs_read_body) and "ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK, false)" in ufs_read_body and not re.search(r"\b(?:kalloc_data|kmem_alloc|IOMalloc|IOMallocContiguous)\s*\(", ufs_read_body),
     "forbidden_apcs_host_cap_bdf_wlan_paths_absent": not any(phase4_forbidden.values()),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
     "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],

@@ -33,7 +33,7 @@ new file mode 100644
 +}
 +void veux_pdmap_rx(uint32_t node,uint32_t port,uint16_t txn,uint16_t msg,const uint8_t *data,uint32_t len){
 + uint8_t out[1024]={0},name[96]={0},list[768]={0};uint16_t name_len=0;uint32_t n=7,ln=1,count=0;
-+ if(len>=7){for(uint32_t o=7;o+3<=len;){uint16_t l;memcpy(&l,data+o+1,2);if(o+3+l>len)break;if(data[o]==1){name_len=l<95?l:95;memcpy(name,data+o+3,name_len);break;}o+=3+l;}}
++ if(len>=7){for(uint32_t o=7;o+3<=len;){uint16_t l=safe_read_u16(data+o+1);if(o+3+l>len)break;if(data[o]==1){name_len=l<95?l:95;for(uint16_t k=0;k<name_len;k++)name[k]=((const volatile uint8_t *)(data+o+3))[k];break;}o+=3+l;}}
 + name[name_len]=0;out[0]=2;memcpy(out+1,&txn,2);memcpy(out+3,&msg,2);
 + uint32_t okerr[2]={0,0};tlv(out,&n,2,okerr,4);
 + for(unsigned i=0;i<sizeof(pd_map)/sizeof(pd_map[0]);i++)if(!strcmp((char*)name,pd_map[i].svc)){
