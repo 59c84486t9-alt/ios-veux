@@ -327,6 +327,22 @@ phase4_sources = {
         "veux_modem_segment_maps" not in phase4_text and
         not any(x in phase4_text.split("VEUX MODEM PAS: loading segments", 1)[1].split("VEUX MODEM PAS: segments loaded", 1)[0]
                 for x in ("kmem_alloc(", "IOMalloc(", "veux_modem_pool_alloc(", "MODEM_POOL_SIZE")),
+    "pas_carveout_writes_use_volatile_bytes": all(x in phase4_patch_texts["0154-veux-modem-pas.patch"] for x in (
+        "volatile uint8_t *zero_ptr=(volatile uint8_t *)(dst+ph[i].filesz)",
+        "for(uint32_t k=0;k<(ph[i].memsz-ph[i].filesz);k++)zero_ptr[k]=0")) and
+        "bzero(dst+ph[i].filesz" not in phase4_patch_texts["0154-veux-modem-pas.patch"],
+    "ufs_modem_destination_copy_uses_volatile_bytes": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
+        "volatile uint8_t *dest = (volatile uint8_t *)((uint8_t *)dst + done)",
+        "for (uint32_t k = 0; k < take; k++) dest[k] = src[k]")) and
+        "memcpy((uint8_t *)dst + done" not in phase4_patch_texts["0162-veux-ufs-multilun.patch"],
+    "glink_device_fifo_writes_use_volatile_bytes": all(x in phase4_text for x in (
+        "static void peek(", "static uint32_t put(",
+        "volatile uint8_t *dst_ptr=(volatile uint8_t *)dst",
+        "volatile uint8_t *dst_ptr=(volatile uint8_t *)(gtx+h)",
+        "for(uint32_t i=0;i<a;i++)dst_ptr[i]=src_ptr[i]")) and
+        not any("memcpy(" in line or "memset(" in line for line in (
+            phase4_text.split("static void peek(", 1)[1].splitlines()[0],
+            phase4_text.split("static uint32_t put(", 1)[1].splitlines()[0])),
     "forbidden_apcs_host_cap_bdf_wlan_paths_absent": not any(phase4_forbidden.values()),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
     "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],

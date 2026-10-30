@@ -5603,3 +5603,22 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   to a host-visible bootloader/recovery interface, so a host-side hard reset or
   recovery command could not be issued; the user must hard reset and return it
   to recovery physically, then provide a screen photo to confirm the logs.
+
+## >>> UPDATE 2026-10-30 (Phase 4.21/4.22 code changes; CI pending) <<<
+
+- Replaced the modem segment `.bss` `bzero()` in `0154-veux-modem-pas.patch`
+  with volatile byte stores. The UFS bounce-buffer-to-destination copy is
+  defined in `0162-veux-ufs-multilun.patch` (not `0154`); replaced its
+  `memcpy()` with volatile byte stores into the requested destination. This
+  keeps writes to the mapped modem carveout byte-sized regardless of compiler
+  bulk-operation lowering.
+- Confirmed `0156-veux-modem-glink.patch` `peek()` and `put()` use volatile
+  byte loops for the GLINK FIFOs and `asm_buf` receive destination. Remaining
+  `memset`/`memcpy` calls in the file initialize/build local packet or header
+  buffers. Added Phase-4 source manifest gates for the PAS zero loop, UFS copy,
+  and GLINK FIFO byte loops/no bulk copies in `peek()`/`put()`.
+- `python3 tools/validate-repo.py`, Python syntax compilation of
+  `tools/kernel-manifest.py`, and `git diff --check` pass. CI has not run yet;
+  no wrapper has been built and no partition has been written for this phase.
+  Next: push this patch/gate update, dispatch CI, verify the uploaded kernel and
+  wrapper, then repeat all `boot_b` pre-flash checks before any write.
