@@ -334,7 +334,8 @@ phase4_sources = {
     "ufs_modem_destination_copy_uses_volatile_bytes": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
         "volatile uint8_t *dest = (volatile uint8_t *)((uint8_t *)dst + done)",
         "for (uint32_t k = 0; k < take; k++) dest[k] = src[k]")) and
-        "memcpy((uint8_t *)dst + done" not in phase4_patch_texts["0162-veux-ufs-multilun.patch"],
+        not any("memcpy((uint8_t *)dst + done" in line for line in
+                phase4_patch_texts["0162-veux-ufs-multilun.patch"].splitlines() if line.startswith("+")),
     "glink_device_fifo_writes_use_volatile_bytes": all(x in phase4_text for x in (
         "static void peek(", "static uint32_t put(",
         "volatile uint8_t *dst_ptr=(volatile uint8_t *)dst",

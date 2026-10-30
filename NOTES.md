@@ -5632,3 +5632,8 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   in the patch deletion marker. Corrected the hunk; `patch --dry-run -p1` now
   passes against the current pre-0162 UFS source, and repository validation
   passes. No artifact/wrapper/flash; rerun CI.
+- CI run `41000708024` compiled the kernel and applied patches `0152`–`0162`
+  with zero skips, but the Phase-4 source gate failed: its UFS assertion treated
+  the intentionally removed `memcpy` line in a unified diff as live source.
+  Updated the gate to inspect only added patch lines when rejecting a bulk copy.
+  No wrapper/artifact/flash. Python syntax and whitespace checks pass; rerun CI.
