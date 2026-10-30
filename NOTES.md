@@ -5571,3 +5571,15 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `verify-veux-wrapper.py` passed 30/30 required markers, source absence
   checks, and byte-for-byte payload reconstruction. Pre-flash device checks
   have not yet been run; no Phase-4.20 partition write has been made.
+
+## >>> UPDATE 2026-10-30 (Phase 4.20 pre-flash checklist passed) <<<
+
+- Fastboot serial `4078cac030c8` is present. Read-only checklist returned
+  product `veux`, current-slot `b` (accepted by the user's explicit slot
+  override), unlocked `yes`, and `partition-size:boot_b = 0x8000000`.
+- Wrapper `/home/nyra/veux-artifacts/40977083696/xnu-kernel/modem-held.img`
+  has SHA-256
+  `787a4b924bca45d298fa45e4c162dbc1fa27aa46115e06c2b7f729b05f33340c`, size
+  exactly 17,281,024 bytes, and a matching manifest for CI/build ID `40977083696`.
+  Full verification passed 30/30 markers. The authorized write, if the
+  immediate recheck matches, is `boot_b` only with exactly those bytes.
