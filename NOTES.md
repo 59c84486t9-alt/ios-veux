@@ -5867,3 +5867,6 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   SHA-256 `a44f258108637faf1cfb142c8f26ac830d1383448db9ffa5483e1e9959140950`.
   `fastboot set_active b` returned `Setting current slot to 'b' OKAY`;
   `fastboot reboot` returned `Rebooting OKAY`. Post-reboot checks are pending.
+- Per the user's follow-up, stopped the post-flash wait before three minutes
+  and did not poll fastboot or ADB after reboot. Post-reboot host enumeration
+  and the screen state are unverified; no camera capture was taken.
