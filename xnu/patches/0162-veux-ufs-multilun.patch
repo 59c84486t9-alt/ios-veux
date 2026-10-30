@@ -66,7 +66,7 @@ Subject: [PATCH] Scan VEUX UFS LUNs for modem_a
  	if (error == 0 && (off > target_count * (uint64_t)UFS_BLOCK ||
  	    len > target_count * (uint64_t)UFS_BLOCK - off)) error = EINVAL;
  	for (uint64_t done = 0; error == 0 && done < len;) {
-@@ -432,17 +473,18 @@
+@@ -432,16 +473,18 @@
  		uint32_t skip = (uint32_t)(pos % UFS_BLOCK);
  		uint32_t take = (uint32_t)MIN(len - done, BOUNCE_SIZE - skip);
  		uint32_t blocks = (skip + take + UFS_BLOCK - 1) / UFS_BLOCK;
