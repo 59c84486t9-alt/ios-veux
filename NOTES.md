@@ -5821,8 +5821,14 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `modem.b14`, and supplied a photo showing the modem firmware load sequence
   followed by the panic. The reported caller is
   `0xfffffe0007ad42f4`; offset from the stated image base
-  `0xfffffe0007004000` is `0xAD02F4`. Exact function symbolication against the
-  flashed kernel artifact is pending.
+  `0xfffffe0007004000` is `0xAD02F4`. Ghidra/REA resolved the absolute caller
+  address in the exact flashed kernel SHA-256
+  `7c9183814fa7725c78b620c6e2a61242b5c057fe8e9b8a0e033a1db95944527b` to
+  `___kmem_entry_validate_object_panic` (function range
+  `0xfffffe0007ad426c–0xfffffe0007ad430f`, query PC inside). Evidence ID:
+  `ev_d78210cdd8ff220be109a299cb3ce0cc014c71ea5ac1ea7e5d82c75fab46ef91`.
+  Thus the supplied claim that this address is not that function is contradicted
+  by the shipped-artifact symbolication.
 - Replaced PAS `.bss` clearing in `0154` with writes through a volatile
   `uint8_t *`, and replaced the UFS bounce-to-destination copy in `0155` and
   `0162` with writes through a volatile destination pointer. Updated the
