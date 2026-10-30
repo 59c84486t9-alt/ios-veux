@@ -5804,3 +5804,13 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   than `boot_b`. Checklist passed. Planned write is only `boot_b`, exactly
   17,281,024 bytes from the verified wrapper with SHA-256 above. No write has
   occurred at the time of this entry. No ADB command was run.
+- Flash result: `fastboot flash boot_b /home/nyra/veux-artifacts/41047323635/xnu-kernel/modem-held.img`
+  returned `Sending 'boot_b' (16876 KB) OKAY`, `Writing 'boot_b' OKAY`, and
+  `Finished. Total time: 0.557s`. `fastboot set_active b` returned
+  `Setting current slot to 'b' OKAY`; `fastboot reboot` returned `Rebooting
+  OKAY`. Only `boot_b` was written: 17,281,024 bytes, SHA-256
+  `92a41c94805730c70852fe8ddd8e10c701a46ed2e73eb8e04d956c6e73700d2b`.
+- After the requested three-minute wait, `fastboot devices` was empty. Per the
+  user's instruction, ADB was not queried. This host has no camera input, so no
+  photo or screen-log confirmation is available; whether `segments loaded`,
+  `auth_and_reset ret=0x0`, or `QRTR: HELLO` appeared remains unverified.
