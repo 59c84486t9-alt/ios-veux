@@ -72,7 +72,7 @@ Subject: [PATCH] Scan VEUX UFS LUNs for modem_a
  		uint32_t blocks = (skip + take + UFS_BLOCK - 1) / UFS_BLOCK;
 +		su.lun = target_lun;
  		error = ufs_read_blocks(target_first + lba, blocks);
-- 		if (error == 0) memcpy((uint8_t *)dst + done, (const uint8_t *)(su.dma + DMA_BOUNCE) + skip, take);
+-		if (error == 0) memcpy((uint8_t *)dst + done, (const uint8_t *)(su.dma + DMA_BOUNCE) + skip, take);
 +		if (error == 0) {
 +			volatile uint8_t *dest = (volatile uint8_t *)((uint8_t *)dst + done);
 +			const uint8_t *src = (const uint8_t *)(su.dma + DMA_BOUNCE) + skip;

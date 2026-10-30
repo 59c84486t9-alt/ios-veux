@@ -5627,3 +5627,8 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   the previous `bzero()` segment-loop context. No Phase-4 gates/artifact ran;
   no wrapper or flash. Updated `0159` context to match the new volatile loop;
   repository validation and whitespace checks pass. Rerunning CI.
+- CI run `41000119776` applied patches through `0161`, then strict application
+  rejected `0162` because the removed `memcpy` line had an extra leading space
+  in the patch deletion marker. Corrected the hunk; `patch --dry-run -p1` now
+  passes against the current pre-0162 UFS source, and repository validation
+  passes. No artifact/wrapper/flash; rerun CI.
