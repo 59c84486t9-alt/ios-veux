@@ -343,18 +343,25 @@ phase4_sources = {
         "veux_modem_segment_maps" not in phase4_text and
         not any(x in phase4_text.split("VEUX MODEM PAS: loading segments", 1)[1].split("VEUX MODEM PAS: segments loaded", 1)[0]
                 for x in ("kmem_alloc(", "IOMalloc(", "veux_modem_pool_alloc(", "MODEM_POOL_SIZE")),
-    "pas_carveout_writes_use_volatile_bytes": all(x in phase4_patch_texts["0154-veux-modem-pas.patch"] for x in (
-        "volatile uint8_t *zero_ptr=(volatile uint8_t *)(dst+ph[i].filesz)",
-        "for(uint32_t k=0;k<(ph[i].memsz-ph[i].filesz);k++)zero_ptr[k]=0")) and
+    "pas_carveout_writes_use_inline_strb": all(x in phase4_patch_texts["0154-veux-modem-pas.patch"] for x in (
+        "uint64_t zero_len=ph[i].memsz-ph[i].filesz",
+        "uintptr_t zero_ptr=(uintptr_t)(dst+ph[i].filesz)",
+        "__asm__ volatile(\"strb wzr, [%0]\" :: \"r\"(zero_ptr+k) : \"memory\");")) and
+        "zero_ptr[k]=0" not in phase4_patch_texts["0154-veux-modem-pas.patch"] and
         "bzero(dst+ph[i].filesz" not in phase4_patch_texts["0154-veux-modem-pas.patch"],
-    "ufs_modem_destination_copy_uses_volatile_bytes": all(x in phase4_patch_texts["0155-veux-modem-firmware.patch"] for x in (
-        "volatile uint8_t *dest = (volatile uint8_t *)((uint8_t *)dst + done)",
-        "for (uint32_t k = 0; k < take; k++) {", "dest[k] = src[k];")) and
+    "ufs_modem_destination_copy_uses_inline_ldrb_strb": all(x in phase4_patch_texts["0155-veux-modem-firmware.patch"] for x in (
+        "uintptr_t dest_ptr = (uintptr_t)((uint8_t *)dst + done)",
+        "const uint8_t *src_ptr = (const uint8_t *)(su.dma + DMA_BOUNCE) + skip",
+        "__asm__ volatile(\"ldrb %w0, [%1]\" : \"=r\"(val) : \"r\"(src_ptr + k) : \"memory\");",
+        "__asm__ volatile(\"strb %w0, [%1]\" :: \"r\"(val), \"r\"(dest_ptr + k) : \"memory\");")) and
+        "dest[k] = src[k];" not in phase4_patch_texts["0155-veux-modem-firmware.patch"] and
+        all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
+            "uintptr_t dest_ptr = (uintptr_t)((uint8_t *)dst + done)",
+            "__asm__ volatile(\"ldrb %w0, [%1]\" : \"=r\"(val) : \"r\"(src_ptr + k) : \"memory\");",
+            "__asm__ volatile(\"strb %w0, [%1]\" :: \"r\"(val), \"r\"(dest_ptr + k) : \"memory\");")) and
+        "dest[k] = src[k];" not in phase4_patch_texts["0162-veux-ufs-multilun.patch"] and
         not any("memcpy((uint8_t *)dst + done" in line for line in
                 phase4_patch_texts["0155-veux-modem-firmware.patch"].splitlines() if line.startswith("+")) and
-        all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
-            "volatile uint8_t *dest = (volatile uint8_t *)((uint8_t *)dst + done)",
-            "for (uint32_t k = 0; k < take; k++) {", "dest[k] = src[k];")) and
         not any("memcpy((uint8_t *)dst + done" in line for line in
                 phase4_patch_texts["0162-veux-ufs-multilun.patch"].splitlines() if line.startswith("+")),
     "ufs_modem_read_uses_existing_bounce_without_temp_heap": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (

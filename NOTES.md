@@ -5765,3 +5765,17 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   and at the one- and two-minute checks. Stopped further device polling at the
   user's request after about 2m51s. The host has no camera input, so no photo
   or screen-log confirmation is available from this machine.
+
+## >>> UPDATE 2026-10-30 (Phase 4.25 inline assembly source fix; CI pending) <<<
+
+- The user reported the modem segment `.bss` still panics in `_bzero+0x44`
+  with a size of 2,001,664 bytes at `modem.b14`. This report is not a new
+  host-observed device log.
+- Replaced the PAS `.bss` byte loop in `0154-veux-modem-pas.patch` with one
+  inline-assembly `strb wzr` per byte so the compiler cannot lower it to
+  `bzero`. Replaced UFS bounce-to-destination copying in both `0155` and the
+  LUN-aware `0162` hunk with inline `ldrb`/`strb` instructions.
+- Updated the Phase-4 manifest gates to require those exact assembly
+  instructions and reject the old source loops. `py_compile`,
+  `tools/validate-repo.py`, and `git diff --check` pass. CI, wrapper, and flash
+  are pending.
