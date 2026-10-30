@@ -5637,3 +5637,28 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   the intentionally removed `memcpy` line in a unified diff as live source.
   Updated the gate to inspect only added patch lines when rejecting a bulk copy.
   No wrapper/artifact/flash. Python syntax and whitespace checks pass; rerun CI.
+
+## >>> UPDATE 2026-10-30 (Phase 4.21/4.22 green CI and boot_b pre-flash passed) <<<
+
+- CI run `41002104784` on source commit `b7863a21f177ca5e99bae9f968d80df3b76fc18c`
+  is green. Kernel SHA-256:
+  `20994f894bf0c306bc279e27184624c68aa7ae30709f407ae92003fda401a370`.
+  Phase-4 source gates pass for the PAS `.bss` volatile zero loop, UFS
+  destination volatile copy, and GLINK volatile FIFO/assembly-buffer byte
+  access; binary gates pass. Patches `0152`–`0162` are all `APPLIED`, zero
+  skips.
+- Built `/home/nyra/veux-artifacts/41002104784/xnu-kernel/modem-held.img` and
+  verified it: 30/30 milestone/diagnostic markers, forbidden-marker absence,
+  and payload reconstruction all pass. Wrapper SHA-256
+  `26859c5c7488fce298ec676b089706ec75294da26ba6c275567cc75bb2e70558`, size
+  17,281,024 bytes. Manifest path:
+  `/home/nyra/veux-artifacts/41002104784/xnu-kernel/modem-held.img.manifest.json`.
+  Phone DTB SHA-256 remains
+  `08284b0f3b0d3810abda6d617598370099f36f0f54111668bfe89f6ee35b4e2e`.
+- Pre-flash checklist on Fastboot serial `4078cac030c8`: product `veux`,
+  current-slot `b` (accepted under the user's explicit slot override), unlocked
+  `yes`, `partition-size:boot_b = 0x8000000` (134,217,728 bytes). Wrapper
+  manifest/build ID and SHA verified; image is 17,281,024 bytes and fits.
+- Planned authorized write: `boot_b` only, exactly 17,281,024 bytes from the
+  wrapper above. No write has occurred yet; repeat the device/hash/size checks
+  immediately before flashing.
