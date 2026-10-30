@@ -66,28 +66,24 @@ Subject: [PATCH] Scan VEUX UFS LUNs for modem_a
  	if (error == 0 && (off > target_count * (uint64_t)UFS_BLOCK ||
  	    len > target_count * (uint64_t)UFS_BLOCK - off)) error = EINVAL;
  	for (uint64_t done = 0; error == 0 && done < len;) {
-@@ -432,18 +473,20 @@
+@@ -432,17 +473,18 @@
  		uint32_t skip = (uint32_t)(pos % UFS_BLOCK);
  		uint32_t take = (uint32_t)MIN(len - done, BOUNCE_SIZE - skip);
  		uint32_t blocks = (skip + take + UFS_BLOCK - 1) / UFS_BLOCK;
 +		su.lun = target_lun;
  		error = ufs_read_blocks(target_first + lba, blocks);
 -		if (error == 0) {
--			uintptr_t dest_ptr = (uintptr_t)((uint8_t *)dst + done);
+-			volatile uint8_t *dest_ptr = (volatile uint8_t *)((uint8_t *)dst + done);
 -			const uint8_t *src_ptr = (const uint8_t *)(su.dma + DMA_BOUNCE) + skip;
 -			for (uint32_t k = 0; k < take; k++) {
--				uint8_t val;
--				__asm__ volatile("ldrb %w0, [%1]" : "=r"(val) : "r"(src_ptr + k) : "memory");
--				__asm__ volatile("strb %w0, [%1]" :: "r"(val), "r"(dest_ptr + k) : "memory");
+-				dest_ptr[k] = src_ptr[k];
 -			}
 -		}
 +		if (error == 0) {
-+			uintptr_t dest_ptr = (uintptr_t)((uint8_t *)dst + done);
++			volatile uint8_t *dest_ptr = (volatile uint8_t *)((uint8_t *)dst + done);
 +			const uint8_t *src_ptr = (const uint8_t *)(su.dma + DMA_BOUNCE) + skip;
 +			for (uint32_t k = 0; k < take; k++) {
-+				uint8_t val;
-+				__asm__ volatile("ldrb %w0, [%1]" : "=r"(val) : "r"(src_ptr + k) : "memory");
-+				__asm__ volatile("strb %w0, [%1]" :: "r"(val), "r"(dest_ptr + k) : "memory");
++				dest_ptr[k] = src_ptr[k];
 +			}
 +		}
  		done += error == 0 ? take : 0;

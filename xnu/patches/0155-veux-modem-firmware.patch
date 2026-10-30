@@ -13,7 +13,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
  static void sweet_log_start(void);
  #if defined(ARM64_BOARD_CONFIG_VEUX)
  static void veux_log_start(bool userdata_partition);
-@@ -407,6 +408,46 @@
+@@ -407,6 +408,44 @@
  	}
  	printf("SWEET/VEUX UFS: no GPT partition named \"%s\"\n", want);
  	return ENOENT;
@@ -43,12 +43,10 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 +		uint32_t blocks = (skip + take + UFS_BLOCK - 1) / UFS_BLOCK;
 +		error = ufs_read_blocks(target_first + lba, blocks);
 +		if (error == 0) {
-+			uintptr_t dest_ptr = (uintptr_t)((uint8_t *)dst + done);
++			volatile uint8_t *dest_ptr = (volatile uint8_t *)((uint8_t *)dst + done);
 +			const uint8_t *src_ptr = (const uint8_t *)(su.dma + DMA_BOUNCE) + skip;
 +			for (uint32_t k = 0; k < take; k++) {
-+				uint8_t val;
-+				__asm__ volatile("ldrb %w0, [%1]" : "=r"(val) : "r"(src_ptr + k) : "memory");
-+				__asm__ volatile("strb %w0, [%1]" :: "r"(val), "r"(dest_ptr + k) : "memory");
++				dest_ptr[k] = src_ptr[k];
 +			}
 +		}
 +		done += error == 0 ? take : 0;

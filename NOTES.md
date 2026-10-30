@@ -5814,3 +5814,20 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   user's instruction, ADB was not queried. This host has no camera input, so no
   photo or screen-log confirmation is available; whether `segments loaded`,
   `auth_and_reset ret=0x0`, or `QRTR: HELLO` appeared remains unverified.
+
+## >>> UPDATE 2026-10-30 (Phase 4.26 volatile stores; CI pending) <<<
+
+- The user reports the same `kmem_alloc(..., 2001664, ...)` panic at
+  `modem.b14`, and supplied a photo showing the modem firmware load sequence
+  followed by the panic. The reported caller is
+  `0xfffffe0007ad42f4`; offset from the stated image base
+  `0xfffffe0007004000` is `0xAD02F4`. Exact function symbolication against the
+  flashed kernel artifact is pending.
+- Replaced PAS `.bss` clearing in `0154` with writes through a volatile
+  `uint8_t *`, and replaced the UFS bounce-to-destination copy in `0155` and
+  `0162` with writes through a volatile destination pointer. Updated the
+  manifest gates to require these volatile loops and reject the previous
+  inline assembly and ordinary copy path.
+- `tools/validate-repo.py`, `python3 -m py_compile tools/kernel-manifest.py`,
+  and `git diff --check` pass. CI, wrapper, checklist, and any device write are
+  pending.
