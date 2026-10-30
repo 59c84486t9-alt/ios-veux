@@ -280,10 +280,19 @@ phase4_forbidden = {
 ufs_source_path = a.source_root / "bsd/dev/sweet_ufs.c"
 ufs_source = ufs_source_path.read_text(errors="replace") if ufs_source_path.is_file() else ""
 ufs_read_body = ufs_source.split("ufs_read_blocks(uint64_t lba", 1)[-1].split("\n}", 1)[0]
+modem_fw_entries = [
+    (name, int(offset, 16), int(size))
+    for name, offset, size in re.findall(
+        r'^\+\s*\{ "(modem\.b[0-9a-f]+)",\s*(0x[0-9a-fA-F]+)U,\s*(\d+)U,',
+        phase4_patch_texts["0155-veux-modem-firmware.patch"], re.MULTILINE)
+]
+modem_fw_ranges = sorted((offset, offset + size, name) for name, offset, size in modem_fw_entries)
+modem_fw_no_overlap = all(left[1] <= right[0] for left, right in zip(modem_fw_ranges, modem_fw_ranges[1:]))
 phase4_sources = {
     "nine_unique_patch_files": all(phase4_patch_texts.values()),
     "patches_applied_without_skip": all(phase4_status.values()),
     "firmware_table_116_rows": phase4_patch_texts["0155-veux-modem-firmware.patch"].count("{ \"") == 116,
+    "modem_bxx_table_has_33_unique_aligned_nonoverlapping_ranges": len(modem_fw_entries) == 33 and len({name for name, _, _ in modem_fw_entries}) == 33 and all(offset % 0x1000 == 0 and size > 0 for _, offset, size in modem_fw_entries) and modem_fw_no_overlap,
     "pas_and_modem_worker_hold": "veux_modem_start(void)" in phase4_text and "veux_modem_hold(void)" in phase4_text,
     "modem_a_read_only_api": "sweet_ufs_read_part(\"modem_a\"" in phase4_text,
     "glink_qrtr_pdm_wlfw_functions": all(x in phase4_text for x in (

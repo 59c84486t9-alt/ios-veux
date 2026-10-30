@@ -5725,3 +5725,10 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   PAS allocation/free sizes, and the safe byte readers in GLINK/PDMAP/WLFW.
   `tools/validate-repo.py`, `py_compile`, and `git diff --check` pass locally.
   CI, wrapper verification, and device write are pending.
+- Extended the Phase-4 source gate to audit all 33 `modem.bxx` table entries:
+  names are unique, sizes are positive, offsets are 4 KiB aligned, and sorted
+  file extents do not overlap. The table spans through `0x0b07951c`, totals
+  88,204,687 bytes including `modem.mdt`, and its largest `.bxx` is
+  `modem.b26` (38,035,520 bytes). The `modem.bxx` payloads are not available
+  as host files in this workspace, so their contents/CRCs cannot be recomputed
+  offline; the kernel's full-file CRC path logs each complete read.
