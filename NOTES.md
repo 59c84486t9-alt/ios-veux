@@ -5837,3 +5837,26 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - `tools/validate-repo.py`, `python3 -m py_compile tools/kernel-manifest.py`,
   and `git diff --check` pass. CI, wrapper, checklist, and any device write are
   pending.
+
+## >>> UPDATE 2026-10-30 (Phase 4.26 green CI; preflash checklist) <<<
+
+- CI run `41056134753` passed on code commit `9338b99881ebbf2992d0a58bea4479747c11ed49`.
+  Build, manifest, and Phase 2/3/4 sub-gates passed. The artifact kernel SHA-256
+  is `5e7b9122de4362070f7a2c390cd2b9ab78305ecc04d04e8f3302f3ebe40f5517`.
+- Built `/home/nyra/veux-artifacts/41056134753/xnu-kernel/modem-held.img` with
+  build ID/run ID `41056134753`, DTB SHA-256
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`, and
+  boot args `debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress
+  rd=ufsroot0 modem=1 modem_watch=180 veuxfbconsole=1`. Wrapper SHA-256 is
+  `a44f258108637faf1cfb142c8f26ac830d1383448db9ffa5483e1e9959140950`; size is
+  exactly 17,281,024 bytes. `verify-veux-wrapper.py --variant modem-held`
+  passed: 30/30 modem markers, forbidden-marker checks, payload reconstruction,
+  and manifest verification all passed.
+- **Preflash checklist, completed immediately before the planned write:**
+  `fastboot devices` = `4078cac030c8 fastboot`; `fastboot getvar product` =
+  `veux`; `fastboot getvar current-slot` = `b` (accepted by the user's override);
+  `fastboot getvar unlocked` = `yes`; `fastboot getvar partition-size:boot_b` =
+  `0x8000000` (134,217,728 bytes). Wrapper SHA and manifest were verified as
+  above. Checklist passed. Planned target is `boot_b` only, with exactly
+  17,281,024 bytes from the verified wrapper. No partition write has occurred
+  at the time of this entry. ADB was not queried.
