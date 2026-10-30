@@ -5860,3 +5860,10 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   above. Checklist passed. Planned target is `boot_b` only, with exactly
   17,281,024 bytes from the verified wrapper. No partition write has occurred
   at the time of this entry. ADB was not queried.
+- Flash completed after a second immediate checklist with the same passing
+  values. `fastboot flash boot_b .../modem-held.img` returned `Sending 'boot_b'
+  (16876 KB) OKAY`, `Writing 'boot_b' OKAY`, and `Finished. Total time: 0.561s`.
+  The only partition written was `boot_b`; exactly 17,281,024 bytes, wrapper
+  SHA-256 `a44f258108637faf1cfb142c8f26ac830d1383448db9ffa5483e1e9959140950`.
+  `fastboot set_active b` returned `Setting current slot to 'b' OKAY`;
+  `fastboot reboot` returned `Rebooting OKAY`. Post-reboot checks are pending.
