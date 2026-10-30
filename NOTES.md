@@ -5583,3 +5583,21 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   exactly 17,281,024 bytes, and a matching manifest for CI/build ID `40977083696`.
   Full verification passed 30/30 markers. The authorized write, if the
   immediate recheck matches, is `boot_b` only with exactly those bytes.
+
+## >>> UPDATE 2026-10-30 (Phase 4.20 boot_b flash completed; observation pending) <<<
+
+- Immediately before the write, serial `4078cac030c8` returned product `veux`,
+  current-slot `b` (accepted per user override), unlocked `yes`, and
+  `partition-size:boot_b = 0x8000000`. Wrapper hash, manifest and the full
+  verifier were rechecked successfully.
+- Wrote exactly 17,281,024 bytes to `boot_b` from
+  `/home/nyra/veux-artifacts/40977083696/xnu-kernel/modem-held.img`, SHA-256
+  `787a4b924bca45d298fa45e4c162dbc1fa27aa46115e06c2b7f729b05f33340c`.
+  `fastboot flash boot_b` returned `Sending 'boot_b' (16876 KB) OKAY`,
+  `Writing 'boot_b' OKAY`, `Finished`; `fastboot set_active b` returned
+  `Setting current slot to 'b' OKAY`; `fastboot reboot` returned `Rebooting
+  OKAY`, `Finished`. No other partition was written.
+- Three-minute observation requested. Host camera access is unavailable; check
+  whether the phone returns on ADB for a possible screen capture. If the phone
+  stays in the kernel WFE hold without USB, screen confirmation and return to
+  recovery require the user to handle it physically.
