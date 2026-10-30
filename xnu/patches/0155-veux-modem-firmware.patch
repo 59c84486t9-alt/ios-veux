@@ -206,13 +206,8 @@ new file mode 100644
 diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
 --- a/osfmk/conf/files.arm64
 +++ b/osfmk/conf/files.arm64
-@@ -45,7 +45,7 @@
- osfmk/arm64/veux_ipcc.c		standard
- osfmk/arm64/veux_modem_pool.c	standard
- osfmk/arm64/veux_modem_pas.c	standard
-+osfmk/arm64/veux_modem_fw.c	standard
- osfmk/arm64/arm64_hypercall.c	standard
- osfmk/arm/io_map.c		standard
+@@ -49,1 +49,2 @@
  osfmk/arm64/loose_ends.c	standard
++osfmk/arm64/veux_modem_fw.c	standard
 -- 
 2.49.0
