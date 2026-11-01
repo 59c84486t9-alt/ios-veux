@@ -36,6 +36,14 @@
   screen result is pending; expected evidence is modem segment loading,
   `modem_hold=0` continuing, `VEUX ROOT mode=rw`, iOS launchd/SpringBoard, and
   later Goodix touch status.
+- The user supplied a photo showing the shim still at `XNU jumping (fbcon
+  clears screen)`. The normal variant deliberately omits `veuxfb` and
+  `veuxfbconsole`, so this text remains static during a successful early XNU
+  boot and cannot distinguish progress from a pre-display hang. The host still
+  sees neither Fastboot nor ADB. Runtime remains unresolved; wait for the
+  Apple display/lock screen or create a combined diagnostic with the
+  framebuffer console enabled if the screen remains unchanged beyond several
+  minutes.
 
 ## >>> UPDATE 2026-11-01 (Phase 4.28 segment mapping lifecycle; CI pending) <<<
 
