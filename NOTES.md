@@ -42,6 +42,17 @@
   is not host-observable on this machine; the expected confirmation is a
   `mapping bNN`, `mapped bNN VA=...`, and corresponding `unmapped bNN` for
   every segment, followed by `segments loaded`.
+- User-supplied screen photos show the mapping-lifecycle fix working:
+  `b33` and `b34` reuse VA `0xfffffe5442764000` after unmap,
+  `b35` maps at `0xfffffe5bba234000`, unmaps, and `segments loaded` follows.
+  The modem then prints `auth_reset ret=0 res=0`, `SMP2P READY`,
+  `VERSION_ACK`, and `OPEN_ACK IPCRTR`. No kmem-allocation panic appears in
+  this successful pass.
+- The same photo transcription later shows a second progression through
+  `b33`/`b34`/`b35`, ending after `mapped b35`. The chronology cannot be
+  established from the supplied screen text: it could be a second boot after a
+  display-preserving reset or older console text retained elsewhere on screen.
+  A fresh full-screen photo is required before treating this as a loader stall.
 
 ## >>> UPDATE 2026-11-01 (Phase 4.27 flashed to boot_b) <<<
 
