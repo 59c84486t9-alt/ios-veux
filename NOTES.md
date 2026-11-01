@@ -52,6 +52,9 @@
   It keeps `veuxfbconsole=1` enabled and omits `veux_gui_noconsole=1`, allowing
   the post-GUI modem/WLFW messages to remain observable. Direct verification
   passed 39/39 modem markers and exact payload reconstruction. Not flashed yet.
+- After Fastboot reconnected, rechecked serial/product/slot/unlock/capacity and
+  wrapper size/hash. Flashed only this image to `boot_b`, selected B, and
+  rebooted. Runtime WLFW result is pending.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
