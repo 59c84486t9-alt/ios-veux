@@ -1,3 +1,21 @@
+## >>> UPDATE 2026-11-01 (serialize modem load before iOS exec; CI pending) <<<
+
+- The console-enabled combined image reached UFS root mount, but process 1
+  failed `execve("/sbin/launchd")` with `EINVAL` and panicked at
+  `kern_misc.c:7107`. The same capture showed modem segment loading still
+  active and interleaved with root/init work.
+- Added a modem boot-completion handoff: the modem worker wakes the bootstrap
+  thread after `load_modem()` finishes `init_image`, segment loading, and
+  `auth_reset`; the bootstrap thread waits up to `modem_boot_wait=300` seconds
+  before continuing to root mount. Diagnostic mode with `modem_hold=1` still
+  holds indefinitely after the worker starts.
+- Added source, binary, workflow, and wrapper requirements for the boot-wait
+  handoff. The complete combined boot arguments now include
+  `modem_hold=0 modem_boot_wait=300 modem_watch=86400`.
+- Repository validation, Python syntax checks, strict patch parsing, and
+  whitespace checks pass. CI, wrapper verification, device write, and runtime
+  result are pending.
+
 ## >>> UPDATE 2026-11-01 (modem plus iOS GUI/touch runtime; CI pending) <<<
 
 - The existing `modem-held` image intentionally blocks `sweet_ufs_rootdev`

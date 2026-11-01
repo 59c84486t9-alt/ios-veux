@@ -37,7 +37,7 @@ modem_forbidden_boot_args = {
 }
 if any(arg.split("=", 1)[0] in modem_forbidden_boot_args for arg in modem_held_boot_args):
     raise SystemExit("modem-held boot args contain a forbidden write, GUI, or probe argument")
-if not {"modem=1", "modem_hold=0", "modem_watch=86400", "rootrw=1", "ufsrw=1",
+if not {"modem=1", "modem_hold=0", "modem_boot_wait=300", "modem_watch=86400", "rootrw=1", "ufsrw=1",
         "veuxsandbox=1", "veux_gui=1", "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args):
     raise SystemExit("modem-normal requires modem service, RW root, sandbox, GUI, and its variant marker")
 if {"modem_hold=1", "veuxtouchprobe=1", "veuxtouchprobehold=1",
@@ -445,10 +445,13 @@ phase4_sources = {
         "for (uint8_t lun = 0; lun <= 5; lun++)",
         "veux_modem_a_partition_valid", "veux_modem_a_first_block", "veux_modem_a_nblocks",
         "VEUX UFS: cached modem_a on LUN=%u")),
-    "modem_main_thread_hold_is_explicit_and_diagnostic_only": all(x in phase4_text for x in (
+    "modem_root_handoff_waits_for_load_and_hold_is_diagnostic_only": all(x in phase4_text for x in (
         "assert_wait(&veux_modem_wait_chan,THREAD_UNINT)",
         "thread_block(THREAD_CONTINUE_NULL)", "veux_modem_hold();",
-        'if(!PE_parse_boot_argn("modem_hold",&hold,sizeof(hold))||hold!=1)return;')),
+        "bool loaded=load_modem();thread_wakeup(&veux_modem_wait_chan);",
+        'PE_parse_boot_argn("modem_boot_wait",&wait,sizeof(wait))',
+        "assert_wait_timeout(&veux_modem_wait_chan,THREAD_UNINT,wait*1000,1000*NSEC_PER_USEC)",
+        "VEUX MODEM PAS: boot wait complete; continuing to root mount")),
 }
 if not all(phase4_sources.values()):
     raise SystemExit("VEUX Phase-4 source assertions failed: " + repr(phase4_sources) + " forbidden=" + repr(phase4_forbidden))
@@ -476,6 +479,7 @@ phase4_binary = {
         b"VEUX MODEM PAS: mapping b%02u pa=0x%llx len=0x%llx\n",
         b"VEUX MODEM PAS: mapped b%02u VA=0x%llx\n",
         b"VEUX MODEM PAS: unmapped b%02u\n")),
+    "pas_boot_wait_handoff": b"VEUX MODEM PAS: boot wait complete; continuing to root mount\n" in kernel,
     "modem_pool_mapping_address": b"VEUX MODEM POOL: mapped at VA 0x%llx\n" in kernel,
     "glink_startup_diagnostics": all(x in kernel for x in (
         b"VEUX GLINK: requesting SMEM items 478, 479, 480\n",
@@ -605,7 +609,7 @@ source_checks["all_runtime_boot_variants_are_manifested_and_safe"] = (
     {"rootrw=1", "ufsrw=1", "veuxvariant=normal"}.issubset(boot_args)
     and {"veuxtouchprobe=1", "veuxtouchprobehold=1", "veuxvariant=held"}.issubset(held_boot_args)
     and not ({"rootrw=1", "ufsrw=1", "veuxtouchprobeactive=1", "veuxlog=1"} & held_boot_args)
-    and {"modem=1", "modem_hold=0", "rootrw=1", "ufsrw=1", "veux_gui=1",
+    and {"modem=1", "modem_hold=0", "modem_boot_wait=300", "rootrw=1", "ufsrw=1", "veux_gui=1",
          "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args)
     and not ({"modem_hold=1", "veuxtouchprobe=1", "veuxtouchprobehold=1",
               "veuxtouchprobeactive=1", "veuxlog=1"} & modem_normal_boot_args)

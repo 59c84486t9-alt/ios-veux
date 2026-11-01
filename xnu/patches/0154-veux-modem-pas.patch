@@ -69,7 +69,7 @@ diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
 new file mode 100644
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem_pas.c
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,122 @@
 +#include <pexpert/arm64/board_config.h>
 +#include <kern/debug.h>
 +#include <kern/kalloc.h>
@@ -175,17 +175,18 @@ new file mode 100644
 + uint32_t watch=180;PE_parse_boot_argn("modem_watch",&watch,sizeof(watch));
 + printf("VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3\n");
 + smem=(uint8_t *)ml_io_map_wcomb(SMEM_PA,SMEM_SIZE);if(!smem){printf("VEUX MODEM PAS: SMEM map failed\n");veux_modem_hold();}printf("VEUX GLINK: mapped SMEM\n");tcsr=(volatile uint8_t *)ml_io_map(TCSR_PA,0x20000);if(!tcsr){printf("VEUX MODEM PAS: TCSR map failed\n");veux_modem_hold();}part=find_part(0,1);if(!part){printf("VEUX MODEM PAS: SMEM partition missing\n");veux_modem_hold();}
-+ printf("VEUX MODEM PAS: starting modem boot sequence\n");if(!load_modem()){printf("VEUX MODEM PAS: modem_boot failed\n");veux_modem_hold();}add_out(ITEM_OUT);
++ printf("VEUX MODEM PAS: starting modem boot sequence\n");bool loaded=load_modem();thread_wakeup(&veux_modem_wait_chan);if(!loaded){printf("VEUX MODEM PAS: modem_boot failed\n");veux_modem_hold();}add_out(ITEM_OUT);
 + printf("VEUX MODEM PAS: auth_reset complete; waiting SMP2P\n");uint32_t last=~0U;for(uint32_t ms=0;ms<watch*1000;ms++){(void)veux_ipcc_poll(2,2);struct smp_hdr *in=smem_find(ITEM_IN,NULL);if(in&&in->magic==SMP_MAGIC){volatile uint32_t *sk=smp_find(in,"slave-kernel"),*ipa=smp_find(in,"ipa");if(ipa&&*ipa==1)printf("VEUX MODEM: ipa_query_seen\n");if(sk&&*sk!=last){last=*sk;if(*sk&1){printf("VEUX MODEM: FATAL slave-kernel=0x%x\n",*sk);veux_modem_hold();}if(*sk&2){printf("VEUX MODEM: SMP2P READY\n");veux_glink_init();for(uint32_t g=0;g<watch*1000;g++){(void)veux_ipcc_poll(2,0);veux_glink_poll();delay(1000);}printf("VEUX MODEM PAS: modem_watch expired after READY\n");veux_modem_hold();}}}delay(1000);}
 + printf("VEUX MODEM PAS: modem_watch timeout\n");veux_modem_hold();
 +}
 +static void veux_modem_thread(void *arg __unused, wait_result_t wr __unused){veux_modem_run();veux_modem_hold();}
 +void veux_modem_start(void){
-+ uint32_t on=0,hold=0;thread_t t;
++ uint32_t on=0,hold=0,wait=300;thread_t t;
 + if(!PE_parse_boot_argn("modem",&on,sizeof(on))||on!=1)return;
 + if(kernel_thread_start(veux_modem_thread,NULL,&t)!=KERN_SUCCESS){printf("VEUX MODEM PAS: worker creation failed\n");veux_modem_hold();}
 + thread_deallocate(t);
-+ if(!PE_parse_boot_argn("modem_hold",&hold,sizeof(hold))||hold!=1)return;
++ (void)PE_parse_boot_argn("modem_boot_wait",&wait,sizeof(wait));
++ if(!PE_parse_boot_argn("modem_hold",&hold,sizeof(hold))||hold!=1){if(wait&&assert_wait_timeout(&veux_modem_wait_chan,THREAD_UNINT,wait*1000,1000*NSEC_PER_USEC)==THREAD_WAITING)thread_block(THREAD_CONTINUE_NULL);printf("VEUX MODEM PAS: boot wait complete; continuing to root mount\n");return;}
 + (void)assert_wait(&veux_modem_wait_chan,THREAD_UNINT);
 + thread_block(THREAD_CONTINUE_NULL);
 + veux_modem_hold();
