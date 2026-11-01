@@ -19,6 +19,10 @@
   the modem worker. This distinguishes a modem-induced userland stall from a
   regression in the current normal runtime. It has not been flashed because
   the phone is not host-visible.
+- After Fastboot reconnected, rechecked product, slot B, unlock state,
+  partition capacity, image size, and SHA-256. Flashed only `boot_b`, selected
+  slot B, and rebooted; all Fastboot operations returned OKAY. Runtime result
+  is pending.
 
 ## >>> UPDATE 2026-11-01 (serialize modem load before iOS exec; CI pending) <<<
 
