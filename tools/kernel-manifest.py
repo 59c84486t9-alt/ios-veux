@@ -280,6 +280,8 @@ phase4_forbidden = {
 ufs_source_path = a.source_root / "bsd/dev/sweet_ufs.c"
 ufs_source = ufs_source_path.read_text(errors="replace") if ufs_source_path.is_file() else ""
 ufs_read_body = ufs_source.split("ufs_read_blocks(uint64_t lba", 1)[-1].split("\n}", 1)[0]
+pas_source_path = a.source_root / "osfmk/arm64/veux_modem_pas.c"
+pas_source = pas_source_path.read_text(errors="replace") if pas_source_path.is_file() else ""
 modem_fw_entries = [
     (name, int(offset, 16), int(size))
     for name, offset, size in re.findall(
@@ -345,8 +347,13 @@ phase4_sources = {
         'printf("VEUX MODEM PAS: starting modem boot sequence\n");if(!load_modem())' in phase4_patch_texts["0154-veux-modem-pas.patch"],
     "pas_each_segment_progress_before_read":
         'printf("VEUX MODEM PAS: loading modem.b%02u\n",i);if(ph[i].filesz&&veux_fw_read' in phase4_patch_texts["0154-veux-modem-pas.patch"],
-    "pas_bss_progress_before_volatile_zero_loop":
-        'printf("VEUX MODEM PAS: zeroing %llu bytes for b%02u\n",(unsigned long long)(ph[i].memsz-ph[i].filesz),i);volatile uint8_t *zero_ptr=' in phase4_patch_texts["0154-veux-modem-pas.patch"],
+    "pas_bss_progress_before_aligned_volatile_u64_zero_loop": all(x in phase4_patch_texts["0154-veux-modem-pas.patch"] for x in (
+        "uint64_t zero_count=ph[i].memsz-ph[i].filesz,k=0;",
+        'printf("VEUX MODEM PAS: zeroing %llu bytes for b%02u\\n",(unsigned long long)zero_count,i);',
+        "while(k<zero_count&&((uintptr_t)(zero_bytes+k)&7ULL)){zero_bytes[k++]=0;}",
+        "volatile uint64_t *zero_words=(volatile uint64_t *)(zero_bytes+k);",
+        "for(;k+8ULL<=zero_count;k+=8ULL){*zero_words++=0;}",
+        "for(;k<zero_count;k++){zero_bytes[k]=0;}")),
     "pas_segments_use_per_segment_io_mapping_without_heap_alloc": all(x in phase4_text for x in (
         "veux_modem_map_phys(map_pa,map_len)", "MODEM_PA+ph[i].paddr",
         'extern "C" uintptr_t ml_io_map(uintptr_t, uintptr_t)', "ml_io_map((uintptr_t)pa,(uintptr_t)size)")) and
@@ -354,18 +361,23 @@ phase4_sources = {
         "veux_modem_segment_maps" not in phase4_text and
         not any(x in phase4_text.split("VEUX MODEM PAS: loading segments", 1)[1].split("VEUX MODEM PAS: segments loaded", 1)[0]
                 for x in ("kmem_alloc(", "IOMalloc(", "veux_modem_pool_alloc(", "MODEM_POOL_SIZE")),
-    "pas_carveout_zeroing_uses_volatile_pointer": all(x in phase4_patch_texts["0154-veux-modem-pas.patch"] for x in (
-        "volatile uint8_t *zero_ptr=(volatile uint8_t *)(dst+ph[i].filesz)",
-        "for(uint64_t k=0;k<(ph[i].memsz-ph[i].filesz);k++){zero_ptr[k]=0;}")) and
-        "strb wzr" not in phase4_patch_texts["0154-veux-modem-pas.patch"] and
+    "pas_carveout_zeroing_uses_aligned_volatile_u64": all(x in pas_source for x in (
+        "uint64_t zero_count=ph[i].memsz-ph[i].filesz,k=0;",
+        "volatile uint64_t *zero_words=(volatile uint64_t *)(zero_bytes+k);",
+        "for(;k+8ULL<=zero_count;k+=8ULL){*zero_words++=0;}")) and
+        "volatile uint8_t *zero_ptr=(volatile uint8_t *)(dst+ph[i].filesz)" not in phase4_patch_texts["0154-veux-modem-pas.patch"] and
         "bzero(dst+ph[i].filesz" not in phase4_patch_texts["0154-veux-modem-pas.patch"],
-    "ufs_modem_destination_copy_uses_volatile_pointer": all(x in phase4_patch_texts["0155-veux-modem-firmware.patch"] for x in (
+    "ufs_modem_destination_copy_uses_aligned_volatile_u64": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
         "volatile uint8_t *dest_ptr = (volatile uint8_t *)((uint8_t *)dst + done)",
         "const uint8_t *src_ptr = (const uint8_t *)(su.dma + DMA_BOUNCE) + skip",
-        "dest_ptr[k] = src_ptr[k];")) and
-        all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
-            "volatile uint8_t *dest_ptr = (volatile uint8_t *)((uint8_t *)dst + done)",
-            "dest_ptr[k] = src_ptr[k];")) and
+        "(((uintptr_t)(dest_ptr + k)) | ((uintptr_t)(src_ptr + k))) & 7U",
+        "volatile uint64_t *dest64 = (volatile uint64_t *)(dest_ptr + k);",
+        "const volatile uint64_t *src64 = (const volatile uint64_t *)(src_ptr + k);",
+        "for (; k + 8U <= take; k += 8U) *dest64++ = *src64++;",
+        "for (; k < take; k++) dest_ptr[k] = src_ptr[k];")) and
+        all(x in ufs_source for x in (
+            "volatile uint64_t *dest64 = (volatile uint64_t *)(dest_ptr + k);",
+            "const volatile uint64_t *src64 = (const volatile uint64_t *)(src_ptr + k);")) and
         "ldrb %w0" not in phase4_patch_texts["0155-veux-modem-firmware.patch"] and
         "strb %w0" not in phase4_patch_texts["0155-veux-modem-firmware.patch"] and
         "ldrb %w0" not in phase4_patch_texts["0162-veux-ufs-multilun.patch"] and
