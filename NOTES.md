@@ -21,6 +21,10 @@
   verification, and the dependent `0159` patch context. Repository validation,
   Python syntax checks, strict patch-sequence application, and whitespace
   checks pass. CI and device test are pending.
+- CI run `41359978782` passed on commit `7170a1c` in 12m5s, including the
+  kernel build and Phase-2/3/4 modem gates. The deferred-modem kernel exists,
+  but its wrapper has not yet been built, verified, or flashed. The phone was
+  left on the confirmed modem-disabled iOS GUI image while CI ran.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
