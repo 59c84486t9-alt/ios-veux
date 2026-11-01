@@ -36,6 +36,16 @@
   `boot_b`, selected B, and rebooted. Runtime result is pending. The intended
   sequence is iOS GUI/touch first, followed by modem worker startup after 120
   seconds.
+- User confirms the deferred build boots iOS but Wi-Fi is not usable. This is
+  expected with the current implementation: the isolation boot and deferred
+  modem boot prove GUI/touch and timing are viable, while WLFW still stops
+  after CAP and no Apple-visible Adrastea network device exists.
+- The remaining work is Phase 8: complete WLFW BDF/calibration/firmware-ready/
+  WLAN-config/mission sequencing, then implement Adrastea SNOC copy engines,
+  SMMU mapping, direct GIC IRQs, HTC, WMI, scan/connect, and an Apple network
+  interface. The local Topaz WLAN scan patch is a structural reference only;
+  its WCN3988 companion, descriptor format, DMAs, VMIDs, and endpoints cannot
+  be copied unchanged to VEUX.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
