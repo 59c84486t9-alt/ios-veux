@@ -25,6 +25,13 @@
   kernel build and Phase-2/3/4 modem gates. The deferred-modem kernel exists,
   but its wrapper has not yet been built, verified, or flashed. The phone was
   left on the confirmed modem-disabled iOS GUI image while CI ran.
+- Built deferred modem wrapper
+  `/home/nyra/veux-artifacts/41359978782/modem-normal.img`, 17,281,024 bytes,
+  SHA-256 `03742fd82eb204798538cf92794a87613c1e33bfaf654d721a1990277f9827ca`.
+  Kernel SHA-256 is
+  `0efaaac7b7feb191ee26174ee2c3b91a1d2f868c273aa024cd70d30e9e3aab19`.
+  Verification passed 39/39 markers, the deferred-worker marker, forbidden
+  checks, exact args, and byte-for-byte reconstruction. Fastboot is visible.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
