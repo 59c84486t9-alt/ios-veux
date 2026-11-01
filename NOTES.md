@@ -1,3 +1,19 @@
+## >>> UPDATE 2026-11-02 (modem-disabled iOS GUI confirmed; deferred modem next) <<<
+
+- User confirms `/home/nyra/veux-artifacts/41355888099/normal-console.img`
+  boots iOS successfully. This proves the current GUI, touch, sandbox, RW root,
+  and launchd runtime are viable when the modem worker is absent.
+- Wi-Fi is unavailable in that isolation image by design: `modem=1` is absent,
+  so neither modem/WLFW transport nor WLAN firmware startup runs.
+- Even with the modem worker, patch `0158` intentionally stops after the WLFW
+  CAP response and does not complete BDF download, calibration, firmware-ready,
+  CE configuration, or mission mode. No Apple-side WLAN device/network driver
+  is present in the current patch set, so a modem worker alone is not expected
+  to produce a working Wi-Fi interface.
+- Next staged test: defer modem startup until after the GUI is stable, inspect
+  WLFW service discovery and CAP, then port the remaining WLFW/QMI stages from
+  the local `TopazModem.cpp` reference only if the device advertises them.
+
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
 - The synchronized run reached the intended handoff: modem segments completed,
