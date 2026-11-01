@@ -34,6 +34,14 @@
   current slot `b`; unlocked `yes`; `boot_b` size `0x8000000`. The only
   partition to be written is `boot_b`, exactly 17,281,024 bytes from the
   wrapper above.
+- Flash completed after a second matching hash/size/device check:
+  `fastboot flash boot_b` reported Sending OKAY, Writing OKAY, and Finished in
+  0.546s. `fastboot set_active b` and `fastboot reboot` both returned OKAY.
+  No partition other than `boot_b` was written.
+- Fifteen seconds after reboot, both Fastboot and ADB were empty. Screen output
+  is not host-observable on this machine; the expected confirmation is a
+  `mapping bNN`, `mapped bNN VA=...`, and corresponding `unmapped bNN` for
+  every segment, followed by `segments loaded`.
 
 ## >>> UPDATE 2026-11-01 (Phase 4.27 flashed to boot_b) <<<
 
