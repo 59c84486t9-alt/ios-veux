@@ -52,6 +52,10 @@
   `20db7522297e3a2bc6a6f500bd07b3995a829ad9cf473f52499f30dc4b84da68`.
   Wrapper verification passed modem markers, payload reconstruction, and boot
   arguments. No flash occurred yet because the phone was not host-visible.
+- After the user returned the phone to Fastboot, rechecked serial
+  `4078cac030c8`, product `veux`, slot B, unlocked state, partition capacity,
+  wrapper size, and SHA-256. Flashed only `boot_b`, selected B, and rebooted;
+  all Fastboot operations returned OKAY. Screen diagnostic output is pending.
 
 ## >>> UPDATE 2026-11-01 (Phase 4.28 segment mapping lifecycle; CI pending) <<<
 
