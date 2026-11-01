@@ -21,7 +21,7 @@ diff --git a/osfmk/arm64/veux_modem.h b/osfmk/arm64/veux_modem.h
 new file mode 100644
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem.h
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,43 @@
 +#ifndef _ARM64_VEUX_MODEM_H_
 +#define _ARM64_VEUX_MODEM_H_
 +#include <stdbool.h>
@@ -44,6 +44,7 @@ new file mode 100644
 +void veux_wlfw_dispatch(uint32_t node, uint32_t port);
 +void veux_wlfw_rx(uint32_t node, uint32_t src_port, uint32_t dst_port, const uint8_t *data, uint32_t len);
 +void *veux_modem_map_phys(uint64_t pa, uint64_t size);
++void veux_modem_unmap_phys(void *va, uint64_t size);
 +void veux_modem_start(void);
 +uint64_t veux_scm_assign(uint64_t addr,uint64_t size,const uint32_t *vmids,unsigned count);
 +void veux_wlfw_poll(void);
@@ -162,7 +163,7 @@ new file mode 100644
 + if(hp->offset+(uint64_t)hp->filesz<=(uint64_t)n)memcpy(meta+hdr,mdt+hp->offset,hp->filesz);else{char name[20];snprintf(name,sizeof(name),"modem.b%02u",hash);if(veux_fw_read(name,0,meta+hdr,hp->filesz)!=hp->filesz){IOFreeContiguous(meta,meta_alloc_size);kfree_data(mdt,mdt_alloc_size);return false;}}
 + printf("VEUX MODEM PAS: metadata copied\n");barrier();uint64_t res=0,st=0;printf("VEUX MODEM PAS: calling init_image\n");st=smc(SCM_FN(SCM_SVC_PIL,PIL_INIT_IMAGE),2|(SCM_ARG_RW<<6),PAS_ID_MODEM,(uint64_t)meta_pa,0,&res);IOFreeContiguous(meta,meta_alloc_size);meta=NULL;printf("VEUX MODEM PAS: init_image ret=%llx res=%llx\n",st,res);if(st||res)goto fail;
 + if(reloc){st=smc(SCM_FN(SCM_SVC_PIL,PIL_MEM_SETUP),3,PAS_ID_MODEM,min,(max-min+0xfff)&~0xfffULL,&res);printf("VEUX MODEM PAS: mem_setup ret=%llx res=%llx\n",st,res);if(st||res)goto fail;}
-+ printf("VEUX MODEM PAS: loading segments\n");for(uint32_t i=0;i<eh->phnum;i++){if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;if(ph[i].filesz>ph[i].memsz)goto fail;char name[20];snprintf(name,sizeof(name),"modem.b%02u",i);uint64_t seg_pa=ph[i].paddr<MODEM_SIZE?MODEM_PA+ph[i].paddr:ph[i].paddr;if(seg_pa<MODEM_PA||seg_pa>MODEM_PA+MODEM_SIZE||ph[i].memsz>MODEM_PA+MODEM_SIZE-seg_pa)goto fail;uint64_t map_pa=seg_pa&~0x3fffULL,offset=seg_pa-map_pa;uint64_t map_len=(offset+ph[i].memsz+0x3fffULL)&~0x3fffULL;uint8_t *map=veux_modem_map_phys(map_pa,map_len);if(!map)goto fail;uint8_t *dst=map+offset;if(ph[i].filesz&&!veux_fw_find(name)){printf("VEUX MODEM PAS: segment %s absent\n",name);goto fail;}printf("VEUX MODEM PAS: loading modem.b%02u\n",i);if(ph[i].filesz&&veux_fw_read(name,0,dst,ph[i].filesz)!=ph[i].filesz)goto fail;if(ph[i].memsz>ph[i].filesz){uint64_t zero_count=ph[i].memsz-ph[i].filesz,k=0;printf("VEUX MODEM PAS: zeroing %llu bytes for b%02u\n",(unsigned long long)zero_count,i);volatile uint8_t *zero_bytes=(volatile uint8_t *)(dst+ph[i].filesz);while(k<zero_count&&((uintptr_t)(zero_bytes+k)&7ULL)){zero_bytes[k++]=0;}volatile uint64_t *zero_words=(volatile uint64_t *)(zero_bytes+k);for(;k+8ULL<=zero_count;k+=8ULL){*zero_words++=0;}for(;k<zero_count;k++){zero_bytes[k]=0;}}barrier();}printf("VEUX MODEM PAS: segments loaded\n");
++ printf("VEUX MODEM PAS: loading segments\n");for(uint32_t i=0;i<eh->phnum;i++){if(ph[i].type!=PT_LOAD||!ph[i].memsz||(ph[i].flags&MDT_TYPE_MASK)==MDT_TYPE_HASH)continue;if(ph[i].filesz>ph[i].memsz)goto fail;char name[20];snprintf(name,sizeof(name),"modem.b%02u",i);uint64_t seg_pa=ph[i].paddr<MODEM_SIZE?MODEM_PA+ph[i].paddr:ph[i].paddr;if(seg_pa<MODEM_PA||seg_pa>MODEM_PA+MODEM_SIZE||ph[i].memsz>MODEM_PA+MODEM_SIZE-seg_pa)goto fail;if(ph[i].filesz&&!veux_fw_find(name)){printf("VEUX MODEM PAS: segment %s absent\n",name);goto fail;}uint64_t map_pa=seg_pa&~0x3fffULL,offset=seg_pa-map_pa;uint64_t map_len=(offset+ph[i].memsz+0x3fffULL)&~0x3fffULL;printf("VEUX MODEM PAS: mapping b%02u pa=0x%llx len=0x%llx\n",i,(unsigned long long)map_pa,(unsigned long long)map_len);uint8_t *map=veux_modem_map_phys(map_pa,map_len);if(!map){printf("VEUX MODEM PAS: map failed for b%02u\n",i);goto fail;}printf("VEUX MODEM PAS: mapped b%02u VA=0x%llx\n",i,(unsigned long long)(uintptr_t)map);uint8_t *dst=map+offset;printf("VEUX MODEM PAS: loading modem.b%02u\n",i);if(ph[i].filesz&&veux_fw_read(name,0,dst,ph[i].filesz)!=ph[i].filesz){veux_modem_unmap_phys(map,map_len);goto fail;}if(ph[i].memsz>ph[i].filesz){uint64_t zero_count=ph[i].memsz-ph[i].filesz,k=0;printf("VEUX MODEM PAS: zeroing %llu bytes for b%02u\n",(unsigned long long)zero_count,i);volatile uint8_t *zero_bytes=(volatile uint8_t *)(dst+ph[i].filesz);while(k<zero_count&&((uintptr_t)(zero_bytes+k)&7ULL)){zero_bytes[k++]=0;}volatile uint64_t *zero_words=(volatile uint64_t *)(zero_bytes+k);for(;k+8ULL<=zero_count;k+=8ULL){*zero_words++=0;}for(;k<zero_count;k++){zero_bytes[k]=0;}}barrier();veux_modem_unmap_phys(map,map_len);printf("VEUX MODEM PAS: unmapped b%02u\n",i);}printf("VEUX MODEM PAS: segments loaded\n");
 + st=smc(SCM_FN(SCM_SVC_PIL,PIL_AUTH_RESET),1,PAS_ID_MODEM,0,0,&res);printf("VEUX MODEM PAS: auth_reset ret=%llx res=%llx\n",st,res);kfree_data(mdt,mdt_alloc_size);return st==0&&res==0;
 +fail: kfree_data(mdt,mdt_alloc_size);return false;
 +}
@@ -237,9 +238,11 @@ diff --git a/iokit/Kernel/arm/VeuxModemMap.cpp b/iokit/Kernel/arm/VeuxModemMap.c
 new file mode 100644
 --- /dev/null
 +++ b/iokit/Kernel/arm/VeuxModemMap.cpp
-@@ -0,0 +1,16 @@
+@@ -0,0 +1,25 @@
++#include <arm/memory_types.h>
 +#include <stdint.h>
-+extern "C" uintptr_t ml_io_map(uintptr_t, uintptr_t);
++extern "C" uintptr_t ml_io_map_unmappable(uintptr_t, uintptr_t, unsigned int);
++extern "C" void ml_io_unmap(uintptr_t, uintptr_t);
 +
 +#if defined(ARM64_BOARD_CONFIG_VEUX)
 +
@@ -247,9 +250,16 @@ new file mode 100644
 +veux_modem_map_phys(uint64_t pa, uint64_t size)
 +{
 + if(size==0||pa>UINTPTR_MAX-size)return 0;
-+ /* ml_io_map creates an I/O mapping, not an 81 MiB heap buffer. XNU exposes no
-+  * matching unmap API here, so mappings remain until reset. */
-+ return (void *)ml_io_map((uintptr_t)pa,(uintptr_t)size);
++ /* Use kernel_map so the fixed 8 MiB io_submap is not exhausted by the
++  * modem's multi-segment boot image. The caller unmaps after each copy. */
++ return (void *)ml_io_map_unmappable((uintptr_t)pa,(uintptr_t)size,VM_WIMG_IO);
++}
++
++extern "C" void
++veux_modem_unmap_phys(void *va, uint64_t size)
++{
++ if(va==0||size==0||(uintptr_t)va>UINTPTR_MAX-size)return;
++ ml_io_unmap((uintptr_t)va,(uintptr_t)size);
 +}
 +
 +#endif

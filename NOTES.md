@@ -1,3 +1,21 @@
+## >>> UPDATE 2026-11-01 (Phase 4.28 segment mapping lifecycle; CI pending) <<<
+
+- The 2,001,664-byte kmem failure occurs after `modem.b34` is read even though
+  that segment is only 284 bytes and reports `crc-ok`; the failure is a VM
+  mapping resource issue, not firmware corruption.
+- `0154-veux-modem-pas.patch` previously mapped every modem segment through
+  `ml_io_map()` and retained every mapping. The runtime I/O submap is only
+  8 MiB, while the modem files alone exceed 84 MiB.
+- Changed segment mappings to `ml_io_map_unmappable()` so they come from
+  `kernel_map`, added `veux_modem_unmap_phys()` using `ml_io_unmap()`, and
+  release each mapping after copy/zero or after a read failure. Missing
+  firmware is now checked before allocating the mapping.
+- Added boot-visible `mapping bNN`, `mapped bNN VA`, and `unmapped bNN`
+  diagnostics, plus source/binary manifest and wrapper-verifier gates.
+- `tools/validate-repo.py`, Python syntax compilation, `git diff --check`, and
+  strict `git apply --numstat` patch parsing pass. CI, wrapper verification,
+  and device write are pending.
+
 ## >>> UPDATE 2026-11-01 (Phase 4.27 flashed to boot_b) <<<
 
 - Immediately before writing, the wrapper SHA-256 remained

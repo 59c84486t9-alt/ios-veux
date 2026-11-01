@@ -355,11 +355,20 @@ phase4_sources = {
         "volatile uint64_t *zero_words=(volatile uint64_t *)(zero_bytes+k);",
         "for(;k+8ULL<=zero_count;k+=8ULL){*zero_words++=0;}",
         "for(;k<zero_count;k++){zero_bytes[k]=0;}")),
-    "pas_segments_use_per_segment_io_mapping_without_heap_alloc": all(x in phase4_text for x in (
+    "pas_segments_map_from_kernel_va_and_unmap_each_without_heap_alloc": all(x in phase4_text for x in (
         "veux_modem_map_phys(map_pa,map_len)", "MODEM_PA+ph[i].paddr",
-        'extern "C" uintptr_t ml_io_map(uintptr_t, uintptr_t)', "ml_io_map((uintptr_t)pa,(uintptr_t)size)")) and
+        'extern "C" uintptr_t ml_io_map_unmappable(uintptr_t, uintptr_t, unsigned int)',
+        "ml_io_map_unmappable((uintptr_t)pa,(uintptr_t)size,VM_WIMG_IO)",
+        'extern "C" void ml_io_unmap(uintptr_t, uintptr_t)',
+        "ml_io_unmap((uintptr_t)va,(uintptr_t)size)",
+        "veux_modem_unmap_phys(map,map_len)",
+        "if(ph[i].filesz&&!veux_fw_find(name))",
+        'printf("VEUX MODEM PAS: mapping b%02u pa=0x%llx len=0x%llx\\n"',
+        'printf("VEUX MODEM PAS: mapped b%02u VA=0x%llx\\n"',
+        'printf("VEUX MODEM PAS: unmapped b%02u\\n"')) and
         "IOMemoryDescriptor::withPhysicalAddress" not in phase4_text and
         "veux_modem_segment_maps" not in phase4_text and
+        "return (void *)ml_io_map((uintptr_t)pa,(uintptr_t)size)" not in phase4_text and
         not any(x in phase4_text.split("VEUX MODEM PAS: loading segments", 1)[1].split("VEUX MODEM PAS: segments loaded", 1)[0]
                 for x in ("kmem_alloc(", "IOMalloc(", "veux_modem_pool_alloc(", "MODEM_POOL_SIZE")),
     "pas_carveout_zeroing_uses_aligned_volatile_u64": all(x in pas_source for x in (
@@ -454,6 +463,10 @@ phase4_binary = {
         b"VEUX MODEM PAS: starting modem boot sequence\n",
         b"VEUX MODEM PAS: loading modem.b%02u\n",
         b"VEUX MODEM PAS: zeroing %llu bytes for b%02u\n")),
+    "pas_segment_mapping_lifecycle": all(x in kernel for x in (
+        b"VEUX MODEM PAS: mapping b%02u pa=0x%llx len=0x%llx\n",
+        b"VEUX MODEM PAS: mapped b%02u VA=0x%llx\n",
+        b"VEUX MODEM PAS: unmapped b%02u\n")),
     "modem_pool_mapping_address": b"VEUX MODEM POOL: mapped at VA 0x%llx\n" in kernel,
     "glink_startup_diagnostics": all(x in kernel for x in (
         b"VEUX GLINK: requesting SMEM items 478, 479, 480\n",
