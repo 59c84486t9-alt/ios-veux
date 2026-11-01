@@ -256,6 +256,7 @@ for name in phase4_patch_names:
     terminal = [line for line in status if line.startswith(f"PATCH_STATUS: {name} ") and
                 line.endswith((" APPLIED", " ALLOWLISTED_SKIP"))]
     phase4_status[name] = len(terminal) == 1 and terminal[0].endswith(" APPLIED")
+modem_pool_patch_text = (Path("xnu/patches") / "0153-veux-modem-pool.patch").read_text()
 phase4_text = "\n".join(phase4_patch_texts.values())
 dt_crc_patch = phase4_patch_texts["0159-veux-dt-crc-diagnostics.patch"]
 dt_crc_checks = {
@@ -339,10 +340,10 @@ phase4_sources = {
         "veux_modem_pool_alloc(ms,&mpa)" not in phase4_text.replace(" ", ""),
     "pas_scm_pool_buffers_still_use_pool_va": "veux_modem_pool_alloc(0x1000,&pa)" in phase4_text.replace(" ", "") and "veux_modem_pool_va(pa,0x1000)" in phase4_text.replace(" ", ""),
     "modem_pool_logs_mapped_virtual_address_after_map": (
-        "mapping = ml_io_map_wcomb((vm_offset_t)VEUX_MODEM_POOL_BASE," in phase4_patch_texts["0153-veux-modem-pool.patch"] and
-        "VEUX MODEM POOL: mapped at VA 0x%llx\n" in phase4_patch_texts["0153-veux-modem-pool.patch"] and
-        phase4_patch_texts["0153-veux-modem-pool.patch"].find("mapping = ml_io_map_wcomb") <
-        phase4_patch_texts["0153-veux-modem-pool.patch"].find("VEUX MODEM POOL: mapped at VA 0x%llx")),
+        "mapping = ml_io_map_wcomb((vm_offset_t)VEUX_MODEM_POOL_BASE," in modem_pool_patch_text and
+        "VEUX MODEM POOL: mapped at VA 0x%llx\n" in modem_pool_patch_text and
+        modem_pool_patch_text.find("mapping = ml_io_map_wcomb") <
+        modem_pool_patch_text.find("VEUX MODEM POOL: mapped at VA 0x%llx")),
     "pas_worker_start_log_immediately_before_load":
         'printf("VEUX MODEM PAS: starting modem boot sequence\n");if(!load_modem())' in phase4_patch_texts["0154-veux-modem-pas.patch"],
     "pas_each_segment_progress_before_read":
