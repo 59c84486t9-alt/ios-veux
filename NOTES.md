@@ -1,3 +1,31 @@
+## >>> UPDATE 2026-11-01 (Phase 4.27 green artifact; pre-flash checklist) <<<
+
+- CI run [41335732685](https://github.com/59c84486t9-alt/ios-veux/actions/runs/41335732685)
+  completed successfully on attempt 2 at commit
+  `67fa2e9fad78d9df191cd7176c07f8b5541b7c32`. The first two attempts
+  compiled successfully but stopped in manifest-only checks; the third
+  attempt passed all gates and then failed only while creating the
+  `xnu-buildtree` artifact due to a GitHub artifact-service timeout. Rerunning
+  the failed job produced a fully green run.
+- The green kernel SHA-256 is
+  `de99f24efe547745407d3b36e67cc4c4e4fb141383b2fa7da665f7e9f141a6c8`.
+  Patches `0152` through `0162` are each `APPLIED` with zero skips. Both
+  Phase-4 source and binary manifests passed, including the aligned volatile
+  `uint64_t` loops and all four Phase-4.27 checkpoint strings.
+- Built `/home/nyra/veux-artifacts/41335732685-green/modem-held.img` from that
+  green kernel, the unchanged verified phone ADT/DTB, and the exact modem-held
+  arguments. `verify-veux-wrapper.py --variant modem-held` passed 34/34 modem
+  markers, forbidden-marker checks, exact boot arguments, and byte-for-byte
+  payload reconstruction. The wrapper is 17,281,024 bytes; SHA-256 is
+  `1e28e32f82068becbf1e95208b26386a03b0890ebb4e2bbc332ad72f29b6f09f`;
+  DTB SHA-256 remains
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`.
+- Pre-flash checklist passed: Fastboot shows `4078cac030c8`; product is
+  `veux`; current slot is `b`; unlocked is `yes`; and `boot_b` size is
+  `0x8000000` (134,217,728 bytes). The exact authorized write is `boot_b`
+  only, 17,281,024 bytes from the green wrapper above. `boot_a` and all other
+  partitions remain untouched. Stop after the WLFW CAP diagnostic.
+
 ## >>> UPDATE 2026-10-29 (Phase 5.5 fixed wrapper flashed to boot_b) <<<
 
 - Under the user's explicit slot override, the full remaining pre-flash checks
