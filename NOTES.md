@@ -11,6 +11,14 @@
 - The host still enumerates neither ADB nor Fastboot, consistent with previous
   iOS userland states. The next runtime milestone is SpringBoard/GUI or a
   later userland failure photo.
+- The console remained unchanged after the successful launchd exec, so built
+  a same-kernel isolation image without `modem=1`:
+  `/home/nyra/veux-artifacts/41355888099/normal-console.img`, SHA-256
+  `07653faf828cb681657a3d6f800714d6c099da77cb87e0b17191ff8b77f2d32f`.
+  It keeps the normal GUI/touch/RW/sandbox setup and visible console but omits
+  the modem worker. This distinguishes a modem-induced userland stall from a
+  regression in the current normal runtime. It has not been flashed because
+  the phone is not host-visible.
 
 ## >>> UPDATE 2026-11-01 (serialize modem load before iOS exec; CI pending) <<<
 
