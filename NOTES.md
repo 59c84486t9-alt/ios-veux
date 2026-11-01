@@ -46,6 +46,12 @@
   interface. The local Topaz WLAN scan patch is a structural reference only;
   its WCN3988 companion, descriptor format, DMAs, VMIDs, and endpoints cannot
   be copied unchanged to VEUX.
+- Built a console-visible deferred wrapper from the same verified kernel:
+  `/home/nyra/veux-artifacts/41359978782/deferred-wifi-console.img`, SHA-256
+  `11d706b6e8f3d5945e951f0da6f10b5ef53ee36da0e78ddc659b4fa6035fc0a5`.
+  It keeps `veuxfbconsole=1` enabled and omits `veux_gui_noconsole=1`, allowing
+  the post-GUI modem/WLFW messages to remain observable. Direct verification
+  passed 39/39 modem markers and exact payload reconstruction. Not flashed yet.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
