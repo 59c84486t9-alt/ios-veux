@@ -32,6 +32,10 @@
   `0efaaac7b7feb191ee26174ee2c3b91a1d2f868c273aa024cd70d30e9e3aab19`.
   Verification passed 39/39 markers, the deferred-worker marker, forbidden
   checks, exact args, and byte-for-byte reconstruction. Fastboot is visible.
+- Rechecked all Fastboot values plus wrapper size/SHA, then flashed only
+  `boot_b`, selected B, and rebooted. Runtime result is pending. The intended
+  sequence is iOS GUI/touch first, followed by modem worker startup after 120
+  seconds.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
