@@ -15,6 +15,11 @@
 - Repository validation, Python syntax checks, strict patch parsing, and
   whitespace checks pass. CI, wrapper verification, device write, and runtime
   result are pending.
+- CI run `41355546858` stopped because the wake-up change was placed in patch
+  `0154`, while dependent patch `0159` applies the final transformation of that
+  same line. Restored the base line in `0154`; the `0154` then `0159` patch
+  sequence now applies exactly in a clean temporary tree and produces the wake
+  plus bounded wait. No kernel artifact or device write occurred.
 
 ## >>> UPDATE 2026-11-01 (modem plus iOS GUI/touch runtime; CI pending) <<<
 
