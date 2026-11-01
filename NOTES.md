@@ -1,3 +1,17 @@
+## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
+
+- The synchronized run reached the intended handoff: modem segments completed,
+  `modem_boot_wait` unblocked the bootstrap thread, `Vfs_mount` mounted
+  `iOSRoot`, and `VEUX ROOT mount result errno=0x0` reported success.
+- Modem status reached `SMP2P READY`, GLINK `VERSION_ACK`, and
+  `OPEN_ACK IPCRTR`. The root mounted read-write with `rootrw=1 ufsrw=1`.
+- Process 1 executed `/sbin/launchd`: `VEUX EXEC ... errno=0 path_errno=0`
+  shows the exec succeeded, unlike the previous `EINVAL` panic. No panic is
+  visible in this capture.
+- The host still enumerates neither ADB nor Fastboot, consistent with previous
+  iOS userland states. The next runtime milestone is SpringBoard/GUI or a
+  later userland failure photo.
+
 ## >>> UPDATE 2026-11-01 (serialize modem load before iOS exec; CI pending) <<<
 
 - The console-enabled combined image reached UFS root mount, but process 1
