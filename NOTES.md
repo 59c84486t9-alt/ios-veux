@@ -44,6 +44,14 @@
   Apple display/lock screen or create a combined diagnostic with the
   framebuffer console enabled if the screen remains unchanged beyond several
   minutes.
+- The user confirmed the shim text remained unchanged for roughly ten minutes,
+  which rules out normal modem-loading delay. Built a diagnostic wrapper from
+  the same green kernel and combined modem-normal arguments plus `veuxfb=1
+  veuxfbconsole=1`: `/home/nyra/veux-artifacts/41349481184/modem-normal-console.img`,
+  17,281,024 bytes, SHA-256
+  `20db7522297e3a2bc6a6f500bd07b3995a829ad9cf473f52499f30dc4b84da68`.
+  Wrapper verification passed modem markers, payload reconstruction, and boot
+  arguments. No flash occurred yet because the phone was not host-visible.
 
 ## >>> UPDATE 2026-11-01 (Phase 4.28 segment mapping lifecycle; CI pending) <<<
 
