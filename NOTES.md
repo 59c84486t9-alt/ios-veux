@@ -20,6 +20,20 @@
   `VM_MEM_*` bits undefined. Replaced it with `vm/memory_types.h`, which
   includes the machine definitions before defining those bits. No kernel
   artifact was produced and no device write occurred.
+- CI run `41347340211` passed on commit `fce4f0e` in 14m15s, including the
+  build, kernel manifest, Phase 2/3/4 gates, packaging, and artifact upload.
+  Kernel SHA-256 is
+  `555f28655d59924cefeb64ef7f4d6c79fadc12284821ff09e9aab71bf87863c5`.
+- Built `/home/nyra/veux-artifacts/41347340211/modem-held.img` using the
+  verified phone ADT and DTB. The wrapper is 17,281,024 bytes with SHA-256
+  `e89e5f90bd53b403f1b1ab859bfe86f584da11f0cf14cb392aa212cf50ef1005`.
+  Verification passed 37/37 modem markers, forbidden checks, exact boot args,
+  and byte-for-byte payload reconstruction. The kernel contains both mapper
+  symbols and all three mapping-lifecycle log strings.
+- Pre-flash checklist passed: Fastboot serial `4078cac030c8`; product `veux`;
+  current slot `b`; unlocked `yes`; `boot_b` size `0x8000000`. The only
+  partition to be written is `boot_b`, exactly 17,281,024 bytes from the
+  wrapper above.
 
 ## >>> UPDATE 2026-11-01 (Phase 4.27 flashed to boot_b) <<<
 
