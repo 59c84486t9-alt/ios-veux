@@ -16,6 +16,17 @@
 - Repository validation, Python syntax checks, patch parsing, and whitespace
   checks pass. CI, wrapper verification, device write, and iOS runtime result
   are pending.
+- CI run `41349481184` passed on commit `05b8057` in 13m12s. Kernel SHA-256 is
+  `df647959a547db1e90f4c6280809ba444c58a7b2ebb250ab52ee0228a8f626e9`.
+  All Phase-2/3/4 gates passed with the new four-variant manifest.
+- Built `/home/nyra/veux-artifacts/41349481184/modem-normal.img`, 17,281,024
+  bytes, SHA-256
+  `1a5fa680973bf7b2171092e45848a58ffab31f418cc388240dcacf3a58892bdd`.
+  Verification passed 37/37 modem markers, exact modem-normal arguments,
+  forbidden-marker checks, and byte-for-byte payload reconstruction.
+- Pre-flash target is `boot_b` only. The image includes the known-good normal
+  GUI/touch runtime and starts the modem worker with `modem_hold=0` and a
+  24-hour watch.
 
 ## >>> UPDATE 2026-11-01 (Phase 4.28 segment mapping lifecycle; CI pending) <<<
 
