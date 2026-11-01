@@ -13,6 +13,7 @@ ap.add_argument("--build-id", required=True)
 ap.add_argument("--boot-args", required=True, help="full normal-variant boot args")
 ap.add_argument("--held-boot-args", required=True, help="full held-probe boot args")
 ap.add_argument("--modem-held-boot-args", required=True, help="exact modem diagnostic held boot args")
+ap.add_argument("--modem-normal-boot-args", required=True, help="full modem plus iOS GUI boot args")
 ap.add_argument("--source-root", required=True, type=Path)
 ap.add_argument("--output", required=True, type=Path)
 a = ap.parse_args()
@@ -20,6 +21,7 @@ a = ap.parse_args()
 boot_args = set(a.boot_args.split())
 held_boot_args = set(a.held_boot_args.split())
 modem_held_boot_args = a.modem_held_boot_args.split()
+modem_normal_boot_args = set(a.modem_normal_boot_args.split())
 expected_modem_held_boot_args = (
     "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress "
     "rd=ufsroot0 modem=1 modem_watch=180 veuxfbconsole=1"
@@ -35,6 +37,12 @@ modem_forbidden_boot_args = {
 }
 if any(arg.split("=", 1)[0] in modem_forbidden_boot_args for arg in modem_held_boot_args):
     raise SystemExit("modem-held boot args contain a forbidden write, GUI, or probe argument")
+if not {"modem=1", "modem_hold=0", "modem_watch=86400", "rootrw=1", "ufsrw=1",
+        "veuxsandbox=1", "veux_gui=1", "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args):
+    raise SystemExit("modem-normal requires modem service, RW root, sandbox, GUI, and its variant marker")
+if {"modem_hold=1", "veuxtouchprobe=1", "veuxtouchprobehold=1",
+    "veuxtouchprobeactive=1", "veuxlog=1"} & modem_normal_boot_args:
+    raise SystemExit("modem-normal must not enable a diagnostic hold, probe, or logger")
 if not {"rootrw=1", "ufsrw=1", "veuxvariant=normal"}.issubset(boot_args):
     raise SystemExit("normal variant requires the explicit RW pair and veuxvariant=normal")
 if {"veuxtouchprobe=1", "veuxtouchprobehold=1", "veuxfb=1", "veuxfbconsole=1", "veuxvariant=held"} - held_boot_args:
@@ -437,9 +445,10 @@ phase4_sources = {
         "for (uint8_t lun = 0; lun <= 5; lun++)",
         "veux_modem_a_partition_valid", "veux_modem_a_first_block", "veux_modem_a_nblocks",
         "VEUX UFS: cached modem_a on LUN=%u")),
-    "modem_main_thread_waits_uninterruptibly": all(x in phase4_text for x in (
+    "modem_main_thread_hold_is_explicit_and_diagnostic_only": all(x in phase4_text for x in (
         "assert_wait(&veux_modem_wait_chan,THREAD_UNINT)",
-        "thread_block(THREAD_CONTINUE_NULL)", "veux_modem_hold();")),
+        "thread_block(THREAD_CONTINUE_NULL)", "veux_modem_hold();",
+        'if(!PE_parse_boot_argn("modem_hold",&hold,sizeof(hold))||hold!=1)return;')),
 }
 if not all(phase4_sources.values()):
     raise SystemExit("VEUX Phase-4 source assertions failed: " + repr(phase4_sources) + " forbidden=" + repr(phase4_forbidden))
@@ -592,10 +601,14 @@ source_checks["pmap_nofault_translation_probe_removed_from_touch_startup"] = (
     "touch_tlmm_map_check" not in (a.source_root / "bsd/dev/sweet_touch.c").read_text()
     and "pmap_find_phys_nofault" not in (a.source_root / "bsd/dev/sweet_touch.c").read_text()
 )
-source_checks["both_full_boot_variants_are_manifested_and_safe"] = (
+source_checks["all_runtime_boot_variants_are_manifested_and_safe"] = (
     {"rootrw=1", "ufsrw=1", "veuxvariant=normal"}.issubset(boot_args)
     and {"veuxtouchprobe=1", "veuxtouchprobehold=1", "veuxvariant=held"}.issubset(held_boot_args)
     and not ({"rootrw=1", "ufsrw=1", "veuxtouchprobeactive=1", "veuxlog=1"} & held_boot_args)
+    and {"modem=1", "modem_hold=0", "rootrw=1", "ufsrw=1", "veux_gui=1",
+         "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args)
+    and not ({"modem_hold=1", "veuxtouchprobe=1", "veuxtouchprobehold=1",
+              "veuxtouchprobeactive=1", "veuxlog=1"} & modem_normal_boot_args)
 )
 source_checks["active_touch_probe_remains_separate_from_read_only_held_path"] = (
     "veux_touch_active_probe" not in touch_probe
@@ -849,10 +862,12 @@ manifest = {
         "normal": {"boot_args": a.boot_args, "root_mode_requested": "rw"},
         "held": {"boot_args": a.held_boot_args, "root_mode_requested": "ro", "probe": "read-only CFG reads at PA 0x503000 and 0x513000; WFE before root mount"},
         "modem-held": {"boot_args": a.modem_held_boot_args, "root_mode_requested": "ro", "probe": "read-only modem PAS/GLINK/QRTR/WLFW CAP diagnostic; WFE before root mount"},
+        "modem-normal": {"boot_args": a.modem_normal_boot_args, "root_mode_requested": "rw", "probe": "modem served in a worker while the normal iOS GUI and touch paths continue"},
     },
     "boot_args": a.boot_args,
     "held_boot_args": a.held_boot_args,
     "modem_held_boot_args": a.modem_held_boot_args,
+    "modem_normal_boot_args": a.modem_normal_boot_args,
     "root_mode_requested": "rw",
     "wrapper": "assembled on host with the phone DTB; see adjacent wrapper manifest",
 }

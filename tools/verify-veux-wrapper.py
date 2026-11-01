@@ -52,7 +52,7 @@ ap.add_argument("--run-id", required=True)
 ap.add_argument("--patch-status", required=True, type=Path)
 ap.add_argument("--manifest", type=Path)
 ap.add_argument("--variants-manifest", type=Path, help="kernel manifest containing both full boot-arg strings")
-ap.add_argument("--variant", choices=("normal", "held", "modem-held"))
+ap.add_argument("--variant", choices=("normal", "held", "modem-held", "modem-normal"))
 a = ap.parse_args()
 if a.build_id != a.run_id:
     raise SystemExit("build ID must equal the CI run ID")
@@ -86,14 +86,21 @@ variant_manifest = None
 if a.variants_manifest:
     variant_manifest = json.loads(a.variants_manifest.read_text())
     variants = variant_manifest.get("variants", {})
-    if set(variants) not in ({"normal", "held"}, {"normal", "held", "modem-held"}):
-        raise SystemExit("variants manifest must contain normal, held, and optional modem-held entries")
-    if a.variant == "modem-held" and set(variants) != {"normal", "held", "modem-held"}:
-        raise SystemExit("modem-held wrapper requires the three-variant kernel manifest")
+    if not {"normal", "held"}.issubset(variants) or not set(variants).issubset(
+            {"normal", "held", "modem-held", "modem-normal"}):
+        raise SystemExit("variants manifest has an unsupported variant set")
+    if a.variant in ("modem-held", "modem-normal") and set(variants) != {
+            "normal", "held", "modem-held", "modem-normal"}:
+        raise SystemExit("modem runtime wrappers require the four-variant kernel manifest")
     if not a.variant:
         raise SystemExit("--variant is required with --variants-manifest")
     if variants[a.variant].get("boot_args") != payload_args:
         raise SystemExit(f"payload arguments do not match the {a.variant} boot-argument manifest")
+    if a.variant == "modem-normal":
+        required_args = {"rootrw=1", "ufsrw=1", "veuxsandbox=1", "veux_gui=1",
+                         "modem=1", "modem_hold=0", "modem_watch=86400"}
+        if not required_args.issubset(payload_args.split()):
+            raise SystemExit("modem-normal wrapper lacks required modem/iOS runtime arguments")
 adt_blob = embedded_payload[adt_off:adt_off + adt_size]
 # Rebuild through the normal packer using the exact ADT carried by the payload.
 with tempfile.NamedTemporaryFile(prefix="veux-adt-", suffix=".tmp", dir=a.image.parent) as tmp:
@@ -105,7 +112,7 @@ if rebuilt != payload:
 build_marker = f"VEUX BUILD: ID={a.build_id}".encode()
 if build_marker not in kernel:
     raise SystemExit("CI kernel lacks the expected screen/ring build ID")
-if a.variant == "modem-held":
+if a.variant in ("modem-held", "modem-normal"):
     required = (
         b"VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3",
         b"VEUX MODEM PAS: copying mdt metadata\n",

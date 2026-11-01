@@ -69,7 +69,7 @@ diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
 new file mode 100644
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem_pas.c
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,121 @@
 +#include <pexpert/arm64/board_config.h>
 +#include <kern/debug.h>
 +#include <kern/kalloc.h>
@@ -181,10 +181,11 @@ new file mode 100644
 +}
 +static void veux_modem_thread(void *arg __unused, wait_result_t wr __unused){veux_modem_run();veux_modem_hold();}
 +void veux_modem_start(void){
-+ uint32_t on=0;thread_t t;
++ uint32_t on=0,hold=0;thread_t t;
 + if(!PE_parse_boot_argn("modem",&on,sizeof(on))||on!=1)return;
 + if(kernel_thread_start(veux_modem_thread,NULL,&t)!=KERN_SUCCESS){printf("VEUX MODEM PAS: worker creation failed\n");veux_modem_hold();}
 + thread_deallocate(t);
++ if(!PE_parse_boot_argn("modem_hold",&hold,sizeof(hold))||hold!=1)return;
 + (void)assert_wait(&veux_modem_wait_chan,THREAD_UNINT);
 + thread_block(THREAD_CONTINUE_NULL);
 + veux_modem_hold();

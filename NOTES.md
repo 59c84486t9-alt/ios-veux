@@ -1,3 +1,22 @@
+## >>> UPDATE 2026-11-01 (modem plus iOS GUI/touch runtime; CI pending) <<<
+
+- The existing `modem-held` image intentionally blocks `sweet_ufs_rootdev`
+  after starting the modem worker and uses no GUI/touch runtime arguments, so
+  it cannot continue into iOS.
+- Added a fourth `modem-normal` variant using the known-good normal RW,
+  sandbox, software GUI, and default-enabled Goodix touch configuration, plus
+  `modem=1 modem_hold=0 modem_watch=86400`.
+- `veux_modem_start()` now blocks the bootstrap thread only when
+  `modem_hold=1`; otherwise it starts the modem worker and returns so root
+  mount and userland can continue. The modem remains served for 24 hours.
+- Extended the kernel manifest, wrapper verifier, and workflow preflight to
+  require the combined modem/GUI/RW variant while rejecting diagnostic holds,
+  probes, and the overlapping logger. `0159` was updated for the new start
+  function context.
+- Repository validation, Python syntax checks, patch parsing, and whitespace
+  checks pass. CI, wrapper verification, device write, and iOS runtime result
+  are pending.
+
 ## >>> UPDATE 2026-11-01 (Phase 4.28 segment mapping lifecycle; CI pending) <<<
 
 - The 2,001,664-byte kmem failure occurs after `modem.b34` is read even though
