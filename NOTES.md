@@ -15,6 +15,11 @@
 - `tools/validate-repo.py`, Python syntax compilation, `git diff --check`, and
   strict `git apply --numstat` patch parsing pass. CI, wrapper verification,
   and device write are pending.
+- CI run `41346068695` applied all patches but stopped compiling
+  `VeuxModemMap.cpp`: including `arm/memory_types.h` alone leaves the generic
+  `VM_MEM_*` bits undefined. Replaced it with `vm/memory_types.h`, which
+  includes the machine definitions before defining those bits. No kernel
+  artifact was produced and no device write occurred.
 
 ## >>> UPDATE 2026-11-01 (Phase 4.27 flashed to boot_b) <<<
 
