@@ -1,3 +1,19 @@
+## >>> UPDATE 2026-11-01 (Phase 4.27 flashed to boot_b) <<<
+
+- Immediately before writing, the wrapper SHA-256 remained
+  `1e28e32f82068becbf1e95208b26386a03b0890ebb4e2bbc332ad72f29b6f09f`,
+  its size was 17,281,024 bytes, the manifest matched, and all Fastboot checks
+  passed again: serial `4078cac030c8`, product `veux`, current slot `b`,
+  unlocked `yes`, and `boot_b` size `0x8000000`.
+- `fastboot flash boot_b
+  /home/nyra/veux-artifacts/41335732685-green/modem-held.img` returned
+  `Sending 'boot_b' (16876 KB) OKAY`, `Writing 'boot_b' OKAY`, and
+  `Finished. Total time: 0.564s`. Only `boot_b` was written.
+- `fastboot set_active b` returned OKAY and `fastboot reboot` returned
+  `Rebooting OKAY`. The kernel is expected to print the pool VA, segment
+  progress, zeroing sizes, UFS progress, and eventually the WLFW CAP diagnostic;
+  those screen results are not host-observed yet. Stop after CAP.
+
 ## >>> UPDATE 2026-11-01 (Phase 4.27 green artifact; pre-flash checklist) <<<
 
 - CI run [41335732685](https://github.com/59c84486t9-alt/ios-veux/actions/runs/41335732685)
