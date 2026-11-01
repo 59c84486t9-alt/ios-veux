@@ -13,6 +13,14 @@
 - Next staged test: defer modem startup until after the GUI is stable, inspect
   WLFW service discovery and CAP, then port the remaining WLFW/QMI stages from
   the local `TopazModem.cpp` reference only if the device advertises them.
+- Added `modem_defer`: the modem worker logs that it is deferred and sleeps
+  before its first modem access. The modem-normal arguments now use
+  `modem_boot_wait=0 modem_defer=120`, allowing launchd, SpringBoard, GUI, and
+  the 45-second touch worker to initialize before modem firmware loading starts.
+- Updated manifest source/binary checks, workflow preflight, wrapper
+  verification, and the dependent `0159` patch context. Repository validation,
+  Python syntax checks, strict patch-sequence application, and whitespace
+  checks pass. CI and device test are pending.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 

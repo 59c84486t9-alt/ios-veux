@@ -98,7 +98,8 @@ if a.variants_manifest:
         raise SystemExit(f"payload arguments do not match the {a.variant} boot-argument manifest")
     if a.variant == "modem-normal":
         required_args = {"rootrw=1", "ufsrw=1", "veuxsandbox=1", "veux_gui=1",
-                         "modem=1", "modem_hold=0", "modem_boot_wait=300",
+                         "modem=1", "modem_hold=0", "modem_boot_wait=0",
+                         "modem_defer=120",
                          "modem_watch=86400"}
         if not required_args.issubset(payload_args.split()):
             raise SystemExit("modem-normal wrapper lacks required modem/iOS runtime arguments")
@@ -127,6 +128,7 @@ if a.variant in ("modem-held", "modem-normal"):
         b"VEUX MODEM PAS: mapped b%02u VA=0x%llx\n",
         b"VEUX MODEM PAS: unmapped b%02u\n",
         b"VEUX MODEM PAS: boot wait complete; continuing to root mount\n",
+        b"VEUX MODEM PAS: worker deferred for %u seconds\n",
         b"VEUX MODEM PAS: zeroing %llu bytes for b%02u\n",
         b"VEUX MODEM POOL: mapped at VA 0x%llx\n",
         b"VEUX IPCC: pa=0x00208000 mpss=2 smp2p=2 glink_qmp=0 gic_spi=334",

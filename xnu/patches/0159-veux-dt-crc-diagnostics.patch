@@ -62,7 +62,7 @@ diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
  static int veux_modem_wait_chan;
  static void veux_modem_run(void){
 + veux_dt_crc_log("modem_worker_entry");
-  uint32_t watch=180;PE_parse_boot_argn("modem_watch",&watch,sizeof(watch));
+  uint32_t watch=180,defer=0;PE_parse_boot_argn("modem_watch",&watch,sizeof(watch));PE_parse_boot_argn("modem_defer",&defer,sizeof(defer));if(defer){printf("VEUX MODEM PAS: worker deferred for %u seconds\n",defer);IOSleep(defer*1000);}
   printf("VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3\n");
   smem=(uint8_t *)ml_io_map_wcomb(SMEM_PA,SMEM_SIZE);if(!smem){printf("VEUX MODEM PAS: SMEM map failed\n");veux_modem_hold();}printf("VEUX GLINK: mapped SMEM\n");tcsr=(volatile uint8_t *)ml_io_map(TCSR_PA,0x20000);if(!tcsr){printf("VEUX MODEM PAS: TCSR map failed\n");veux_modem_hold();}part=find_part(0,1);if(!part){printf("VEUX MODEM PAS: SMEM partition missing\n");veux_modem_hold();}
 - printf("VEUX MODEM PAS: starting modem boot sequence\n");if(!load_modem()){printf("VEUX MODEM PAS: modem_boot failed\n");veux_modem_hold();}add_out(ITEM_OUT);
