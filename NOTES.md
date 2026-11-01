@@ -29,6 +29,9 @@
   Direct verification passed 38/38 markers including the boot-wait handoff,
   source absence checks, and byte-for-byte reconstruction.
 - Fastboot serial `4078cac030c8` is present for the synchronized-handoff test.
+- Rechecked the wrapper SHA/size and Fastboot product, slot, unlock state, and
+  `boot_b` capacity. Flashed only `boot_b`, selected B, and rebooted; all
+  commands returned OKAY. Runtime screen result is pending.
 
 ## >>> UPDATE 2026-11-01 (modem plus iOS GUI/touch runtime; CI pending) <<<
 
