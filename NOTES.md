@@ -27,6 +27,15 @@
 - Pre-flash target is `boot_b` only. The image includes the known-good normal
   GUI/touch runtime and starts the modem worker with `modem_hold=0` and a
   24-hour watch.
+- Flash completed after a second hash/size/device check. Only `boot_b` was
+  written, exactly 17,281,024 bytes from wrapper SHA-256
+  `1a5fa680973bf7b2171092e45848a58ffab31f418cc388240dcacf3a58892bdd`;
+  Fastboot reported Sending/Writing OKAY, selected slot B, and rebooted.
+- Fifty seconds after reboot, neither Fastboot nor ADB enumerated. This is
+  expected for the historical iOS GUI runtime and is not runtime proof. The
+  screen result is pending; expected evidence is modem segment loading,
+  `modem_hold=0` continuing, `VEUX ROOT mode=rw`, iOS launchd/SpringBoard, and
+  later Goodix touch status.
 
 ## >>> UPDATE 2026-11-01 (Phase 4.28 segment mapping lifecycle; CI pending) <<<
 
