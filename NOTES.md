@@ -20,6 +20,15 @@
   same line. Restored the base line in `0154`; the `0154` then `0159` patch
   sequence now applies exactly in a clean temporary tree and produces the wake
   plus bounded wait. No kernel artifact or device write occurred.
+- CI run `41355888099` passed on commit `8db9b97` in 17m19s. Kernel SHA-256 is
+  `45e6190f4275f0ca4da15639be11ebe8efb724b7edfc452edb107701690634c6`.
+  Built console-enabled wrapper
+  `/home/nyra/veux-artifacts/41355888099/modem-normal-console.img`, 17,281,024
+  bytes, SHA-256
+  `02a54c45d30ad02e5169336e3b02e47cb77d59b1244909566c6683567378b6bb`.
+  Direct verification passed 38/38 markers including the boot-wait handoff,
+  source absence checks, and byte-for-byte reconstruction.
+- Fastboot serial `4078cac030c8` is present for the synchronized-handoff test.
 
 ## >>> UPDATE 2026-11-01 (modem plus iOS GUI/touch runtime; CI pending) <<<
 
