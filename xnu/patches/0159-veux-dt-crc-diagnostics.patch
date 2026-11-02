@@ -59,7 +59,7 @@ diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
   if(reloc){st=smc(SCM_FN(SCM_SVC_PIL,PIL_MEM_SETUP),3,PAS_ID_MODEM,min,(max-min+0xfff)&~0xfffULL,&res);printf("VEUX MODEM PAS: mem_setup ret=%llx res=%llx\n",st,res);if(st||res)goto fail;}
 @@ -100,10 +133,11 @@
  void veux_modem_hold(void){printf("VEUX MODEM HOLD: wfe\n");for(;;)__asm__ volatile("dsb sy; wfe" ::: "memory");}
- static int veux_modem_wait_chan;
+ static int veux_modem_wait_chan;static bool veux_modem_started,veux_modem_gui_ready;
  static void veux_modem_run(void){
 + veux_dt_crc_log("modem_worker_entry");
   uint32_t watch=180,defer=0;PE_parse_boot_argn("modem_watch",&watch,sizeof(watch));PE_parse_boot_argn("modem_defer",&defer,sizeof(defer));if(defer){printf("VEUX MODEM PAS: worker deferred for %u seconds\n",defer);IOSleep(defer*1000);}
@@ -72,8 +72,8 @@ diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
  }
 @@ -105,9 +139,11 @@
  void veux_modem_start(void){
-  uint32_t on=0,hold=0,wait=300;thread_t t;
-  if(!PE_parse_boot_argn("modem",&on,sizeof(on))||on!=1)return;
+  uint32_t on=0,hold=0,wait=300,after=0;thread_t t;
+  if(veux_modem_started||!PE_parse_boot_argn("modem",&on,sizeof(on))||on!=1||(PE_parse_boot_argn("modem_after_gui",&after,sizeof(after))&&after&&!veux_modem_gui_ready))return;veux_modem_started=true;
 + veux_dt_crc_log("before_modem_thread");
   if(kernel_thread_start(veux_modem_thread,NULL,&t)!=KERN_SUCCESS){printf("VEUX MODEM PAS: worker creation failed\n");veux_modem_hold();}
 + veux_dt_crc_log("after_modem_thread");

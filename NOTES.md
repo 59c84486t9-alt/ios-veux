@@ -55,6 +55,17 @@
 - After Fastboot reconnected, rechecked serial/product/slot/unlock/capacity and
   wrapper size/hash. Flashed only this image to `boot_b`, selected B, and
   rebooted. Runtime WLFW result is pending.
+- User observed an Apple logo and continuing modem console output, but no GUI.
+  The 120-second timer can therefore fire before a stable GUI frame.
+- Added `modem_after_gui=1` and patch `0163`: `veux_modem_start()` now registers
+  a one-shot modem request without starting the worker; the first valid
+  SpringBoard/backboard framebuffer calls `veux_modem_gui_ready()`, which starts
+  the worker. This replaces timer-based deferral for the modem-normal variant.
+- Updated manifest source/binary checks, workflow arguments, wrapper
+  requirements, and dependent patch contexts. `0154` then `0159` apply in a
+  clean temporary tree, `0163` applies to the exact CI-413599 buildtree, and
+  all repository, Python, and whitespace checks pass. CI and device test are
+  pending.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 

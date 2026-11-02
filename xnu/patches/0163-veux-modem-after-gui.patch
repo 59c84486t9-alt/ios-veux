@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000006 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Start VEUX modem only after first valid GUI frame
+
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -37,8 +37,9 @@
+ #include "SweetSurface.h"
+ 
+ extern "C" void veux_fb_gui_handoff(void);
++extern "C" void veux_modem_gui_ready(void);
+ extern "C" void veux_fb_normal_status_draw(void);
+ extern "C" void veux_fb_normal_status_clear(void);
+ extern "C" void veux_fb_touch_status_redraw(void);
+ extern "C" void veux_fb_touch_status_clear(void);
+ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+@@ -561,13 +562,14 @@
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 			__asm__ volatile("dsb sy" ::: "memory");
+ 			if (!fConsolePaused) {
+ 				fConsolePaused = true;
+ 				veux_gui_first_present = 1;
+ 				IOLog("VEUX GUI: first valid software display present\n");
+ 				veux_fb_normal_status_clear();
+ 				veux_fb_touch_status_clear();
++				veux_modem_gui_ready();
+ 				uint32_t quiet = 0;
+ 				if (PE_parse_boot_argn("veux_gui_noconsole", &quiet, sizeof(quiet)) && quiet == 1) {
+ 					veux_fb_gui_handoff();
+ 				}
+ 			}
+ #endif
+ 		}
+-- 
+2.49.0

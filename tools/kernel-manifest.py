@@ -37,7 +37,7 @@ modem_forbidden_boot_args = {
 }
 if any(arg.split("=", 1)[0] in modem_forbidden_boot_args for arg in modem_held_boot_args):
     raise SystemExit("modem-held boot args contain a forbidden write, GUI, or probe argument")
-if not {"modem=1", "modem_hold=0", "modem_boot_wait=0", "modem_defer=120", "modem_watch=86400", "rootrw=1", "ufsrw=1",
+if not {"modem=1", "modem_hold=0", "modem_boot_wait=0", "modem_after_gui=1", "modem_watch=86400", "rootrw=1", "ufsrw=1",
         "veuxsandbox=1", "veux_gui=1", "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args):
     raise SystemExit("modem-normal requires modem service, RW root, sandbox, GUI, and its variant marker")
 if {"modem_hold=1", "veuxtouchprobe=1", "veuxtouchprobehold=1",
@@ -255,6 +255,7 @@ phase4_patch_names = (
     "0160-veux-ipcc-clock-note.patch",
     "0161-veux-ipcc-mapping-diagnostic.patch",
     "0162-veux-ufs-multilun.patch",
+    "0163-veux-modem-after-gui.patch",
 )
 phase4_patch_texts = {}
 phase4_status = {}
@@ -453,8 +454,10 @@ phase4_sources = {
         "assert_wait_timeout(&veux_modem_wait_chan,THREAD_UNINT,wait*1000,1000*NSEC_PER_USEC)",
         "VEUX MODEM PAS: boot wait complete; continuing to root mount",
         'PE_parse_boot_argn("modem_defer",&defer,sizeof(defer))',
-        "IOSleep(defer*1000)")) and
-        "VEUX MODEM PAS: worker deferred for %u seconds" in phase4_text,
+        "IOSleep(defer*1000)") and
+        "VEUX MODEM PAS: worker deferred for %u seconds" in phase4_text and
+        'PE_parse_boot_argn("modem_after_gui",&after,sizeof(after))' in phase4_text and
+        "veux_modem_gui_ready(void){veux_modem_gui_ready=true;veux_modem_start();}" in phase4_text),
 }
 if not all(phase4_sources.values()):
     raise SystemExit("VEUX Phase-4 source assertions failed: " + repr(phase4_sources) + " forbidden=" + repr(phase4_forbidden))
@@ -484,6 +487,7 @@ phase4_binary = {
         b"VEUX MODEM PAS: unmapped b%02u\n")),
     "pas_boot_wait_handoff": b"VEUX MODEM PAS: boot wait complete; continuing to root mount\n" in kernel,
     "pas_deferred_worker_start": b"VEUX MODEM PAS: worker deferred for %u seconds\n" in kernel,
+    "modem_gui_ready_hook": b"veux_modem_gui_ready" in kernel,
     "modem_pool_mapping_address": b"VEUX MODEM POOL: mapped at VA 0x%llx\n" in kernel,
     "glink_startup_diagnostics": all(x in kernel for x in (
         b"VEUX GLINK: requesting SMEM items 478, 479, 480\n",
@@ -613,7 +617,7 @@ source_checks["all_runtime_boot_variants_are_manifested_and_safe"] = (
     {"rootrw=1", "ufsrw=1", "veuxvariant=normal"}.issubset(boot_args)
     and {"veuxtouchprobe=1", "veuxtouchprobehold=1", "veuxvariant=held"}.issubset(held_boot_args)
     and not ({"rootrw=1", "ufsrw=1", "veuxtouchprobeactive=1", "veuxlog=1"} & held_boot_args)
-    and {"modem=1", "modem_hold=0", "modem_boot_wait=0", "modem_defer=120", "rootrw=1", "ufsrw=1", "veux_gui=1",
+    and {"modem=1", "modem_hold=0", "modem_boot_wait=0", "modem_after_gui=1", "rootrw=1", "ufsrw=1", "veux_gui=1",
          "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args)
     and not ({"modem_hold=1", "veuxtouchprobe=1", "veuxtouchprobehold=1",
               "veuxtouchprobeactive=1", "veuxlog=1"} & modem_normal_boot_args)
@@ -745,6 +749,10 @@ source_checks["xpcproxy_driver_spawn_exception_is_bootarg_gated_entitlement_only
 )
 
 fb = (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
+source_checks["modem_worker_starts_after_first_gui_present"] = (
+    "extern \"C\" void veux_modem_gui_ready(void);" in fb
+    and "veux_modem_gui_ready();" in fb.split("first valid software display present", 1)[1]
+)
 surface = (a.source_root / "iokit/Kernel/arm/SweetSurface.cpp").read_text()
 watchdog = (a.source_root / "iokit/Kernel/arm/SweetWatchdog.cpp").read_text()
 platform = (a.source_root / "iokit/Kernel/arm/VeuxPlatformExpert.cpp").read_text()
