@@ -18,8 +18,11 @@
   608-byte command-line field.
 - Added `tools/repack-veux-bootv2.py` for reproducible payload replacement in
   a verified VEUX boot-v2 template. Repository validation passes all 29 Python
-  tools, 162 patches, and 8 shell scripts. The console image is not flashed
-  yet; the phone must first re-enter Fastboot.
+  tools, 162 patches, and 8 shell scripts.
+- Rechecked serial `4078cac030c8`, product `veux`, slot B, unlocked state,
+  `boot_b` capacity `0x8000000`, console image size, and SHA-256, then flashed
+  only `boot_b`. Send/write, slot selection, and reboot all returned `OKAY`.
+  Runtime modem/WLFW output is pending screen confirmation.
 
 ## >>> UPDATE 2026-11-02 (SpringBoard-triggered normal image flashed) <<<
 
