@@ -170,7 +170,7 @@ new file mode 100644
 +static volatile uint32_t *smp_find(struct smp_hdr *h,const char *n){struct smp_ent *e=(void *)(h+1);for(uint32_t i=0;i<h->valid&&i<SMP2P_MAX;i++)if(!strncmp(e[i].name,n,16))return &e[i].value;return NULL;}
 +static void add_out(uint32_t item){struct smp_hdr *h=veux_smem_alloc(item,sizeof(*h)+SMP2P_MAX*sizeof(struct smp_ent));if(!h)return;if(!h->version){h->magic=SMP_MAGIC;h->local=0;h->remote=1;h->total=SMP2P_MAX;h->features[0]=1;h->valid=0;barrier();h->version=1;}volatile uint32_t *ipa=NULL;struct smp_ent *e=(void *)(h+1);for(uint32_t i=0;i<h->valid&&i<SMP2P_MAX;i++)if(!strncmp(e[i].name,"ipa",16))ipa=&e[i].value;if(!ipa&&h->valid<h->total){strlcpy(e[h->valid].name,"ipa",sizeof(e[h->valid].name));e[h->valid].value=0;barrier();h->valid++;}barrier();veux_ipcc_signal(2,2);}
 +void veux_modem_hold(void){printf("VEUX MODEM HOLD: wfe\n");for(;;)__asm__ volatile("dsb sy; wfe" ::: "memory");}
-+static int veux_modem_wait_chan;static bool veux_modem_started,veux_modem_gui_ready;
++static int veux_modem_wait_chan;static bool veux_modem_started,veux_modem_gui_is_ready;
 +static void veux_modem_run(void){
 + uint32_t watch=180,defer=0;PE_parse_boot_argn("modem_watch",&watch,sizeof(watch));PE_parse_boot_argn("modem_defer",&defer,sizeof(defer));if(defer){printf("VEUX MODEM PAS: worker deferred for %u seconds\n",defer);IOSleep(defer*1000);}
 + printf("VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3\n");
@@ -182,7 +182,7 @@ new file mode 100644
 +static void veux_modem_thread(void *arg __unused, wait_result_t wr __unused){veux_modem_run();veux_modem_hold();}
 +void veux_modem_start(void){
 + uint32_t on=0,hold=0,wait=300,after=0;thread_t t;
-+ if(veux_modem_started||!PE_parse_boot_argn("modem",&on,sizeof(on))||on!=1||(PE_parse_boot_argn("modem_after_gui",&after,sizeof(after))&&after&&!veux_modem_gui_ready))return;veux_modem_started=true;
++ if(veux_modem_started||!PE_parse_boot_argn("modem",&on,sizeof(on))||on!=1||(PE_parse_boot_argn("modem_after_gui",&after,sizeof(after))&&after&&!veux_modem_gui_is_ready))return;veux_modem_started=true;
 + if(kernel_thread_start(veux_modem_thread,NULL,&t)!=KERN_SUCCESS){printf("VEUX MODEM PAS: worker creation failed\n");veux_modem_hold();}
 + thread_deallocate(t);
 + (void)PE_parse_boot_argn("modem_boot_wait",&wait,sizeof(wait));
@@ -191,7 +191,7 @@ new file mode 100644
 + thread_block(THREAD_CONTINUE_NULL);
 + veux_modem_hold();
 +}
-+void veux_modem_gui_ready(void){veux_modem_gui_ready=true;veux_modem_start();}
++void veux_modem_gui_ready(void){veux_modem_gui_is_ready=true;veux_modem_start();}
 +#endif
 diff --git a/osfmk/arm64/veux_modem_pool.c b/osfmk/arm64/veux_modem_pool.c
 --- a/osfmk/arm64/veux_modem_pool.c

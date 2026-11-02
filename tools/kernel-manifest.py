@@ -457,7 +457,7 @@ phase4_sources = {
         "IOSleep(defer*1000)") and
         "VEUX MODEM PAS: worker deferred for %u seconds" in phase4_text and
         'PE_parse_boot_argn("modem_after_gui",&after,sizeof(after))' in phase4_text and
-        "veux_modem_gui_ready(void){veux_modem_gui_ready=true;veux_modem_start();}" in phase4_text),
+        "veux_modem_gui_ready(void){veux_modem_gui_is_ready=true;veux_modem_start();}" in phase4_text),
 }
 if not all(phase4_sources.values()):
     raise SystemExit("VEUX Phase-4 source assertions failed: " + repr(phase4_sources) + " forbidden=" + repr(phase4_forbidden))

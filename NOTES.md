@@ -66,6 +66,12 @@
   clean temporary tree, `0163` applies to the exact CI-413599 buildtree, and
   all repository, Python, and whitespace checks pass. CI and device test are
   pending.
+- CI run `41376139698` applied all patches but rejected the first GUI-hook
+  implementation because the state flag and exported hook both used the
+  identifier `veux_modem_gui_ready`. Renamed the state flag to
+  `veux_modem_gui_is_ready` while keeping the exported hook name. Local
+  sequence/application checks pass; no artifact or device write resulted from
+  the failed run.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
