@@ -256,6 +256,7 @@ phase4_patch_names = (
     "0161-veux-ipcc-mapping-diagnostic.patch",
     "0162-veux-ufs-multilun.patch",
     "0163-veux-modem-after-gui.patch",
+    "0164-veux-gui-freeze-diagnostic.patch",
 )
 phase4_patch_texts = {}
 phase4_status = {}
@@ -440,6 +441,9 @@ phase4_sources = {
         "IOFreeContiguous(meta,meta_alloc_size)")),
     "ufs_read_blocks_has_no_temporary_heap_buffer": bool(ufs_read_body) and "ufs_scsi(cdb, sizeof(cdb), count * UFS_BLOCK, false)" in ufs_read_body and not re.search(r"\b(?:kalloc_data|kmem_alloc|IOMalloc|IOMallocContiguous)\s*\(", ufs_read_body),
     "forbidden_apcs_host_cap_bdf_wlan_paths_absent": not any(phase4_forbidden.values()),
+    "gui_freeze_diagnostic_is_bootarg_gated": all(x in phase4_patch_texts["0164-veux-gui-freeze-diagnostic.patch"] for x in (
+        "fConsolePaused", 'PE_parse_boot_argn("veux_gui_freeze", &freeze, sizeof(freeze))',
+        "freeze == 1", "src = 0;")),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
     "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],
     "modem_a_scans_luns_0_to_5_and_caches_location": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
@@ -488,6 +492,7 @@ phase4_binary = {
     "pas_boot_wait_handoff": b"VEUX MODEM PAS: boot wait complete; continuing to root mount\n" in kernel,
     "pas_deferred_worker_start": b"VEUX MODEM PAS: worker deferred for %u seconds\n" in kernel,
     "modem_gui_ready_hook": b"veux_modem_gui_ready" in kernel,
+    "gui_freeze_diagnostic_bootarg": b"veux_gui_freeze" in kernel,
     "modem_pool_mapping_address": b"VEUX MODEM POOL: mapped at VA 0x%llx\n" in kernel,
     "glink_startup_diagnostics": all(x in kernel for x in (
         b"VEUX GLINK: requesting SMEM items 478, 479, 480\n",

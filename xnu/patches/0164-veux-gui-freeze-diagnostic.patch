@@ -1,0 +1,17 @@
+From 0000000000000000000000000000000000000007 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Freeze VEUX GUI frame copying for persistent console diagnostics
+
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -556,1 +556,7 @@
++			uint32_t freeze = 0;
++			if (fConsolePaused &&
++			    PE_parse_boot_argn("veux_gui_freeze", &freeze, sizeof(freeze)) &&
++			    freeze == 1) {
++				src = 0;
++			}
+ 		if (src != 0 && bpe == 4) {
+-- 
+2.49.0

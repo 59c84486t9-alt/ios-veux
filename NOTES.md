@@ -14,6 +14,20 @@
   long enough for the modem worker, then reboot to recovery and pull the
   persistent ring to determine the actual last modem/WLFW milestone.
 
+## >>> UPDATE 2026-11-02 (GUI-freeze console capture; CI pending) <<<
+
+- The Phase-8 console image boots on some attempts and produces the modem
+  sequence too quickly to read because SpringBoard continually overwrites the
+  framebuffer console.
+- Added `0164-veux-gui-freeze-diagnostic.patch`: with boot argument
+  `veux_gui_freeze=1`, the first SpringBoard/backboardd frame is copied and
+  triggers the modem worker as before, then subsequent GUI frames are not
+  copied. Modem console lines therefore remain visible on the retained frame.
+- The switch defaults off, so normal GUI behavior is unchanged. Source and
+  binary manifest gates require that the freeze is boot-argument-gated.
+  Patch application, repository validation, CI, wrapper creation, and device
+  runtime verification are pending.
+
 ## >>> UPDATE 2026-11-02 (Phase 8 WLFW progression; CI pending) <<<
 
 - The supplied GUI-triggered console capture reaches modem segment loading,
