@@ -1,3 +1,26 @@
+## >>> UPDATE 2026-11-02 (GUI-triggered normal image boots; console variant ready) <<<
+
+- User confirms the SpringBoard-triggered normal image boots into usable iOS:
+  the GUI and touch path both work. No kernel diagnostic text appears after
+  the shim's yellow output, which is expected because this image includes
+  `veux_gui_noconsole=1`.
+- This runtime result proves that gating the modem start on `backboardd` or
+  `SpringBoard` fixed the earlier Apple-logo/first-frame modem regression.
+- Built `/home/nyra/veux-artifacts/41516989640/gui-wifi-console.img`, 17,281,024
+  bytes, SHA-256
+  `451238176e916b8f57283b1ae99047406753529042b04018ce9282cb8acdf82d`.
+  It uses the exact CI-41516989640 kernel and embedded ADT, with only the
+  console arguments changed (`veux_gui_noconsole=1` replaced by `veuxfb=1
+  veuxfbconsole=1`).
+- Strict wrapper verification passed 40/40 modem markers, forbidden-marker
+  checks, exact boot arguments, the phone DTB, and byte-for-byte payload
+  reconstruction. Comparing payloads shows differences only inside the
+  608-byte command-line field.
+- Added `tools/repack-veux-bootv2.py` for reproducible payload replacement in
+  a verified VEUX boot-v2 template. Repository validation passes all 29 Python
+  tools, 162 patches, and 8 shell scripts. The console image is not flashed
+  yet; the phone must first re-enter Fastboot.
+
 ## >>> UPDATE 2026-11-02 (SpringBoard-triggered normal image flashed) <<<
 
 - CI run `41516989640` produced the SpringBoard/backboardd-triggered normal
