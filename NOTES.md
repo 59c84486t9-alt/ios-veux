@@ -1,3 +1,25 @@
+## >>> UPDATE 2026-11-02 (SpringBoard-triggered normal image flashed) <<<
+
+- CI run `41516989640` produced the SpringBoard/backboardd-triggered normal
+  image `/home/nyra/veux-artifacts/41516989640/modem-normal.img` (17,281,024
+  bytes, SHA-256
+  `4d46654a043cdcf6ec824fb6207a1d83dcaaffd8277677e66d6eaf845904a472`;
+  kernel SHA-256
+  `e523631224de34bd8d3c74cbc512a0ca35a19a5fd3c3461bb85bcb89cc82cd1a`).
+- Full local verification passed: 40/40 modem markers, source and binary
+  forbidden-marker checks, byte-for-byte payload reconstruction, the exact
+  phone DTB, manifest, and the complete `modem-normal` boot-argument string.
+  The image uses `modem_after_gui=1`, `modem_hold=0`, `modem_boot_wait=0`,
+  normal RW root, and the normal GUI/touch path.
+- Immediately before writing, Fastboot reported serial `4078cac030c8`, product
+  `veux`, current slot B, unlocked state, and `boot_b` capacity `0x8000000`.
+  Only `boot_b` was flashed. Fastboot send and write returned `OKAY`; selecting
+  slot B and rebooting also returned `OKAY`. No other partition was written.
+- Twenty seconds after reboot, neither Fastboot nor ADB enumerated the phone.
+  Runtime GUI and modem/WLFW results are pending screen confirmation. Wi-Fi is
+  not expected to become usable from this image because the WLFW implementation
+  still stops after CAP and the remaining BDF/CE/HTC/WMI/network path is absent.
+
 ## >>> UPDATE 2026-11-02 (modem-disabled iOS GUI confirmed; deferred modem next) <<<
 
 - User confirms `/home/nyra/veux-artifacts/41355888099/normal-console.img`
