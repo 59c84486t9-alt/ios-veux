@@ -76,6 +76,13 @@
   had mismatched generator parentheses. Corrected the `all(...)` expression;
   Python, repository, and whitespace validation now pass. No artifact or device
   write resulted from that failed run.
+- CI run `41378169964` passed on commit `3e3b031` in 10m12s. Kernel SHA-256 is
+  `89fac6edf9aa8cab85e803f7be5ee87ab295cd11855ef9c17fdc48c4d977cdea`.
+  Built `/home/nyra/veux-artifacts/41378169964/modem-normal.img`, 17,281,024
+  bytes, SHA-256
+  `ac7776254c3ebc6fe289a148749419864aedd4dfd71a922b2ef06bc627363d26`;
+  verification passed 40/40 markers and exact reconstruction. Fastboot is
+  visible for the GUI-triggered runtime test.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
