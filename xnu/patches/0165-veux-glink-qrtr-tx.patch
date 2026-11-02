@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000008 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Send VEUX QRTR packets through GLINK RX intents
+
+diff --git a/osfmk/arm64/veux_modem_glink.c b/osfmk/arm64/veux_modem_glink.c
+--- a/osfmk/arm64/veux_modem_glink.c
++++ b/osfmk/arm64/veux_modem_glink.c
+@@ -27,6 +27,10 @@
+ #define Q_NEW_SERVER 4
+ #define Q_DATA 1
+ #define Q_CTRL 0xfffffffeU
++#define TXQ_SLOTS 8
++#define TXQ_PACKET 2048
++#define TXQ_HDR 16
++struct txslot { uint8_t data[TXQ_HDR+TXQ_PACKET];uint32_t len; };
+ struct gmsg { uint16_t cmd,ch; uint32_t p; } __attribute__((packed));
+ struct gdata { struct gmsg m; uint32_t chunk,left; } __attribute__((packed));
+ struct qrtr1 { uint32_t version,type,src_node,src_port,confirm,size,dst_node,dst_port; } __attribute__((packed));
+@@ -36,6 +39,8 @@
+ static bool remote_open,open_sent,open_ack,intents_sent,hello_sent;static uint32_t qrtr_version=1,modem_node=0xffffffffU;
+ static struct {uint32_t id,size;bool used;} intents[64];static unsigned intent_count;
+ static unsigned poll_count;static bool rx_copy_logged,qrtr_packet_logged;
++static struct txslot txq[TXQ_SLOTS];
++static unsigned txq_head,txq_tail;static bool intent_req_pending,intent_logged,txq_logged;
+ static inline void mb(void){__asm__ volatile("dsb sy" ::: "memory");}
+ static uint32_t avail(void){uint32_t h=gd[3],t=gd[2];return h>=t?h-t:rxlen-t+h;}
+ static void peek(uint32_t off,void *dst,uint32_t n){uint32_t t=gd[2]+off;if(t>=rxlen)t-=rxlen;uint32_t a=n<rxlen-t?n:rxlen-t;if(!rx_copy_logged){printf("VEUX GLINK: copying RX data\n");rx_copy_logged=true;}volatile uint8_t *dst_ptr=(volatile uint8_t *)dst;const volatile uint8_t *src_ptr=(const volatile uint8_t *)(grx+t);for(uint32_t i=0;i<a;i++)dst_ptr[i]=src_ptr[i];if(n>a){src_ptr=(const volatile uint8_t *)grx;for(uint32_t i=0;i<n-a;i++)dst_ptr[a+i]=src_ptr[i];}}
+@@ -44,7 +49,11 @@
+ static bool tx(const void *h,uint32_t hn,const void *d,uint32_t dn){uint32_t head=gd[1],tail=gd[0],free=tail<=head?TX_SIZE-head+tail:tail-head;free=free<8?0:free-8;if(free<((hn+dn+7)&~7U))return false;head=put(head,h,hn);if(dn)head=put(head,d,dn);head=(head+7)&~7U;if(head>=TX_SIZE)head-=TX_SIZE;mb();gd[1]=head;mb();veux_ipcc_signal(2,0);return true;}
+ static void cmd(uint16_t c,uint16_t ch,uint32_t p){struct gmsg m={c,ch,p};(void)tx(&m,sizeof(m),NULL,0);}
+ static void open_chan(void){struct {struct gmsg h;char n[8];} __attribute__((packed)) q={{CMD_OPEN,LCID,7},"IPCRTR"};if(tx(&q,sizeof(q),NULL,0))open_sent=true;}
+-void veux_qrtr_send(uint32_t typ,uint32_t sport,uint32_t node,uint32_t dport,const void *data,uint32_t len){uint8_t b[8192];uint32_t n;if(len>sizeof(b)-sizeof(struct qrtr1))return;memset(b,0,sizeof(b));if(qrtr_version==2){struct qrtr2 *h=(void*)b;h->version=2;h->type=typ;h->flags=typ==Q_DATA;h->size=len;h->src_node=1;h->src_port=sport;h->dst_node=node;h->dst_port=dport;n=sizeof(*h);}else{struct qrtr1 *h=(void*)b;h->version=1;h->type=typ;h->src_node=1;h->src_port=sport;h->confirm=typ==Q_DATA;h->size=len;h->dst_node=node;h->dst_port=dport;n=sizeof(*h);}memcpy(b+n,data,len);(void)tx(b,(n+len+3)&~3U,NULL,0);}
++static int find_intent(uint32_t n){for(unsigned i=0;i<intent_count;i++)if(!intents[i].used&&intents[i].size>=n)return (int)i;return -1;}
++static bool qrtr_tx_one(void){if(txq_head==txq_tail||!remote_open||!open_ack)return false;struct txslot *q=&txq[txq_head%TXQ_SLOTS];uint32_t plen=q->len-TXQ_HDR;int i=find_intent(plen);if(i<0){if(!intent_req_pending){printf("VEUX GLINK: requesting QRTR RX intent len=%u\n",plen);cmd(CMD_RX_INTENT_REQ,LCID,plen);intent_req_pending=true;}return false;}struct gdata h={{CMD_TX_DATA,LCID,intents[i].id},plen,0};memcpy(q->data,&h,sizeof(h));if(!tx(q->data,sizeof(h)+plen,NULL,0))return false;intents[i].used=true;if(!txq_logged){printf("VEUX GLINK: QRTR TX sent len=%u intent=%u\n",plen,intents[i].id);txq_logged=true;}txq_head++;return true;}
++static void qrtr_tx_pump(void){while(qrtr_tx_one());}
++static bool qrtr_queue(const void *p,uint32_t n){if(n>TXQ_PACKET||txq_tail-txq_head>=TXQ_SLOTS){printf("VEUX GLINK: QRTR TX overflow len=%u\n",n);return false;}struct txslot *q=&txq[txq_tail%TXQ_SLOTS];memcpy(q->data+TXQ_HDR,p,n);q->len=TXQ_HDR+n;txq_tail++;qrtr_tx_pump();return true;}
++void veux_qrtr_send(uint32_t typ,uint32_t sport,uint32_t node,uint32_t dport,const void *data,uint32_t len){uint8_t b[TXQ_PACKET];uint32_t n;if(len>sizeof(b)-sizeof(struct qrtr1))return;memset(b,0,sizeof(b));if(qrtr_version==2){struct qrtr2 *h=(void*)b;h->version=2;h->type=typ;h->flags=typ==Q_DATA;h->size=len;h->src_node=1;h->src_port=sport;h->dst_node=node;h->dst_port=dport;n=sizeof(*h);}else{struct qrtr1 *h=(void*)b;h->version=1;h->type=typ;h->src_node=1;h->src_port=sport;h->confirm=typ==Q_DATA;h->size=len;h->dst_node=node;h->dst_port=dport;n=sizeof(*h);}if(len)memcpy(b+n,data,len);(void)qrtr_queue(b,(n+len+3)&~3U);}
+ static uint32_t load_u32_unaligned(const void *p){return safe_read_u32(p);}
+ static void qrtr_rx(const uint8_t *p,uint32_t n){if(!qrtr_packet_logged){printf("VEUX QRTR: processing packet\n");qrtr_packet_logged=true;}uint32_t typ,node,port,dport,size,hlen;if(n>=sizeof(struct qrtr1)&&load_u32_unaligned(p)==1){typ=safe_read_u32(p+4);node=safe_read_u32(p+8);port=safe_read_u32(p+12);size=safe_read_u32(p+20);dport=safe_read_u32(p+28);hlen=sizeof(struct qrtr1);qrtr_version=1;}else if(n>=sizeof(struct qrtr2)&&p[0]==2){typ=p[1];size=safe_read_u32(p+4);node=safe_read_u16(p+8);port=safe_read_u16(p+10);dport=safe_read_u16(p+14);hlen=sizeof(struct qrtr2)+p[3]*4;qrtr_version=2;}else return;if(hlen>n||size>n-hlen)return;
+  if(typ==Q_HELLO){modem_node=node;printf("VEUX QRTR: HELLO node=0x%x version=%u\n",node,qrtr_version);}
+@@ -56,11 +65,11 @@
+  case CMD_VERSION_ACK:advance(8);printf("VEUX GLINK: VERSION_ACK\n");break;
+  case CMD_OPEN:{char name[16]={0};n=(8+m.p+7)&~7U;if(avail()<n)return false;peek(8,name,m.p<15?m.p:15);advance(n);if(!strcmp(name,"IPCRTR")){rcid=m.ch;remote_open=true;cmd(CMD_OPEN_ACK,(uint16_t)rcid,0);if(!open_sent)open_chan();}break;}
+  case CMD_OPEN_ACK:advance(8);if(m.ch==LCID){open_ack=true;printf("VEUX GLINK: OPEN_ACK IPCRTR\n");}break;
+- case CMD_INTENT:n=(8+8*m.p+7)&~7U;if(avail()<n)return false;for(uint32_t i=0;i<m.p&&intent_count<64;i++){uint32_t pair[2];peek(8+8*i,pair,8);intents[intent_count].id=pair[1];intents[intent_count].size=pair[0];intents[intent_count].used=false;intent_count++;}advance(n);break;
++ case CMD_INTENT:n=(8+8*m.p+7)&~7U;if(avail()<n)return false;for(uint32_t i=0;i<m.p&&intent_count<64;i++){uint32_t pair[2];peek(8+8*i,pair,8);intents[intent_count].id=pair[1];intents[intent_count].size=pair[0];intents[intent_count].used=false;intent_count++;}if(!intent_logged){printf("VEUX GLINK: modem RX intents=%u\n",m.p);intent_logged=true;}advance(n);intent_req_pending=false;qrtr_tx_pump();break;
+  case CMD_RX_INTENT_REQ:{advance(8);struct {struct gmsg h;uint32_t pairs[2];} __attribute__((packed)) q={{CMD_INTENT,LCID,1},{0x4400,next_intent++}};(void)tx(&q,sizeof(q),NULL,0);cmd(CMD_RX_INTENT_REQ_ACK,LCID,1);break;}
+- case CMD_RX_DONE:case CMD_RX_DONE_REUSE:case CMD_CLOSE_ACK:advance(8);break;case CMD_CLOSE:advance(8);cmd(CMD_CLOSE_ACK,m.ch,0);break;case CMD_READ_NOTIF:advance(8);veux_ipcc_signal(2,0);break;
++ case CMD_RX_DONE:case CMD_RX_DONE_REUSE:advance(8);for(unsigned i=0;i<intent_count;i++)if(intents[i].id==m.p)intents[i].used=false;qrtr_tx_pump();break;case CMD_CLOSE_ACK:advance(8);break;case CMD_CLOSE:advance(8);cmd(CMD_CLOSE_ACK,m.ch,0);break;case CMD_READ_NOTIF:advance(8);veux_ipcc_signal(2,0);break;
+  case CMD_TX_DATA:{uint32_t hdr[2];if(avail()<16)return false;peek(8,hdr,8);n=(16+hdr[0]+7)&~7U;if(avail()<n)return false;if(asm_len+hdr[0]<=0x4400){peek(16,asm_buf+asm_len,hdr[0]);asm_len+=hdr[0];}advance(n);if(!hdr[1]){qrtr_rx(asm_buf,asm_len);asm_len=0;cmd(CMD_RX_DONE_REUSE,LCID,m.p);}break;}
+  default:advance(8);break;}return true;}
+ void veux_glink_init(void){uint64_t pa=0;asm_buf=NULL;printf("VEUX GLINK: requesting SMEM items 478, 479, 480\n");if(veux_modem_pool_alloc(0x4400,&pa))asm_buf=veux_modem_pool_va(pa,0x4400);gd=veux_smem_alloc(ITEM_DESC,32);gtx=veux_smem_alloc(ITEM_TX,TX_SIZE);grx=veux_smem_alloc(ITEM_RX,TX_SIZE);printf("VEUX GLINK: desc va=0x%llx tx_va=0x%llx rx_va=0x%llx\n",(unsigned long long)(uintptr_t)gd,(unsigned long long)(uintptr_t)gtx,(unsigned long long)(uintptr_t)grx);if(!gd||!gtx||!grx)panic("GLINK SMEM alloc failed");if(!asm_buf)panic("GLINK assembly buffer alloc failed");if(!veux_smem_contains((const void *)gd,32)||!veux_smem_contains(gtx,TX_SIZE)||!veux_smem_contains(grx,TX_SIZE)||((uintptr_t)gd&3)||((uintptr_t)gtx&3)||((uintptr_t)grx&3))panic("GLINK SMEM range invalid");printf("VEUX GLINK: mapped SMEM (write-combine)\n");rxlen=TX_SIZE;gd[1]=gd[2]=0;mb();printf("VEUX GLINK: sending VERSION\n");cmd(CMD_VERSION,1,1);}
+-void veux_glink_poll(void){if(!gd||!grx)return;if(!poll_count)printf("VEUX GLINK: poll loop entered\n");poll_count++;for(unsigned i=0;i<64&&rx_one();i++);if(remote_open&&open_ack&&!intents_sent){struct {struct gmsg h;uint32_t pairs[16];} __attribute__((packed)) q={{5,LCID,8},{0}};for(unsigned i=0;i<8;i++){q.pairs[2*i]=0x4400;q.pairs[2*i+1]=next_intent++;}(void)tx(&q,sizeof(q.h)+64,NULL,0);intents_sent=true;}if(!open_sent&&poll_count>=10000){printf("VEUX GLINK: forcing open\n");open_chan();}if(remote_open&&open_ack&&!hello_sent){struct qctrl q={Q_HELLO,0,0,0,0};veux_qrtr_send(Q_HELLO,Q_CTRL,modem_node,Q_CTRL,&q,sizeof(q));hello_sent=true;veux_pdmap_dispatch();}veux_wlfw_poll();}
++void veux_glink_poll(void){if(!gd||!grx)return;if(!poll_count)printf("VEUX GLINK: poll loop entered\n");poll_count++;for(unsigned i=0;i<64&&rx_one();i++);qrtr_tx_pump();if(remote_open&&open_ack&&!intents_sent){struct {struct gmsg h;uint32_t pairs[16];} __attribute__((packed)) q={{5,LCID,8},{0}};for(unsigned i=0;i<8;i++){q.pairs[2*i]=0x4400;q.pairs[2*i+1]=next_intent++;}(void)tx(&q,sizeof(q.h)+64,NULL,0);intents_sent=true;}if(!open_sent&&poll_count>=10000){printf("VEUX GLINK: forcing open\n");open_chan();}if(remote_open&&open_ack&&!hello_sent){struct qctrl q={Q_HELLO,0,0,0,0};veux_qrtr_send(Q_HELLO,Q_CTRL,modem_node,Q_CTRL,&q,sizeof(q));hello_sent=true;veux_pdmap_dispatch();}qrtr_tx_pump();veux_wlfw_poll();}
+ #endif
+-- 
+2.49.0

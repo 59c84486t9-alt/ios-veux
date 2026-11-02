@@ -14,6 +14,26 @@
   long enough for the modem worker, then reboot to recovery and pull the
   persistent ring to determine the actual last modem/WLFW milestone.
 
+## >>> UPDATE 2026-11-03 (GLINK QRTR TX root cause; CI pending) <<<
+
+- The frozen GUI screenshot confirms one successful modem load through
+  `segments loaded`, `auth_reset`, `SMP2P READY`, GLINK `VERSION_ACK`, and
+  IPCRTR `OPEN_ACK`. The hexdump and later b34/b35 rows are older wrapped-ring
+  output, not a second modem load.
+- No `VEUX QRTR: HELLO` or `NEW_SERVER 0x45` follows the successful GLINK open.
+  Comparing the VEUX transport with the local Topaz implementation found the
+  cause: `veux_qrtr_send()` wrote a bare QRTR packet directly to the GLINK TX
+  FIFO. GLINK requires each packet to use `CMD_TX_DATA` with a modem-provided
+  RX intent ID.
+- Added `0165-veux-glink-qrtr-tx.patch`: queues QRTR packets, requests RX
+  intents when none are available, wraps packets in `CMD_TX_DATA`, tracks
+  intent reuse through `RX_DONE`, and pumps the queue from the poll loop.
+  This affects HELLO, pd-mapper announcements, and all later WLFW QMI traffic.
+- The patch applies cleanly against the CI-415337 build tree. Manifest and
+  wrapper checks now require the new GLINK intent diagnostics. Repository
+  validation, CI, wrapper creation, and device runtime verification are
+  pending.
+
 ## >>> UPDATE 2026-11-02 (GUI-freeze console capture; CI pending) <<<
 
 - The Phase-8 console image boots on some attempts and produces the modem

@@ -257,6 +257,7 @@ phase4_patch_names = (
     "0162-veux-ufs-multilun.patch",
     "0163-veux-modem-after-gui.patch",
     "0164-veux-gui-freeze-diagnostic.patch",
+    "0165-veux-glink-qrtr-tx.patch",
 )
 phase4_patch_texts = {}
 phase4_status = {}
@@ -444,6 +445,12 @@ phase4_sources = {
     "gui_freeze_diagnostic_is_bootarg_gated": all(x in phase4_patch_texts["0164-veux-gui-freeze-diagnostic.patch"] for x in (
         "fConsolePaused", 'PE_parse_boot_argn("veux_gui_freeze", &freeze, sizeof(freeze))',
         "freeze == 1", "src = 0;")),
+    "qrtr_tx_uses_glink_rx_intents": all(x in phase4_patch_texts["0165-veux-glink-qrtr-tx.patch"] for x in (
+        "#define TXQ_SLOTS 8", "static int find_intent(uint32_t n)",
+        "cmd(CMD_RX_INTENT_REQ,LCID,plen)",
+        "struct gdata h={{CMD_TX_DATA,LCID,intents[i].id},plen,0};",
+        "intents[i].used=true", "static void qrtr_tx_pump(void)",
+        "veux_qrtr_send(Q_HELLO", "qrtr_tx_pump();veux_wlfw_poll()")),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
     "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],
     "modem_a_scans_luns_0_to_5_and_caches_location": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
@@ -530,6 +537,9 @@ modem_needles = {
     "qrtr_processing_packet": b"VEUX QRTR: processing packet",
     "smem_zeroing": b"VEUX GLINK: zeroing SMEM item=%u size=0x%x",
     "glink_open_ack_ipcrtr": b"VEUX GLINK: OPEN_ACK IPCRTR",
+    "glink_qrtr_intent_request": b"VEUX GLINK: requesting QRTR RX intent len=%u",
+    "glink_qrtr_intents": b"VEUX GLINK: modem RX intents=%u",
+    "glink_qrtr_tx": b"VEUX GLINK: QRTR TX sent len=%u intent=%u",
     "qrtr_hello": b"VEUX QRTR: HELLO",
     "qrtr_wlfw_server": b"VEUX QRTR: NEW_SERVER 0x45",
     "wlfw_ind_register": b"VEUX WLFW: ind_register ok",
