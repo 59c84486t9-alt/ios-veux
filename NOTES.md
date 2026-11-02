@@ -44,7 +44,10 @@
   SHA-256 `c2403e5f755817aa3682416433175efefdfbe623c04f7a9f94a9312cf0bd65a4`.
   It uses the same kernel and arguments with the framebuffer console instead of
   `veux_gui_noconsole=1`. It does not enable the persistent UFS-tail logger.
-  Neither Phase-8 image has been flashed; runtime verification is pending.
+  Rechecked serial `4078cac030c8`, product `veux`, slot B, unlock state,
+  `boot_b` capacity, image size, and SHA-256, then flashed only the console
+  image to `boot_b`. Send/write, slot selection, and reboot returned `OKAY`.
+  Runtime verification of MSA_READY/FW_READY and the GUI is pending.
 
 ## >>> UPDATE 2026-11-02 (GUI-triggered normal image boots; console variant ready) <<<
 
