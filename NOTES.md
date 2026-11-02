@@ -1,3 +1,16 @@
+- A user-observed console diagnostic boot shows large amounts of kernel text
+  that fades away before the modem/WLFW milestones can be read. This is caused
+  by the GUI repainting the framebuffer after SpringBoard presents; the
+  transient framebuffer console has no retained history in this wrapper.
+- Built `/home/nyra/veux-artifacts/41516989640/gui-wifi-persistent.img`,
+  17,281,024 bytes, SHA-256
+  `14fa305f3d997bfb203e8418ffaa4262de9928a3d02170a0c2a57aeb7550329e`.
+  It uses the exact console image and kernel but adds `veuxlog=1`, enabling
+  the persistent UFS console ring while retaining the GUI and touch path.
+  Strict wrapper verification passed 40/40 markers and payload reconstruction.
+  It is not flashed yet; it allows modem/WLFW output to be recovered after the
+  GUI overwrites the framebuffer.
+
 ## >>> UPDATE 2026-11-02 (GUI-triggered normal image boots; console variant ready) <<<
 
 - User confirms the SpringBoard-triggered normal image boots into usable iOS:
