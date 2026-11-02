@@ -532,6 +532,10 @@ modem_needles = {
     "wlfw_msa_ready": b"VEUX WLFW: msa_ready ok",
     "wlfw_cap": b"VEUX WLFW: cap ok",
     "wlfw_chip_id": b"VEUX WLFW: chip_id",
+    "wlfw_adrastea_sequence": b"VEUX WLFW: Adrastea sequence ind_register -> msa_info -> msa_ready -> cap",
+    "wlfw_msa_ready_indication": b"VEUX WLFW: MSA_READY indication",
+    "wlfw_wait_fw_ready": b"VEUX WLFW: Adrastea APSS board-data path not used; waiting",
+    "wlfw_fw_ready_indication": b"VEUX WLFW: FW_READY indication",
     "modem_hold": b"VEUX MODEM HOLD: wfe",
 }
 missing_modem = [name for name, marker in modem_needles.items() if marker not in kernel]

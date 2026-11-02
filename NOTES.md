@@ -14,6 +14,25 @@
   long enough for the modem worker, then reboot to recovery and pull the
   persistent ring to determine the actual last modem/WLFW milestone.
 
+## >>> UPDATE 2026-11-02 (Phase 8 WLFW progression; CI pending) <<<
+
+- The supplied GUI-triggered console capture reaches modem segment loading,
+  `SMP2P READY`, GLINK `VERSION_ACK`, and IPCRTR `OPEN_ACK`, but does not show
+  WLFW service `0x45`, CAP, board ID, MSA_READY, or FW_READY. It is not enough
+  to validate a hardware-specific CE configuration.
+- Proceeding with the source-correct Adrastea WLFW progression rather than
+  repeating the same diagnostic boot. Updated `0158-veux-modem-wlfw.patch` to
+  handle QMI indications, explicitly record the
+  `IND_REGISTER -> MSA_INFO -> MSA_READY -> CAP` sequence, log MSA_READY and
+  FW_READY, and keep polling after a successful CAP.
+- The patch intentionally does not send `WLAN_CFG` or program CE hardware.
+  The local Xiaomi SM6375 ICNSS2 source confirms Adrastea skips HOST_CAP and
+  does not use the WCN6750 APSS BDF-download path during this initialization;
+  the exact Adrastea CE target/service/shadow arrays remain unavailable.
+- Added manifest and wrapper checks for the new WLFW progression markers.
+  Repository validation passes. A strict CI kernel build, wrapper verification,
+  and device boot are pending.
+
 ## >>> UPDATE 2026-11-02 (GUI-triggered normal image boots; console variant ready) <<<
 
 - User confirms the SpringBoard-triggered normal image boots into usable iOS:

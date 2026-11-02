@@ -6,7 +6,7 @@ diff --git a/osfmk/arm64/veux_modem_wlfw.c b/osfmk/arm64/veux_modem_wlfw.c
 new file mode 100644
 --- /dev/null
 +++ b/osfmk/arm64/veux_modem_wlfw.c
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,47 @@
 +#include <pexpert/arm64/board_config.h>
 +#include <kern/debug.h>
 +#include <kern/kalloc.h>
@@ -18,21 +18,41 @@ new file mode 100644
 +#define CLIENT_ID 0x4b4e454cU
 +#define MSA_ADDR 0x86500000ULL
 +#define MSA_SIZE 0x00200000U
-+static uint32_t node_id,server_port,step_ticks;static uint16_t txn_id=1,waiting_msg;static unsigned phase;static bool started,finished;
++#define QMI_RESP 2
++#define QMI_IND 4
++#define WLFW_IND_REGISTER 0x20
++#define WLFW_FW_READY_IND 0x21
++#define WLFW_CAP 0x24
++#define WLFW_MSA_READY_IND 0x2b
++#define WLFW_MSA_INFO 0x2d
++#define WLFW_MSA_READY 0x2e
++static uint32_t node_id,server_port,step_ticks;
++static uint16_t txn_id=1,waiting_msg;
++static unsigned phase;
++static bool started,finished,cap_done,msa_ready_seen;
 +static void add_tlv(uint8_t*b,uint32_t*n,uint8_t t,const void*v,uint16_t l){b[(*n)++]=t;memcpy(b+*n,&l,2);*n+=2;if(l)memcpy(b+*n,v,l);*n+=l;}
 +static bool send_msg(uint16_t msg,const uint8_t *tlvs,uint32_t len){uint8_t b[256]={0};uint32_t n=7;if(len>240)return false;b[0]=0;uint16_t t=txn_id++;memcpy(b+1,&t,2);memcpy(b+3,&msg,2);if(len)memcpy(b+7,tlvs,len);n+=len;uint16_t l=(uint16_t)(n-7);memcpy(b+5,&l,2);veux_qrtr_send(1,PORT,node_id,server_port,b,n);waiting_msg=msg;step_ticks=0;return true;}
-+static bool send_ind_register(void){uint8_t b[32],a=1;uint32_t n=0,c=CLIENT_ID;add_tlv(b,&n,0x10,&a,1);add_tlv(b,&n,0x13,&a,1);add_tlv(b,&n,0x15,&c,4);phase=1;return send_msg(0x20,b,n);}
-+static bool send_msa_info(void){uint8_t b[32];uint32_t n=0;uint32_t sz=MSA_SIZE;uint64_t msa=MSA_ADDR;add_tlv(b,&n,1,&msa,8);add_tlv(b,&n,2,&sz,4);phase=2;return send_msg(0x2d,b,n);}
++static bool send_ind_register(void){uint8_t b[32],a=1;uint32_t n=0,c=CLIENT_ID;add_tlv(b,&n,0x10,&a,1);add_tlv(b,&n,0x13,&a,1);add_tlv(b,&n,0x15,&c,4);phase=1;return send_msg(WLFW_IND_REGISTER,b,n);}
++static bool send_msa_info(void){uint8_t b[32];uint32_t n=0;uint32_t sz=MSA_SIZE;uint64_t msa=MSA_ADDR;add_tlv(b,&n,1,&msa,8);add_tlv(b,&n,2,&sz,4);phase=2;return send_msg(WLFW_MSA_INFO,b,n);}
 +static bool send_simple(uint16_t id,unsigned ph){phase=ph;return send_msg(id,NULL,0);}
 +static const uint8_t *find_tlv(const uint8_t*d,uint32_t len,uint8_t t,uint16_t*out){for(uint32_t o=7;o+3<=len;){uint16_t n=safe_read_u16(d+o+1);if(o+3+n>len)return NULL;if(d[o]==t){*out=n;return d+o+3;}o+=3+n;}return NULL;}
 +static bool response_ok(const uint8_t*d,uint32_t len,uint64_t *fw){uint16_t l=0;const uint8_t*v=find_tlv(d,len,2,&l);if(!v||l<4)return false;uint16_t result=safe_read_u16(v),error=safe_read_u16(v+2);const uint8_t*s=find_tlv(d,len,0x10,&l);if(fw&&s&&l>=8)*fw=safe_read_u64(s);return result==0&&error==0;}
-+void veux_wlfw_dispatch(uint32_t node,uint32_t port){if(started)return;node_id=node;server_port=port;started=true;if(!send_ind_register()){printf("VEUX WLFW: ind_register FAILED err=0x1\n");veux_modem_hold();}}
-+void veux_wlfw_rx(uint32_t node,uint32_t src,uint32_t dst,const uint8_t*d,uint32_t len){(void)node;(void)src;if(dst!=PORT||!started||len<7||d[0]!=2)return;uint16_t msg=safe_read_u16(d+3);if(msg!=waiting_msg)return;uint64_t fw=0;bool ok=response_ok(d,len,&fw);if(!ok){printf("VEUX WLFW: step=%u FAILED err=0x%x fw_status=0x%llx\n",phase,msg,fw);veux_modem_hold();}
++void veux_wlfw_dispatch(uint32_t node,uint32_t port){if(started)return;node_id=node;server_port=port;started=true;printf("VEUX WLFW: Adrastea sequence ind_register -> msa_info -> msa_ready -> cap\n");if(!send_ind_register()){printf("VEUX WLFW: ind_register FAILED err=0x1\n");veux_modem_hold();}}
++static void on_cap(const uint8_t*d,uint32_t len){
++ uint16_t l=0;uint32_t chip=0,family=0,board=0,soc=0,version=0;const uint8_t*v=find_tlv(d,len,0x10,&l);if(v&&l>=8){chip=safe_read_u32(v);family=safe_read_u32(v+4);}
++ v=find_tlv(d,len,0x11,&l);if(v&&l>=4)board=safe_read_u32(v);v=find_tlv(d,len,0x12,&l);if(v&&l>=4)soc=safe_read_u32(v);v=find_tlv(d,len,0x13,&l);if(v&&l>=4)version=safe_read_u32(v);
++ char build[80]={0};v=find_tlv(d,len,0x14,&l);if(v){uint16_t n=l<sizeof(build)-1?l:sizeof(build)-1;for(uint16_t i=0;i<n;i++)build[i]=((const volatile uint8_t *)v)[i];}
++ printf("VEUX WLFW: cap ok chip_id=0x%x family=0x%x board_id=0x%x soc_id=0x%x fw_version=0x%x fw_build_id=%s\n",chip,family,board,soc,version,build);
++ printf("VEUX WLFW: chip_id 0x%x family=0x%x\n",chip,family);cap_done=true;phase=5;waiting_msg=0;step_ticks=0;
++ printf("VEUX WLFW: Adrastea APSS board-data path not used; waiting %s\n",msa_ready_seen?"FW_READY":"MSA_READY then FW_READY");
++}
++static bool on_indication(const uint8_t*d,uint32_t len){uint16_t msg=safe_read_u16(d+3);if(msg==WLFW_MSA_READY_IND){msa_ready_seen=true;printf("VEUX WLFW: MSA_READY indication%s\n",cap_done?"; continuing":"; waiting for CAP");return true;}if(msg==WLFW_FW_READY_IND){finished=true;printf("VEUX WLFW: FW_READY indication; CE configuration remains gated on verified Adrastea tables\n");return true;}printf("VEUX WLFW: indication msg=0x%x\n",msg);return true;}
++void veux_wlfw_rx(uint32_t node,uint32_t src,uint32_t dst,const uint8_t*d,uint32_t len){(void)node;(void)src;if(dst!=PORT||!started||len<7)return;if(d[0]==QMI_IND){on_indication(d,len);return;}if(d[0]!=QMI_RESP)return;uint16_t msg=safe_read_u16(d+3);if(msg!=waiting_msg)return;uint64_t fw=0;bool ok=response_ok(d,len,&fw);if(!ok){printf("VEUX WLFW: step=%u FAILED err=0x%x fw_status=0x%llx\n",phase,msg,fw);veux_modem_hold();}
 + if(phase==1){printf("VEUX WLFW: ind_register ok fw_status=0x%llx\n",fw);if(!send_msa_info()){printf("VEUX WLFW: msa_info FAILED err=0x1\n");veux_modem_hold();}return;}
-+ if(phase==2){printf("VEUX WLFW: msa_info ok\n");uint16_t l=0;const uint8_t*v=find_tlv(d,len,3,&l);if(!v||l<1){printf("VEUX WLFW: msa_info FAILED err=0x2\n");veux_modem_hold();}if(v&&l>0){uint8_t n=v[0];for(unsigned i=0;i<n&&1+13*(i+1)<=l;i++){uint64_t a;uint32_t z;a=safe_read_u64(v+1+13*i);z=safe_read_u32(v+9+13*i);static const uint32_t vm[]={0x0f,0x18,0x19};if(a<MSA_ADDR||a+z>MSA_ADDR+MSA_SIZE||z==0){printf("VEUX WLFW: msa region out of range\n");veux_modem_hold();}if(veux_scm_assign(a,z,vm,3)!=0){printf("VEUX WLFW: scm_assign FAILED err=0x2\n");veux_modem_hold();}}}if(!send_simple(0x2e,3)){printf("VEUX WLFW: msa_ready FAILED err=0x1\n");veux_modem_hold();}return;}
-+ if(phase==3){printf("VEUX WLFW: msa_ready ok\n");if(!send_simple(0x24,4)){printf("VEUX WLFW: cap FAILED err=0x1\n");veux_modem_hold();}return;}
-+ if(phase==4){uint16_t l=0;uint32_t chip=0,family=0,board=0,soc=0,version=0;const uint8_t*v=find_tlv(d,len,0x10,&l);if(v&&l>=8){chip=safe_read_u32(v);family=safe_read_u32(v+4);}v=find_tlv(d,len,0x11,&l);if(v&&l>=4)board=safe_read_u32(v);v=find_tlv(d,len,0x12,&l);if(v&&l>=4)soc=safe_read_u32(v);v=find_tlv(d,len,0x13,&l);if(v&&l>=4)version=safe_read_u32(v);char build[80]={0};v=find_tlv(d,len,0x14,&l);if(v){uint16_t n=l<sizeof(build)-1?l:sizeof(build)-1;for(uint16_t i=0;i<n;i++)build[i]=((const volatile uint8_t *)v)[i];}printf("VEUX WLFW: cap ok chip_id=0x%x family=0x%x board_id=0x%x soc_id=0x%x fw_version=0x%x fw_build_id=%s\n",chip,family,board,soc,version,build);printf("VEUX WLFW: chip_id 0x%x family=0x%x\n",chip,family);finished=true;veux_modem_hold();}}
-+void veux_wlfw_poll(void){if(started&&!finished&&++step_ticks>10000){printf("VEUX WLFW: step=%u TIMEOUT\n",phase);veux_modem_hold();}}
++ if(phase==2){printf("VEUX WLFW: msa_info ok\n");uint16_t l=0;const uint8_t*v=find_tlv(d,len,3,&l);if(!v||l<1){printf("VEUX WLFW: msa_info FAILED err=0x2\n");veux_modem_hold();}if(v&&l>0){uint8_t n=v[0];for(unsigned i=0;i<n&&1+13*(i+1)<=l;i++){uint64_t a;uint32_t z;a=safe_read_u64(v+1+13*i);z=safe_read_u32(v+9+13*i);static const uint32_t vm[]={0x0f,0x18,0x19};if(a<MSA_ADDR||a+z>MSA_ADDR+MSA_SIZE||z==0){printf("VEUX WLFW: msa region out of range\n");veux_modem_hold();}if(veux_scm_assign(a,z,vm,3)!=0){printf("VEUX WLFW: scm_assign FAILED err=0x2\n");veux_modem_hold();}}}if(!send_simple(WLFW_MSA_READY,3)){printf("VEUX WLFW: msa_ready FAILED err=0x1\n");veux_modem_hold();}return;}
++ if(phase==3){printf("VEUX WLFW: msa_ready ok\n");if(!send_simple(WLFW_CAP,4)){printf("VEUX WLFW: cap FAILED err=0x1\n");veux_modem_hold();}return;}
++ if(phase==4){on_cap(d,len);}}
++void veux_wlfw_poll(void){if(started&&!finished&&waiting_msg&&++step_ticks>10000){printf("VEUX WLFW: step=%u TIMEOUT\n",phase);veux_modem_hold();}}
 +#endif
 diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
 --- a/osfmk/conf/files.arm64
