@@ -25,8 +25,16 @@
   copied. Modem console lines therefore remain visible on the retained frame.
 - The switch defaults off, so normal GUI behavior is unchanged. Source and
   binary manifest gates require that the freeze is boot-argument-gated.
-  Patch application, repository validation, CI, wrapper creation, and device
-  runtime verification are pending.
+- CI run `41533745818` passed on commit `bc5adb2`. Kernel SHA-256 is
+  `cf49cba297037bae9c14330e412ecded4ef43380d4f1008074f4951267769b35`;
+  `0164-veux-gui-freeze-diagnostic.patch` applied with zero fuzz and all
+  Phase-2/3/4 source and binary gates passed.
+- Built and strictly verified
+  `/home/nyra/veux-artifacts/41533745818/phase8-freeze-console.img`,
+  17,281,024 bytes, SHA-256
+  `f06e7bdf51f7b1efa6d5cd715c8dd5264468e4e6c32f0e4570ac46ec95d4d610`.
+  It carries `veux_gui_freeze=1`, no persistent UFS-tail logger, 44/44 modem
+  markers, exact arguments, and reconstructed payload. It is not flashed yet.
 
 ## >>> UPDATE 2026-11-02 (Phase 8 WLFW progression; CI pending) <<<
 
