@@ -15,7 +15,7 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
  extern "C" void veux_fb_touch_status_redraw(void);
  extern "C" void veux_fb_touch_status_clear(void);
  extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
-@@ -561,13 +562,14 @@
+@@ -561,13 +562,16 @@
  #if defined(ARM64_BOARD_CONFIG_VEUX)
  			__asm__ volatile("dsb sy" ::: "memory");
  			if (!fConsolePaused) {
@@ -24,7 +24,9 @@ diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFrame
  				IOLog("VEUX GUI: first valid software display present\n");
  				veux_fb_normal_status_clear();
  				veux_fb_touch_status_clear();
-+				veux_modem_gui_ready();
++				if (strcmp(veux_gui_init_process, "backboardd") == 0 ||
++				    strcmp(veux_gui_init_process, "SpringBoard") == 0)
++					veux_modem_gui_ready();
  				uint32_t quiet = 0;
  				if (PE_parse_boot_argn("veux_gui_noconsole", &quiet, sizeof(quiet)) && quiet == 1) {
  					veux_fb_gui_handoff();

@@ -751,6 +751,8 @@ source_checks["xpcproxy_driver_spawn_exception_is_bootarg_gated_entitlement_only
 fb = (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
 source_checks["modem_worker_starts_after_first_gui_present"] = (
     "extern \"C\" void veux_modem_gui_ready(void);" in fb
+    and 'strcmp(veux_gui_init_process, "backboardd") == 0' in fb
+    and 'strcmp(veux_gui_init_process, "SpringBoard") == 0' in fb
     and "veux_modem_gui_ready();" in fb.split("first valid software display present", 1)[1]
 )
 surface = (a.source_root / "iokit/Kernel/arm/SweetSurface.cpp").read_text()

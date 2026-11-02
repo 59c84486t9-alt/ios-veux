@@ -97,6 +97,16 @@
 - After Fastboot reconnected, rechecked wrapper hash/size and device identity,
   flashed only this image to `boot_b`, selected B, and rebooted. Runtime WLFW
   result is pending.
+- GUI-triggered diagnostic result: the Apple logo frame is the first valid
+  software display frame, so it started modem loading before SpringBoard and
+  prevented GUI completion. The console showed PAS completion, auth reset,
+  SMP2P READY, and GLINK VERSION_ACK, but no WLFW server.
+- Tightened patch `0163`: the first-frame hook now starts the modem only when
+  the active IOMFB client process is `backboardd` or `SpringBoard`. The
+  IOMFB_FDR_Loader/Apple-logo frame no longer triggers modem startup.
+- Zero-fuzz application against the CI-413599 buildtree, manifest source logic,
+  repository validation, Python syntax, and whitespace checks pass. CI is
+  pending.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
