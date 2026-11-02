@@ -94,6 +94,9 @@
   It keeps the first-GUI-frame modem trigger while leaving the console active,
   allowing post-GUI modem/WLFW progress to be photographed. Direct verification
   passed 40/40 markers and exact reconstruction. Not flashed yet.
+- After Fastboot reconnected, rechecked wrapper hash/size and device identity,
+  flashed only this image to `boot_b`, selected B, and rebooted. Runtime WLFW
+  result is pending.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
