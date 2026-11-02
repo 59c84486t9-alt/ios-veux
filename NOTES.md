@@ -8,8 +8,11 @@
   It uses the exact console image and kernel but adds `veuxlog=1`, enabling
   the persistent UFS console ring while retaining the GUI and touch path.
   Strict wrapper verification passed 40/40 markers and payload reconstruction.
-  It is not flashed yet; it allows modem/WLFW output to be recovered after the
-  GUI overwrites the framebuffer.
+- Rechecked serial `4078cac030c8`, product `veux`, slot B, unlock state,
+  `boot_b` capacity, image size, and SHA-256, then flashed only `boot_b`.
+  Send/write, slot selection, and reboot all returned `OKAY`. Let the GUI run
+  long enough for the modem worker, then reboot to recovery and pull the
+  persistent ring to determine the actual last modem/WLFW milestone.
 
 ## >>> UPDATE 2026-11-02 (GUI-triggered normal image boots; console variant ready) <<<
 
