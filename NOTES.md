@@ -30,8 +30,21 @@
   does not use the WCN6750 APSS BDF-download path during this initialization;
   the exact Adrastea CE target/service/shadow arrays remain unavailable.
 - Added manifest and wrapper checks for the new WLFW progression markers.
-  Repository validation passes. A strict CI kernel build, wrapper verification,
-  and device boot are pending.
+  Repository validation and patch-application checks pass.
+- CI run `41527411370` passed on commit `3c1abe1` in 16m51s. Kernel SHA-256 is
+  `428abe0f14b948d195a5ca48921fac7731e2e54db42fe114b37b99a0bc96bfcd`;
+  `0158-veux-modem-wlfw.patch` applied and all Phase-2/3/4 gates passed.
+- Built and fully verified
+  `/home/nyra/veux-artifacts/41527411370/modem-normal.img`: 17,281,024 bytes,
+  SHA-256 `383663816274ad310b8227c0981ec8c96721ea389b27f8e75dfa7c680565bc67`.
+  Verification passed 44/44 modem markers, exact variant arguments, payload
+  reconstruction, DTB, and manifest checks.
+- Built and verified console image
+  `/home/nyra/veux-artifacts/41527411370/phase8-console.img`: 17,281,024 bytes,
+  SHA-256 `c2403e5f755817aa3682416433175efefdfbe623c04f7a9f94a9312cf0bd65a4`.
+  It uses the same kernel and arguments with the framebuffer console instead of
+  `veux_gui_noconsole=1`. It does not enable the persistent UFS-tail logger.
+  Neither Phase-8 image has been flashed; runtime verification is pending.
 
 ## >>> UPDATE 2026-11-02 (GUI-triggered normal image boots; console variant ready) <<<
 
