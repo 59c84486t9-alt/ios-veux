@@ -72,6 +72,10 @@
   `veux_modem_gui_is_ready` while keeping the exported hook name. Local
   sequence/application checks pass; no artifact or device write resulted from
   the failed run.
+- CI run `41377141468` compiled the renamed hook but the manifest check itself
+  had mismatched generator parentheses. Corrected the `all(...)` expression;
+  Python, repository, and whitespace validation now pass. No artifact or device
+  write resulted from that failed run.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
