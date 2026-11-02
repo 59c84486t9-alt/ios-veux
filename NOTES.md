@@ -83,6 +83,9 @@
   `ac7776254c3ebc6fe289a148749419864aedd4dfd71a922b2ef06bc627363d26`;
   verification passed 40/40 markers and exact reconstruction. Fastboot is
   visible for the GUI-triggered runtime test.
+- Rechecked wrapper size/hash, product, slot, unlock state, and partition
+  capacity; flashed only `boot_b`, selected B, and rebooted. Runtime result is
+  pending.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
