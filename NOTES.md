@@ -34,7 +34,11 @@
   17,281,024 bytes, SHA-256
   `f06e7bdf51f7b1efa6d5cd715c8dd5264468e4e6c32f0e4570ac46ec95d4d610`.
   It carries `veux_gui_freeze=1`, no persistent UFS-tail logger, 44/44 modem
-  markers, exact arguments, and reconstructed payload. It is not flashed yet.
+  markers, exact arguments, and reconstructed payload.
+- Rechecked serial `4078cac030c8`, product `veux`, slot B, unlock state,
+  `boot_b` capacity, size, and wrapper SHA-256, then flashed only `boot_b`.
+  Send/write, slot selection, and reboot returned `OKAY`. Runtime verification
+  of the frozen console and WLFW indications is pending.
 
 ## >>> UPDATE 2026-11-02 (Phase 8 WLFW progression; CI pending) <<<
 
