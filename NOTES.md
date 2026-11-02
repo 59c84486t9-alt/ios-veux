@@ -86,6 +86,14 @@
 - Rechecked wrapper size/hash, product, slot, unlock state, and partition
   capacity; flashed only `boot_b`, selected B, and rebooted. Runtime result is
   pending.
+- User confirms the GUI-triggered modem image boots iOS, with no visible
+  diagnostics as expected after `veux_gui_noconsole=1`. Wi-Fi remains absent.
+- Built GUI-triggered console diagnostic
+  `/home/nyra/veux-artifacts/41378169964/gui-wifi-console.img`, SHA-256
+  `207e96af4c994c61ab59f2faf42b4729ca42f38d9c99e030f72966e55ecfa43c`.
+  It keeps the first-GUI-frame modem trigger while leaving the console active,
+  allowing post-GUI modem/WLFW progress to be photographed. Direct verification
+  passed 40/40 markers and exact reconstruction. Not flashed yet.
 
 ## >>> UPDATE 2026-11-01 (combined modem plus iOS handoff succeeds) <<<
 
