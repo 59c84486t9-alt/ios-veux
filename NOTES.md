@@ -40,8 +40,11 @@
   17,281,024 bytes, SHA-256
   `3aa5688fba9034dd5c75e861bba696c0433b090345f9d1a92a44b32b3872e371`.
   It carries both `veux_gui_freeze=1` and the QRTR/GLINK transport fix, with
-  47/47 modem markers and byte-for-byte payload reconstruction. It is not
-  flashed yet.
+  47/47 modem markers and byte-for-byte payload reconstruction.
+- Rechecked serial `4078cac030c8`, product `veux`, slot B, unlock state,
+  `boot_b` capacity, size, and wrapper SHA-256, then flashed only `boot_b`.
+  Send/write, slot selection, and reboot returned `OKAY`. Runtime verification
+  of RX intents, QRTR HELLO, and service `0x45` is pending.
 
 ## >>> UPDATE 2026-11-02 (GUI-freeze console capture; CI pending) <<<
 
