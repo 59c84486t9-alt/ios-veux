@@ -14,6 +14,17 @@
   long enough for the modem worker, then reboot to recovery and pull the
   persistent ring to determine the actual last modem/WLFW milestone.
 
+- CI run `41551340399` passed on commit `b9b0d3a` after making `OPEN_ACK`
+  authoritative for channel readiness. Kernel SHA-256 is
+  `b63a82674cfe83ff577d681f77d561afad3432eaa72eadc6db959ba5acc360a1`.
+- Built and strictly verified
+  `/home/nyra/veux-artifacts/41551340399/phase8-openack-freeze.img`,
+  17,281,024 bytes, SHA-256
+  `61eb3273ed535c80f8215c907c61dc8fc689f5d3ef503f3592e77b81a270df59`.
+  It includes QRTR/GLINK intent transport, authoritative OPEN_ACK handling,
+  OPEN-name/remote-state/intent-size diagnostics, and the frozen GUI console.
+  49/49 modem markers and full payload reconstruction pass. It is not flashed.
+
 ## >>> UPDATE 2026-11-03 (GLINK QRTR TX root cause; CI pending) <<<
 
 - The first QRTR/GLINK runtime build reached
