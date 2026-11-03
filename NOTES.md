@@ -30,9 +30,18 @@
   intent reuse through `RX_DONE`, and pumps the queue from the poll loop.
   This affects HELLO, pd-mapper announcements, and all later WLFW QMI traffic.
 - The patch applies cleanly against the CI-415337 build tree. Manifest and
-  wrapper checks now require the new GLINK intent diagnostics. Repository
-  validation, CI, wrapper creation, and device runtime verification are
-  pending.
+  wrapper checks now require the new GLINK intent diagnostics.
+- CI run `41547429186` passed on commit `24ffc44`. Kernel SHA-256 is
+  `d8adaceb630f5663d05d037b22b9abb4d77f9fb54e999e9193fc727a02af01b5`;
+  `0165-veux-glink-qrtr-tx.patch` applied with zero fuzz and all Phase-2/3/4
+  source and binary gates passed.
+- Built and strictly verified
+  `/home/nyra/veux-artifacts/41547429186/phase8-qrtr-freeze.img`,
+  17,281,024 bytes, SHA-256
+  `3aa5688fba9034dd5c75e861bba696c0433b090345f9d1a92a44b32b3872e371`.
+  It carries both `veux_gui_freeze=1` and the QRTR/GLINK transport fix, with
+  47/47 modem markers and byte-for-byte payload reconstruction. It is not
+  flashed yet.
 
 ## >>> UPDATE 2026-11-02 (GUI-freeze console capture; CI pending) <<<
 
