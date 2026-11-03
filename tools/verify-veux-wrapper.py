@@ -149,6 +149,8 @@ if a.variant in ("modem-held", "modem-normal"):
         b"VEUX GLINK: modem RX intents=%u",
         b"VEUX GLINK: QRTR TX sent len=%u intent=%u",
         b"VEUX GLINK: queueing QRTR HELLO remote=%u",
+        b"VEUX GLINK: poll=%u open=%u remote=%u intents=%u hello=%u",
+        b"VEUX GLINK: unknown cmd=%u ch=%u p=0x%x",
         b"VEUX QRTR: NEW_SERVER 0x45", b"VEUX WLFW: ind_register ok",
         b"VEUX WLFW: msa_info ok", b"VEUX WLFW: msa_ready ok",
         b"VEUX WLFW: cap ok", b"VEUX WLFW: chip_id",

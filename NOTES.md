@@ -32,6 +32,22 @@
   enumerated, consistent with the device booting the newly written image.
   Runtime OPEN name/remote state/intent-size and QRTR TX results are pending.
 
+## >>> UPDATE 2026-11-03 (GLINK open/intent runtime confirmed; state trace building) <<<
+
+- User capture from the OPEN_ACK-authoritative build confirms
+  `OPEN name=IPCRTR rcid=2`, `OPEN_ACK IPCRTR remote=1`, and
+  `modem RX intents=1 size0=0x80 id0=0`. The modem-provided intent is large
+  enough for the 52-byte QRTR HELLO, so intent size is not the blocker.
+- The capture ends after two more IPCC signals and still does not show
+  `queueing QRTR HELLO`, `QRTR TX sent`, `QRTR: HELLO`, or service `0x45`.
+  The frozen-console ring shows older b33/b35 and hexdump rows below, not a
+  second modem load.
+- Added periodic GLINK state diagnostics (`poll`, open flags, intent count,
+  HELLO state, QRTR queue counts) and a one-shot unknown-command trace. These
+  distinguish a stopped poll loop from an ignored modem message or a send
+  failure. Manifest and wrapper gates require both markers. CI and device
+  verification are pending.
+
 ## >>> UPDATE 2026-11-03 (GLINK QRTR TX root cause; CI pending) <<<
 
 - The first QRTR/GLINK runtime build reached
