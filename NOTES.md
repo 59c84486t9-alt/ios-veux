@@ -16,6 +16,15 @@
 
 ## >>> UPDATE 2026-11-03 (GLINK QRTR TX root cause; CI pending) <<<
 
+- The first QRTR/GLINK runtime build reached
+  `OPEN_ACK IPCRTR` and `modem RX intent=1`, proving the modem delivers a
+  receive intent, but still produced no QRTR TX. The transport was still
+  gated on `remote_open && open_ack`; VEUX may ACK a host-initiated open without
+  setting the independent remote-open flag. QRTR TX and HELLO now require only
+  the authoritative `OPEN_ACK`.
+- Added actual OPEN channel/name, remote-open state, and first intent size/ID
+  diagnostics. This distinguishes a missing OPEN from an intent that is too
+  small for the HELLO packet.
 - The frozen GUI screenshot confirms one successful modem load through
   `segments loaded`, `auth_reset`, `SMP2P READY`, GLINK `VERSION_ACK`, and
   IPCRTR `OPEN_ACK`. The hexdump and later b34/b35 rows are older wrapped-ring
