@@ -23,7 +23,14 @@
   `61eb3273ed535c80f8215c907c61dc8fc689f5d3ef503f3592e77b81a270df59`.
   It includes QRTR/GLINK intent transport, authoritative OPEN_ACK handling,
   OPEN-name/remote-state/intent-size diagnostics, and the frozen GUI console.
-  49/49 modem markers and full payload reconstruction pass. It is not flashed.
+  49/49 modem markers and full payload reconstruction pass.
+- Rechecked serial `4078cac030c8`, product `veux`, slot B, unlock state,
+  `boot_b` capacity, size, and wrapper SHA-256. Fastboot send and write
+  returned `OKAY`; only `boot_b` was written. The device disconnected
+  immediately afterward, before the redundant `set_active b` command, while
+  slot B was already active. Ten seconds later neither Fastboot nor ADB was
+  enumerated, consistent with the device booting the newly written image.
+  Runtime OPEN name/remote state/intent-size and QRTR TX results are pending.
 
 ## >>> UPDATE 2026-11-03 (GLINK QRTR TX root cause; CI pending) <<<
 
