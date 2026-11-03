@@ -45,8 +45,14 @@
 - Added periodic GLINK state diagnostics (`poll`, open flags, intent count,
   HELLO state, QRTR queue counts) and a one-shot unknown-command trace. These
   distinguish a stopped poll loop from an ignored modem message or a send
-  failure. Manifest and wrapper gates require both markers. CI and device
-  verification are pending.
+  failure. Manifest and wrapper gates require both markers.
+- CI run `41708298985` passed on commit `df054e4`. Kernel SHA-256 is
+  `4b4b4687f6f51d2b0cf5cb60e661fbe524599d2348b432cdadade3ac1dce8013`.
+- Built and strictly verified
+  `/home/nyra/veux-artifacts/41708298985/glink-state-freeze.img`,
+  17,281,024 bytes, SHA-256
+  `d2a5f34b56768521db30e7df521b20cb8675e2e04376eaf4ebac63470d407c09`.
+  51/51 modem markers and full payload reconstruction pass. It is not flashed.
 
 ## >>> UPDATE 2026-11-03 (GLINK QRTR TX root cause; CI pending) <<<
 
