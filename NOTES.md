@@ -52,7 +52,11 @@
   `/home/nyra/veux-artifacts/41708298985/glink-state-freeze.img`,
   17,281,024 bytes, SHA-256
   `d2a5f34b56768521db30e7df521b20cb8675e2e04376eaf4ebac63470d407c09`.
-  51/51 modem markers and full payload reconstruction pass. It is not flashed.
+  51/51 modem markers and full payload reconstruction pass.
+- Rechecked serial `4078cac030c8`, product `veux`, slot B, unlock state,
+  `boot_b` capacity, size, and wrapper SHA-256. Flashed only `boot_b`;
+  send/write, slot selection, and reboot all returned `OKAY`. Runtime periodic
+  GLINK state/unknown-command verification is pending.
 
 ## >>> UPDATE 2026-11-03 (GLINK QRTR TX root cause; CI pending) <<<
 
