@@ -8,9 +8,11 @@ before changing code or flashing.
   `boot_b`; the user confirmed that iOS reaches the GUI.
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42036847296/modem-gui-gate.img`, flashed after
-  all CI gates and strict wrapper verification passed. The flash and reboot
-  returned `OKAY`; only `boot_b` was written. Runtime result of the GUI-gate
-  retry is pending.
+  all CI gates and strict wrapper verification passed. Its latest overlay
+  reports `present=1 init=IOMFB_FDR_Loader ready=IOMFB_FDR_Loader
+  stage=present`; the accepted SpringBoard/backboardd gate remains closed and
+  modem startup has not begun. Only `boot_b` was written; no new userdata write
+  occurred.
 - The overlay holds the newest 14 filtered modem/GLINK/QRTR/WLFW/PDMAP lines
   in RAM and redraws them over the bottom of the live GUI after framebuffer
   swaps, so SpringBoard actions do not erase or scroll them away. This is
@@ -6509,10 +6511,10 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   HFSX `iOSRoot` image to `userdata` completed earlier. The user later
   confirmed that the modem-disabled image boots the iOS GUI.
 - Current `boot_b` is
-  `/home/nyra/veux-artifacts/41708298985/glink-state-persistent.img`, based on
-  the latest QRTR/GLINK diagnostic kernel. It has `veuxfbconsole=1`, no
-  `veux_gui_freeze=1`, and `veuxlog=1` for persistent diagnostics while the GUI
-  continues updating.
+  `/home/nyra/veux-artifacts/42036847296/modem-gui-gate.img`, based on the
+  latest QRTR/GLINK diagnostic kernel. It has the retained modem overlay and
+  `modem_after_gui=1`; the latest gate status is pending with
+  `IOMFB_FDR_Loader` as both init and ready process.
 - The logger writes a bounded 4 MiB + 4 KiB ring at the end of `userdata`, well
   beyond the 16 GiB HFSX volume. The user explicitly authorized this diagnostic
   write. No other userdata area was targeted.
@@ -6592,19 +6594,26 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 
 ### Immediate next steps
 
-1. Confirm that the current unfrozen diagnostic image reaches the GUI. Let the
-   modem worker run long enough to produce QRTR/WLFW output.
-2. Reboot to recovery and use `tools/veux-log-pull.sh` over recovery ADB to
-   retrieve the bounded persistent ring. Inspect `VEUX GLINK: poll=`,
+1. The latest photo confirms a valid framebuffer present but only an
+   `IOMFB_FDR_Loader` client; the real GUI client has not opened the modem gate.
+   Do not start the modem from the early loader and do not add WLAN stages.
+2. CI run `42042110498` builds additional `VEUX GUI` lines into the retained
+   on-screen ring. The verified candidate is
+   `/home/nyra/veux-artifacts/42042110498/gui-state-overlay.img`; it has not
+   been flashed because the phone is currently absent from Fastboot and ADB.
+   Once Fastboot reconnects, preflight and write only `boot_b`.
+3. Use the retained GUI event/exit state to resolve whether backboardd or
+   SpringBoard opens the display and what the GUI summary reports. Do not ask
+   for a new photo; the user can report the on-screen text if needed.
+4. Once `VEUX MODEM: GUI gate open` appears, inspect `VEUX GLINK: poll=`,
    `queueing QRTR HELLO`, `QRTR TX sent`, `QRTR: HELLO`, `unknown cmd`, and any
-   WLFW line.
-3. Use the periodic state line to distinguish:
+   WLFW line. Use the periodic state line to distinguish:
    - polling stopped: no increasing `poll=` values;
    - HELLO blocked on intent/FIFO: `hello=1` but `q>0`;
    - HELLO sent but modem silent: `hello=1 q=0`, no `QRTR: HELLO`;
    - modem response ignored/malformed: `unknown cmd` or no `processing packet`.
-3. Fix the QRTR HELLO/service-discovery path before adding more WLFW stages.
-4. After HELLO/service `0x45` works, validate CAP and then obtain the exact
+5. Fix the QRTR HELLO/service-discovery path before adding more WLFW stages.
+6. After HELLO/service `0x45` works, validate CAP and then obtain the exact
    Adrastea CE/SMMU configuration before implementing WLAN_CFG, HTC, WMI, scan,
    or an Apple network interface.
 
@@ -6716,3 +6725,27 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `userdata` and all protected partitions untouched. Next work should resolve
   why the actual `backboardd`/`SpringBoard` display client is not reaching
   ready/present; modem/PAS/GLINK debugging remains downstream of that event.
+
+
+## >>> UPDATE 2026-11-05 (GUI state retained in modem overlay) <<<
+
+- Commit `838a51b` adds patch `0168` to retain `VEUX GUI` client/readiness and
+  exit-summary lines in the existing 14-line screen overlay, plus a compact
+  GUI state line with init/ready process, selector mask, swaps, and present.
+  The modem gate and boot arguments are unchanged. Commit `6e06345` makes the
+  strict wrapper verifier require the new GUI-state marker.
+- Strict CI [42042110498](https://github.com/59c84486t9-alt/ios-veux/actions/runs/42042110498)
+  passed XNU build, host framebuffer bounds checks, kernel feature manifest,
+  and Phase 2/3/4 modem gates. Kernel SHA-256:
+  `248784a1c4e1983cf91823b07c93cd3fb3fe5d1547e9e8c6e0f8b9b6c78e2771`.
+- Built `/home/nyra/veux-artifacts/42042110498/gui-state-overlay.img`,
+  17,297,408 bytes, SHA-256
+  `d7964912d256081f1f00f8779a62286b64be499726d758c518534cde1098952b`.
+  Strict wrapper verification passed 56/56 modem markers, including the new
+  GUI state marker, exact phone DTB SHA-256
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`, and
+  byte-for-byte payload reconstruction.
+- `fastboot devices -l` and `adb devices -l` currently show no phone. The new
+  wrapper is not flashed; no partition was written. The next device operation,
+  after Fastboot reconnects, is preflight then `boot_b` only. Do not write
+  `userdata` or any protected partition.
