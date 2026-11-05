@@ -32,6 +32,31 @@
   enumerated, consistent with the device booting the newly written image.
   Runtime OPEN name/remote state/intent-size and QRTR TX results are pending.
 
+## >>> UPDATE 2026-11-05 (XNU boot_b and iOS userdata restored) <<<
+
+- User explicitly authorized the ordered restore: write XNU `boot_b` first,
+  then the iOS HFSX image to `userdata`, then reboot because the userdata write
+  can make Fastboot unavailable until restart.
+- Preflight identified serial `4078cac030c8`, product `veux`, slot B, unlocked
+  state, `boot_b` size `0x8000000`, and `userdata` size `0x196a3d3000`.
+- Generated Android sparse
+  `/home/nyra/.cache/iosxia-debug/veux-root-hfs.simg`, SHA-256
+  `04ece2918c97d7838f2c8b580f2dab8db4bc1f44f2bee8fef173074c95c668a2`,
+  from raw `/home/nyra/.cache/iosxia-debug/veux-root-hfs.img` (SHA-256
+  `6b14eb9672501c0c3bf34955f09322ea070d3d03f8ba961d905934e00fb18139`).
+- Flashed XNU `boot_b` first:
+  `/home/nyra/veux-artifacts/41708298985/glink-state-freeze.img`, SHA-256
+  `d2a5f34b56768521db30e7df521b20cb8675e2e04376eaf4ebac63470d407c09`;
+  send/write returned `OKAY`.
+- Flashed `userdata` second with
+  `fastboot -S 512M flash userdata veux-root-hfs.simg`; all 25 sparse chunks
+  and writes returned `OKAY`, `Finished. Total time: 316.625s`. Fastboot warned
+  that it skipped copying an AVB footer because the input was sparse.
+- `fastboot reboot` printed `Rebooting`, then failed reading status with a USB
+  protocol error. Five seconds later neither Fastboot nor ADB enumerated,
+  consistent with the phone having disconnected and rebooted. Runtime iOS/GUI
+  validation is pending screen confirmation.
+
 ## >>> UPDATE 2026-11-03 (GLINK open/intent runtime confirmed; state trace building) <<<
 
 - User capture from the OPEN_ACK-authoritative build confirms
