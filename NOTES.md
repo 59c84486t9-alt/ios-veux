@@ -9,8 +9,11 @@ before changing code or flashing.
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`, flashed after
   strict wrapper verification. It uses `modem_defer=120` after the GUI gate.
-  Flash, slot B selection, and reboot returned `OKAY`. Thirty seconds after
-  reboot, neither Fastboot nor ADB enumerated; GUI/runtime result is pending.
+  Flash, slot B selection, and reboot returned `OKAY`. The user reports it
+  booted. The latest capture confirms backboardd accepted, first display
+  present, gate open, and `worker deferred for 120 seconds`; IOMFB client
+  initialization continues. The photo itself shows a black background, so
+  visible GUI content is not confirmed. Fastboot/ADB are not enumerated.
 - This overlay retains the newest 14 modem/GLINK/QRTR/WLFW/PDMAP lines plus
   bounded GUI milestones, but excludes per-frame framebuffer swaps. It is
   per-boot screen history, not storage across reboots. Boot args omit
@@ -24,9 +27,11 @@ before changing code or flashing.
   `0293f5b34e95cda8a71bc77819484fd0f8c7b6a0eb2857a7198ac36c3dcc4e12`;
   wrapper SHA-256:
   `18ebabe092ed30ef4a4455b12b408dfefcef63d9d0036ffcf661d4274bfb4ae2`.
-- Next: inspect runtime after the two-minute defer. Do not ask for another
-  photo. Keep `userdata` and all protected partitions untouched. Do not add
-  WLAN_CFG/CE/HTC/WMI until QRTR HELLO and service `0x45` are observed.
+- Next: let the 120-second defer elapse and inspect the modem/GLINK/QRTR overlay
+  for PAS auth reset, SMP2P, GLINK OPEN_ACK, QRTR HELLO, and service `0x45`. Do
+  not ask for another photo. Keep `userdata` and all protected partitions
+  untouched. Do not add WLAN_CFG/CE/HTC/WMI until QRTR HELLO and service `0x45`
+  are observed.
 - Proven modem path: PAS segments -> auth reset -> SMP2P READY -> GLINK
   VERSION_ACK -> IPCRTR OPEN_ACK. The modem supplies a usable RX intent
   (`size0=0x80`, `id0=0`).
@@ -6508,9 +6513,10 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   confirmed that the modem-disabled image boots the iOS GUI.
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`. It is built from
-  green CI run `42125270101` and uses `modem_defer=120`; the user has not yet
-  reported this boot's GUI or modem result. Fastboot/ADB were absent 30 seconds
-  after reboot. The previous image showed the GUI gate opening and GLINK
+  green CI run `42125270101` and uses `modem_defer=120`. The user reports the
+  boot succeeded; the capture confirms the gate and defer, with IOMFB client
+  initialization continuing, but its background is black and GUI content is
+  not visible. Fastboot/ADB are absent. The previous image showed GLINK
   VERSION_ACK/IPCRTR open, but no QRTR HELLO/service `0x45`.
 - The logger writes a bounded 4 MiB + 4 KiB ring at the end of `userdata`, well
   beyond the 16 GiB HFSX volume. The user explicitly authorized this diagnostic
@@ -6951,3 +6957,16 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   protected partition was written. Fastboot and ADB were absent 30 seconds
   after reboot. Wait for the two-minute modem defer and inspect GUI/runtime;
   next transport milestone remains QRTR HELLO and service `0x45`.
+
+
+## >>> UPDATE 2026-11-06 (deferred boot runtime capture) <<<
+
+- The user reports the phone booted. The supplied capture shows IOMFB
+  `backboardd` init/ready, first valid software display present, `GUI gate open
+  accepted=1`, PAS boot wait complete, and `worker deferred for 120 seconds`.
+  IOMFB thermalmonitord and aggregated clients continue initializing. The
+  capture background is black, so visible GUI content is not confirmed from
+  this image alone.
+- Fastboot and ADB are absent on the host. No more flashing is needed now. Let
+  the defer expire, then inspect for PAS auth reset/SMP2P and QRTR HELLO/service
+  `0x45`. Do not write userdata or protected partitions.
