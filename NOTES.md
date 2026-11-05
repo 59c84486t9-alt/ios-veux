@@ -7,16 +7,15 @@ before changing code or flashing.
   `/home/nyra/veux-artifacts/41355888099/normal-console.img` was restored to
   `boot_b`; the user confirmed that iOS reaches the GUI.
 - Current `boot_b` is
-  `/home/nyra/veux-artifacts/42042110498/gui-state-overlay.img`, flashed after
-  strict CI and wrapper verification. Flash and reboot returned `OKAY`; only
-  `boot_b` was written. The user now confirms a GUI boot. The latest screen
-  shows the earlier FDR gate-pending line, thermalmonitord/aggregated IOMFB
-  clients, and framebuffer swaps; it does not show a modem milestone.
-- The overlay holds the newest 14 filtered modem/GLINK/QRTR/WLFW/PDMAP lines
-  in RAM and redraws them over the bottom of the live GUI after framebuffer
-  swaps, so SpringBoard actions do not erase or scroll them away. This is
+  `/home/nyra/veux-artifacts/42060936294/gui-milestones.img`, built from green
+  CI run `42060936294` and flashed after strict wrapper verification. Flash,
+  slot selection, and reboot returned `OKAY`; only `boot_b` was written. The
+  phone has disconnected from Fastboot during reboot; GUI/runtime outcome is
+  pending.
+- This overlay retains the newest 14 modem/GLINK/QRTR/WLFW/PDMAP lines plus
+  bounded GUI milestones, but excludes per-frame framebuffer swaps. It is
   per-boot screen history, not storage across reboots. Boot args omit
-  `veuxlog=1`; no `userdata` write was made for this image.
+  `veuxlog=1`; no `userdata` write was made.
 - CI run `42027405282` passed the XNU build, host console bounds checks, kernel
   manifest, and Phase 2/3/4 modem gates. Wrapper verification passed 53/53
   modem markers, source checks, exact phone DTB, and byte-for-byte payload
@@ -6828,3 +6827,26 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   no partition was written. Once CI and strict wrapper verification pass,
   the user's earlier authorization permits writing `boot_b` only; preserve
   `userdata` and every protected partition.
+
+
+## >>> UPDATE 2026-11-05 (GUI milestone-only overlay flashed) <<<
+
+- CI run [`42060936294`](https://github.com/59c84486t9-alt/ios-veux/actions/runs/42060936294)
+  passed the XNU build, host checks, kernel feature manifest, and Phase 2/3/4
+  modem gates on commit `e2f3c09`. Kernel SHA-256:
+  `ee52f3b9a8e15eda2052dbb1124fc29781b5e75cb084edcb9befe914b303778d`.
+- Patch 0169 filters GUI chatter from the rolling modem overlay while keeping
+  compact GUI state/summary, AppleCLCD registration, first present, and client
+  init/ready milestones. The modem gate and boot arguments are unchanged.
+- Built `/home/nyra/veux-artifacts/42060936294/gui-milestones.img`, 17,297,408
+  bytes, SHA-256
+  `3133d61058054da80a4fcb5d266b67fbcf8de9e771d7d22c19e880f8623c25cf`. Strict
+  verification passed 56/56 modem markers, forbidden-source checks, exact CI
+  kernel and phone DTB, and byte-for-byte payload reconstruction.
+- Preflash checks again confirmed serial `4078cac030c8`, product `veux`, slot
+  `b`, unlocked `yes`, and `boot_b` size `0x8000000`. Flashed only `boot_b`;
+  send/write, `set_active b`, and reboot all returned `OKAY`. No `userdata` or
+  protected partition was written. Fastboot/ADB are currently not enumerated
+  while the phone reboots. Next: read the filtered modem/GLINK/QRTR overlay once
+  the GUI settles; no new photo is needed. Do not add WLAN_CFG/CE/HTC/WMI until
+  QRTR HELLO and service `0x45` are observed.
