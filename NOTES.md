@@ -9,7 +9,8 @@ before changing code or flashing.
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42042110498/gui-state-overlay.img`, flashed after
   strict CI and wrapper verification. Flash and reboot returned `OKAY`; only
-  `boot_b` was written. Runtime status for this GUI-state overlay is pending.
+  `boot_b` was written. The latest photo shows the `backboardd` client ready,
+  first valid present, and `GUI gate open`; modem progress is now pending.
 - The overlay holds the newest 14 filtered modem/GLINK/QRTR/WLFW/PDMAP lines
   in RAM and redraws them over the bottom of the live GUI after framebuffer
   swaps, so SpringBoard actions do not erase or scroll them away. This is
@@ -6510,7 +6511,8 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42042110498/gui-state-overlay.img`, based on the
   latest QRTR/GLINK diagnostic kernel. It has the retained modem and GUI overlay
-  and `modem_after_gui=1`; runtime result after the 2026-11-05 flash is pending.
+  and `modem_after_gui=1`. Runtime now confirms the `backboardd` GUI gate opened;
+  modem/PAS progress is not yet visible.
 - The logger writes a bounded 4 MiB + 4 KiB ring at the end of `userdata`, well
   beyond the 16 GiB HFSX volume. The user explicitly authorized this diagnostic
   write. No other userdata area was targeted.
@@ -6590,17 +6592,17 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 
 ### Immediate next steps
 
-1. The latest photo confirms a valid framebuffer present but only an
-   `IOMFB_FDR_Loader` client; the real GUI client has not opened the modem gate.
-   Do not start the modem from the early loader and do not add WLAN stages.
-2. CI run `42042110498` builds additional `VEUX GUI` lines into the retained
-   on-screen ring. The verified candidate is
-   `/home/nyra/veux-artifacts/42042110498/gui-state-overlay.img`; it has not
-   been flashed because the phone is currently absent from Fastboot and ADB.
-   Once Fastboot reconnects, preflight and write only `boot_b`.
-3. Use the retained GUI event/exit state to resolve whether backboardd or
-   SpringBoard opens the display and what the GUI summary reports. Do not ask
-   for a new photo; the user can report the on-screen text if needed.
+1. Runtime from the latest two photos confirms `IOMFB_FDR_Loader` and
+   `MobileGestaltHelper` reached ready, then `backboardd` reached ready; the
+   first valid present followed and `VEUX MODEM: GUI gate open init=backboardd
+   ready=backboardd stage=present` appeared. Keep the early-loader gate rule.
+2. The following `VEUX MODEM PAS: boot wait complete; continuing to root mount`
+   is the startup thread proceeding with `modem_boot_wait=0`; it does not prove
+   PAS/auth/SMP2P success. No modem worker milestone is yet visible in the
+   overlay. Let the current boot run and inspect for `pas_id=4`, `starting modem
+   boot sequence`, `segments loaded`, `auth_reset complete`, and `SMP2P READY`.
+3. Do not ask for a new photo; the user can report the retained screen text.
+   Do not flash again or write userdata while the current image is running.
 4. Once `VEUX MODEM: GUI gate open` appears, inspect `VEUX GLINK: poll=`,
    `queueing QRTR HELLO`, `QRTR TX sent`, `QRTR: HELLO`, `unknown cmd`, and any
    WLFW line. Use the periodic state line to distinguish:
@@ -6763,3 +6765,24 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   with modem/GLINK logs. Runtime outcome is pending. Do not request a new photo;
   inspect text the user provides and use the new GUI state to identify why the
   SpringBoard/backboardd display client is not opening the modem gate.
+
+
+## >>> UPDATE 2026-11-05 (backboardd opens modem GUI gate) <<<
+
+- The user's two photos from the GUI-state overlay show AppleCLCD registered at
+  1080x2400, then IOMFB clients initialized/ready for `IOMFB_FDR_Loader`,
+  `MobileGestaltHelper`, and `backboardd`. The first valid software display
+  present is followed by `VEUX MODEM: GUI gate open init=backboardd
+  ready=backboardd stage=present`. This is the first runtime-confirmed gate
+  open; the gate remains restricted to backboardd/SpringBoard.
+- The last visible modem line is
+  `VEUX MODEM PAS: boot wait complete; continuing to root mount`. Boot args set
+  `modem_boot_wait=0`, so this records the main startup thread proceeding; it
+  does not prove PAS, auth reset, SMP2P, or GLINK progress. No such milestone is
+  visible in the supplied photos yet. The overlay has only its first few GUI
+  and startup lines so far.
+- Host `adb devices -l` and `fastboot devices -l` show no attached device, so
+  no persistent log-ring pull is available. No new flash or partition write
+  was made after the GUI-state overlay boot. Next: let this boot run and read
+  the retained modem/PAS/GLINK lines; do not request another photo or write
+  `userdata`.
