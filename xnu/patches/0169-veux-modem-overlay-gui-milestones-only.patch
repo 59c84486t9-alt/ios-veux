@@ -1,0 +1,24 @@
+From 0000000000000000000000000000000000000009 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Keep framebuffer swaps out of modem overlay history
+
+Retain only bounded GUI milestones alongside the modem log. Do not capture
+the per-swap VEUX GUI trace, which can evict modem/GLINK progress lines.
+
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1576,6 +1576,11 @@ veux_fb_is_modem_log_line(const char *line)
+ 		"VEUX MODEM", "VEUX GLINK", "VEUX QRTR", "VEUX WLFW",
+ 		"VEUX PDMAP", "VEUX IPCC: pa=", "VEUX IPCC: mapped",
+-		"VEUX UFS: cached modem_a", "VEUX GUI",
++		"VEUX UFS: cached modem_a",
++		"VEUX GUI STATE", "VEUX GUI SUMMARY",
++		"VEUX GUI: AppleCLCD registered",
++		"VEUX GUI: first valid software display present",
++		"VEUX GUI: IOMFB client initialized",
++		"VEUX GUI: IOMFB client ready",
+ 	};
+ 	for (unsigned i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); ++i) {
+ 		if (strncmp(line, prefixes[i], strlen(prefixes[i])) == 0) return true;
+-- 
+2.49.0
