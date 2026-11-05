@@ -6,17 +6,20 @@ before changing code or flashing.
 - The modem-disabled iOS baseline
   `/home/nyra/veux-artifacts/41355888099/normal-console.img` was restored to
   `boot_b`; the user confirmed that iOS reaches the GUI.
-- Current `boot_b` is
-  `/home/nyra/veux-artifacts/41708298985/glink-state-persistent.img`. It uses
-  the latest GLINK-state kernel, removes `veux_gui_freeze=1`, and enables
-  `veuxlog=1` so the GUI can repaint while the UFS ring records diagnostics.
-- The logger writes a bounded 4 MiB + 4 KiB ring at the end of `userdata`,
-  outside the restored 16 GiB HFSX volume. The user authorized this diagnostic
-  write with “oki, do it”; any further `userdata` writes require renewed
-  explicit approval.
-- Flash and reboot returned `OKAY`. Fastboot/ADB were absent at immediate and
-  ~50-second checks. Visual confirmation of this image and a recovery-mode log
-  pull are pending.
+- User confirmed the current `glink-state-persistent.img` boots to the iOS GUI.
+  It is still in `boot_b`; it enables the bounded UFS ring at the tail of
+  `userdata`. No further `userdata` writes are authorized.
+- The filtered on-screen modem/GLINK overlay is committed as `7ab42c9` and
+  pushed. CI run `42024259095` compiled XNU but failed the host console harness
+  because its extracted-source shim lacks a stub for the newly added capture
+  function. Fixing the harness now; do not flash the failed run's image.
+- Fastboot is currently connected as `4078cac030c8`, product `veux`, slot B,
+  unlocked, and `boot_b` is `0x8000000` bytes. Once a green build and wrapper
+  verification are ready, flash only `boot_b` and reboot. Keep all other
+  partitions untouched.
+- The overlay keeps the newest 14 filtered modem/GLINK/QRTR/WLFW/PDMAP lines
+  in RAM and redraws them after GUI swaps. It omits `veuxlog=1`, so it will not
+  write to `userdata`.
 - Proven modem path: PAS segments -> auth reset -> SMP2P READY -> GLINK
   VERSION_ACK -> IPCRTR OPEN_ACK. The modem supplies a usable RX intent
   (`size0=0x80`, `id0=0`).
@@ -6606,3 +6609,24 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   overwrites the iOS volume with an ext4-backed Ubuntu data image.
 - The full 16 GiB HFSX image is not the entire raw `userdata` partition. It only
   restores the iOS filesystem at the partition start.
+
+## >>> UPDATE 2026-11-05 (filtered modem overlay build) <<<
+
+- Commit `7ab42c9` adds an opt-in framebuffer overlay. It retains only the
+  newest 14 complete lines matching modem, GLINK, QRTR, WLFW, PDMAP, selected
+  IPCC, or modem UFS prefixes, then redraws them over the bottom of the live
+  GUI after successful framebuffer copies. The GUI copy and touch paths remain
+  active. Boot args add `veux_modem_overlay=1` and omit both `veuxlog=1` and
+  `veux_gui_freeze=1`; this overlay does not write to `userdata`.
+- CI run `42024259095` built XNU successfully, then its host console bounds
+  harness failed at compile time because the test shim did not declare the new
+  capture helper. All later modem phase gates and artifact collection passed;
+  kernel feature manifest was skipped due to the earlier failure. Added a
+  no-op capture helper to the isolated host shim so its framebuffer bounds
+  checks can continue; the shim has no device-memory side effects.
+- Do not flash any artifact from that failed run. Re-run the workflow and
+  require green gates plus strict modem-normal wrapper verification before
+  flashing only `boot_b`. Device serial `4078cac030c8` is currently in Fastboot
+  on unlocked product `veux`, slot B. `boot_b` capacity is `0x8000000` bytes.
+- The compile environment on the workstation has no `clang`, so the host C
+  harness cannot be run locally; CI's macOS runner supplies it.

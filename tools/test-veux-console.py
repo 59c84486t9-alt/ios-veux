@@ -32,6 +32,7 @@ static unsigned char iso_font[128*16];
 static int veux_gui_console_muted;
 static bool veux_fb_status_active;
 static const char build_id_line[]="VEUX BUILD ID=host-test\n";
+static void veux_fb_modem_log_capture(char c) { (void)c; }
 static bool panic_active(void) { return false; }
 '''
 post=r'''
