@@ -16,6 +16,11 @@ before changing code or flashing.
   bounded GUI milestones, but excludes per-frame framebuffer swaps. It is
   per-boot screen history, not storage across reboots. Boot args omit
   `veuxlog=1`; no `userdata` write was made.
+- The latest capture shows `backboardd` IOMFB client ready before the first
+  valid present, followed by FDR Loader ready and a gate-pending line naming
+  FDR Loader. The gate currently stores only the latest process names, so later
+  FDR/auxiliary clients erase the accepted `backboardd` evidence before present.
+  Patch 0170 is prepared to latch accepted GUI evidence; its CI build is pending.
 - CI run `42027405282` passed the XNU build, host console bounds checks, kernel
   manifest, and Phase 2/3/4 modem gates. Wrapper verification passed 53/53
   modem markers, source checks, exact phone DTB, and byte-for-byte payload
@@ -6509,10 +6514,12 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   HFSX `iOSRoot` image to `userdata` completed earlier. The user later
   confirmed that the modem-disabled image boots the iOS GUI.
 - Current `boot_b` is
-  `/home/nyra/veux-artifacts/42042110498/gui-state-overlay.img`, based on the
-  latest QRTR/GLINK diagnostic kernel. It has the retained modem and GUI overlay
-  and `modem_after_gui=1`. Runtime now confirms the `backboardd` GUI gate opened;
-  modem/PAS progress is not yet visible.
+  `/home/nyra/veux-artifacts/42060936294/gui-milestones.img`, based on green CI
+  run `42060936294`, with the filtered modem overlay and unchanged
+  `modem_after_gui=1` gate. The latest user capture shows `backboardd` ready,
+  then FDR Loader ready, followed by first present and `GUI gate pending` with
+  the latest names both FDR Loader. No modem/PAS progress is visible. This is a
+  stale-process-name gate bug, not a Wi-Fi/QRTR result.
 - The logger writes a bounded 4 MiB + 4 KiB ring at the end of `userdata`, well
   beyond the 16 GiB HFSX volume. The user explicitly authorized this diagnostic
   write. No other userdata area was targeted.
@@ -6592,17 +6599,17 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 
 ### Immediate next steps
 
-1. Runtime from the latest two photos confirms `IOMFB_FDR_Loader` and
-   `MobileGestaltHelper` reached ready, then `backboardd` reached ready; the
-   first valid present followed and `VEUX MODEM: GUI gate open init=backboardd
-   ready=backboardd stage=present` appeared. Keep the early-loader gate rule.
-2. The following `VEUX MODEM PAS: boot wait complete; continuing to root mount`
-   is the startup thread proceeding with `modem_boot_wait=0`; it does not prove
-   PAS/auth/SMP2P success. No modem worker milestone is yet visible in the
-   overlay. Let the current boot run and inspect for `pas_id=4`, `starting modem
-   boot sequence`, `segments loaded`, `auth_reset complete`, and `SMP2P READY`.
-3. Do not ask for a new photo; the user can report the retained screen text.
-   Do not flash again or write userdata while the current image is running.
+1. The latest capture shows `backboardd` client ready before the first valid
+   present. FDR Loader and auxiliary clients arrive later and overwrite the
+   single stored init/ready names, so the pending gate falsely misses the
+   accepted client. Patch 0170 latches accepted-client evidence and keeps the
+   first-present requirement; it does not start the modem earlier.
+2. Build patch 0170 through strict CI and wrapper verification. If green, flash
+   `boot_b` only when Fastboot is connected; never write `userdata` or protected
+   partitions. Then verify the gate opens and inspect PAS/auth/SMP2P before
+   continuing into GLINK/QRTR.
+3. Do not ask for a new photo; use the text the user supplies. Do not add
+   WLAN_CFG/CE/HTC/WMI until QRTR HELLO and service `0x45` are observed.
 4. Once `VEUX MODEM: GUI gate open` appears, inspect `VEUX GLINK: poll=`,
    `queueing QRTR HELLO`, `QRTR TX sent`, `QRTR: HELLO`, `unknown cmd`, and any
    WLFW line. Use the periodic state line to distinguish:
@@ -6850,3 +6857,26 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   while the phone reboots. Next: read the filtered modem/GLINK/QRTR overlay once
   the GUI settles; no new photo is needed. Do not add WLAN_CFG/CE/HTC/WMI until
   QRTR HELLO and service `0x45` are observed.
+
+
+## >>> UPDATE 2026-11-05 (accepted GUI readiness latch identified) <<<
+
+- The user's photo from `gui-milestones.img` shows the newest overlay sequence:
+  AppleCLCD registered; MobileGestaltHelper initialized/ready; `backboardd`
+  initialized/ready; FDR Loader initialized/ready; first valid software
+  present; `GUI gate pending present=1 init=IOMFB_FDR_Loader
+  ready=IOMFB_FDR_Loader stage=present`; then thermalmonitord and aggregated
+  IOMFB events. No GUI gate-open, PAS, GLINK, QRTR, or WLFW milestone appears.
+- Root cause is in `veux_gui_modem_gate_try`: accepted process identity is
+  checked only through mutable latest-init/latest-ready buffers. The accepted
+  `backboardd` ready event occurs before first present, then FDR Loader
+  overwrites both buffers before the present callback. Later auxiliary clients
+  keep it pending.
+- Added patch 0170 to latch the first accepted backboardd/SpringBoard init or
+  ready event atomically. The worker still requires the first valid software
+  present; init/ready alone cannot start it. The gate-open log now states
+  `accepted=1`, with the prior accepted-process line naming which client set it.
+  Patch applies cleanly to the 420609 buildtree. CI and strict wrapper checks
+  are pending.
+- Current device remains on the 420609 image; no additional flash or partition
+  write was made after the supplied capture.

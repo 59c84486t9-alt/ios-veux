@@ -257,11 +257,13 @@ phase4_patch_names = (
     "0161-veux-ipcc-mapping-diagnostic.patch",
     "0162-veux-ufs-multilun.patch",
     "0163-veux-modem-after-gui.patch",
+    "0167-veux-modem-gui-gate-retry.patch",
     "0164-veux-gui-freeze-diagnostic.patch",
     "0165-veux-glink-qrtr-tx.patch",
     "0166-veux-modem-log-overlay.patch",
     "0168-veux-gui-state-in-modem-overlay.patch",
     "0169-veux-modem-overlay-gui-milestones-only.patch",
+    "0170-veux-latch-gui-gate-client.patch",
 )
 phase4_patch_texts = {}
 phase4_status = {}
@@ -473,6 +475,13 @@ phase4_sources = {
         '"VEUX GUI: IOMFB client ready"')) and not any(
             line.startswith("+") and '"VEUX GUI",' in line
             for line in phase4_patch_texts["0169-veux-modem-overlay-gui-milestones-only.patch"].splitlines()),
+    "modem_gui_gate_latches_accepted_client_until_first_present": all(x in phase4_patch_texts["0170-veux-latch-gui-gate-client.patch"] for x in (
+        "veux_modem_gui_accepted_client_seen", "__atomic_exchange_n(&veux_modem_gui_accepted_client_seen",
+        "__atomic_load_n(&veux_modem_gui_accepted_client_seen", '"VEUX MODEM: GUI gate accepted process=%s stage=%s\\n"',
+        '"VEUX MODEM: GUI gate open accepted=1 stage=%s\\n"',
+        'veux_gui_modem_gate_record_client(name, "client-init")',
+        'veux_gui_modem_gate_record_client(name, "client-ready")',
+        'veux_gui_modem_gate_try("client-init")')),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
     "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],
     "modem_a_scans_luns_0_to_5_and_caches_location": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (

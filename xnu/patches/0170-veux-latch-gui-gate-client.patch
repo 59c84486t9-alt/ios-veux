@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000010 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Latch accepted GUI client evidence for modem gate
+
+An accepted backboardd/SpringBoard IOMFB client can become ready before the
+first valid present, then be overwritten by later FDR or auxiliary clients.
+Remember accepted-client evidence monotonically and start the modem only after
+that evidence and the first valid software present have both occurred.
+
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -91,6 +91,7 @@
+ static bool veux_modem_overlay_enabled;
+ static volatile uint32_t veux_modem_gui_gate_pending_logged;
+ static volatile uint32_t veux_modem_gui_gate_dispatched;
++static volatile uint32_t veux_modem_gui_accepted_client_seen;
+ static volatile uint64_t veux_gui_selector_mask;
+ static char veux_gui_init_process[32] = "none";
+ static char veux_gui_ready_process[32] = "none";
+@@ -111,15 +112,23 @@
+ }
+ 
+ static void
++veux_gui_modem_gate_record_client(const char *name, const char *stage)
++{
++	if (strcmp(name, "backboardd") != 0 && strcmp(name, "SpringBoard") != 0) {
++		return;
++	}
++	if (__atomic_exchange_n(&veux_modem_gui_accepted_client_seen, 1u, __ATOMIC_ACQ_REL) == 0u) {
++		IOLog("VEUX MODEM: GUI gate accepted process=%s stage=%s\n", name, stage);
++	}
++}
++
++static void
+ veux_gui_modem_gate_try(const char *stage)
+ {
+ 	if (!veux_gui_first_present) {
+ 		return;
+ 	}
+-	bool accepted = strcmp(veux_gui_init_process, "backboardd") == 0 ||
+-	    strcmp(veux_gui_init_process, "SpringBoard") == 0 ||
+-	    strcmp(veux_gui_ready_process, "backboardd") == 0 ||
+-	    strcmp(veux_gui_ready_process, "SpringBoard") == 0;
++	bool accepted = __atomic_load_n(&veux_modem_gui_accepted_client_seen, __ATOMIC_ACQUIRE) != 0u;
+ 	if (!accepted) {
+ 		if (__atomic_exchange_n(&veux_modem_gui_gate_pending_logged, 1u, __ATOMIC_ACQ_REL) == 0u) {
+ 			IOLog("VEUX MODEM: GUI gate pending present=%u init=%s ready=%s stage=%s\n",
+@@ -129,8 +138,7 @@
+ 		return;
+ 	}
+ 	if (__atomic_exchange_n(&veux_modem_gui_gate_dispatched, 1u, __ATOMIC_ACQ_REL) == 0u) {
+-		IOLog("VEUX MODEM: GUI gate open init=%s ready=%s stage=%s\n",
+-		    veux_gui_init_process, veux_gui_ready_process, stage);
++		IOLog("VEUX MODEM: GUI gate open accepted=1 stage=%s\n", stage);
+ 		veux_modem_gui_ready();
+ 	}
+ }
+@@ -645,6 +653,8 @@
+ 	veux_gui_client_type = type;
+ 	veux_gui_save_process_name(veux_gui_init_process);
+ 	IOLog("VEUX GUI: IOMFB client initialized process=%s type=%u\n", name, type);
++	veux_gui_modem_gate_record_client(name, "client-init");
++	veux_gui_modem_gate_try("client-init");
+ 	int diagnostic_console = 0;
+ 	if (strcmp(name, "backboardd") == 0 || strcmp(name, "SpringBoard") == 0) {
+ 		if (!PE_parse_boot_argn("veuxfbconsole", &diagnostic_console, sizeof(diagnostic_console)) || diagnostic_console != 1) {
+@@ -686,6 +696,7 @@
+ 	veux_gui_client_ready_count++;
+ 	veux_gui_save_process_name(veux_gui_ready_process);
+ 	IOLog("VEUX GUI: IOMFB client ready process=%s\n", name);
++	veux_gui_modem_gate_record_client(name, "client-ready");
+ 	veux_gui_modem_gate_try("client-ready");
+ #endif
+ 	return true;
+-- 
+2.49.0
