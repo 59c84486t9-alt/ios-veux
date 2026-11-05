@@ -810,15 +810,18 @@ source_checks["xpcproxy_driver_spawn_exception_is_bootarg_gated_entitlement_only
 )
 
 fb = (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
-source_checks["modem_worker_retries_gui_gate_until_client_ready"] = (
+source_checks["modem_worker_latches_accepted_gui_client_until_present"] = (
     "extern \"C\" void veux_modem_gui_ready(void);" in fb
     and "veux_gui_modem_gate_try(const char *stage)" in fb
-    and 'strcmp(veux_gui_ready_process, "backboardd") == 0' in fb
-    and 'strcmp(veux_gui_ready_process, "SpringBoard") == 0' in fb
+    and "veux_modem_gui_accepted_client_seen" in fb
+    and "__atomic_load_n(&veux_modem_gui_accepted_client_seen" in fb
+    and "veux_gui_modem_gate_record_client(name, \"client-init\");" in fb
+    and "veux_gui_modem_gate_record_client(name, \"client-ready\");" in fb
     and 'veux_gui_modem_gate_try("present");' in fb
+    and 'veux_gui_modem_gate_try("client-init");' in fb
     and 'veux_gui_modem_gate_try("client-ready");' in fb
     and "VEUX MODEM: GUI gate pending" in fb
-    and "VEUX MODEM: GUI gate open" in fb
+    and "VEUX MODEM: GUI gate open accepted=1" in fb
     and "veux_modem_gui_ready();" in fb
 )
 surface = (a.source_root / "iokit/Kernel/arm/SweetSurface.cpp").read_text()

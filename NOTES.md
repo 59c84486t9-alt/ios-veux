@@ -6880,3 +6880,18 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   are pending.
 - Current device remains on the 420609 image; no additional flash or partition
   write was made after the supplied capture.
+
+## >>> UPDATE 2026-11-05 (GUI gate latch CI assertion cleanup) <<<
+
+- First CI attempt `42070015242` compiled the latch patch and passed host checks,
+  but the Phase-4 binary-marker assertion still expected the old
+  `GUI gate open init/ready` line. Updated the manifest and wrapper checks to
+  require `GUI gate open accepted=1`.
+- Second attempt `42074400914` again compiled successfully and passed the Phase-4
+  binary gate. The broader kernel source policy check still required the old
+  mutable `ready_process` comparison. Replaced it with assertions for the
+  atomic accepted-client latch and the init/ready/present retry calls.
+- Local repository validation passes, the 0170 patch applies cleanly to the
+  420609 buildtree, and all 12 gate-source assertions pass against that
+  materialized source. A fresh strict CI run is pending; no image was produced
+  and no device partition was written by either failed attempt.
