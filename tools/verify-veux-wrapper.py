@@ -168,6 +168,7 @@ if a.variant in ("modem-held", "modem-normal"):
         b"VEUX DISPLAY: modem overlay enabled\n",
         b"VEUX MODEM: GUI gate pending present=%u init=%s ready=%s stage=%s\n",
         b"VEUX MODEM: GUI gate open init=%s ready=%s stage=%s\n",
+        b"VEUX GUI STATE: init=%s ready=%s sel=0x%llx swaps=%u present=%u\n",
     )
     missing = [marker.decode("ascii") for marker in required if marker not in kernel]
     if missing:
