@@ -1,3 +1,27 @@
+## ACTIVE HANDOFF 2026-11-05
+
+Read the full `## CURRENT HANDOFF 2026-11-05` section near the end of this file
+before changing code or flashing.
+
+- Latest device restore wrote
+  `/home/nyra/veux-artifacts/41708298985/glink-state-freeze.img` to `boot_b`
+  first, then `/home/nyra/.cache/iosxia-debug/veux-root-hfs.simg` to
+  `userdata`, then rebooted. Fastboot disappeared after reboot; screen state
+  and periodic GLINK state output still need capture.
+- Proven modem path: PAS segments -> auth reset -> SMP2P READY -> GLINK
+  VERSION_ACK -> IPCRTR OPEN_ACK. The modem supplies a usable RX intent
+  (`size0=0x80`, `id0=0`).
+- Current blocker: no confirmed QRTR HELLO or WLFW service `0x45`. The new
+  `0165` transport queues QRTR and wraps it in `CMD_TX_DATA`; the current image
+  also prints periodic `VEUX GLINK: poll=...` state and the first unknown GLINK
+  command.
+- Next: capture the frozen screen, especially `poll=`, `queueing QRTR HELLO`,
+  `QRTR TX sent`, `QRTR: HELLO`, and `unknown cmd`. Do not add WLAN_CFG/CE/HTC/
+  WMI or reuse Topaz descriptors until QRTR service discovery works.
+- Preserve `boot_a`, bootloaders, recovery/rescue, modem, persist, and fsg/fsc.
+  `userdata` currently holds iOS and must not be overwritten without renewed
+  user approval.
+
 - A user-observed console diagnostic boot shows large amounts of kernel text
   that fades away before the modem/WLFW milestones can be read. This is caused
   by the GUI repainting the framebuffer after SpringBoard presents; the
@@ -6453,3 +6477,108 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Per the user's follow-up, stopped the post-flash wait before three minutes
   and did not poll fastboot or ADB after reboot. Post-reboot host enumeration
   and the screen state are unverified; no camera capture was taken.
+## CURRENT HANDOFF 2026-11-05
+
+### Goal and current device state
+
+- Goal: boot iOS on `veux` and bring up Wi-Fi through the Adrastea/QCA WLAN
+  protection domain reached over modem GLINK/QRTR/WLFW.
+- The latest ordered restore was completed: XNU
+  `/home/nyra/veux-artifacts/41708298985/glink-state-freeze.img` was written
+  to `boot_b` first, then the 16 GiB HFSX `iOSRoot` image was written to
+  `userdata`, then reboot was requested. Both writes completed successfully.
+- Current flashed `boot_b` is the **diagnostic** image above, not a normal
+  no-console GUI image. It has `veux_gui_freeze=1`, `veuxfbconsole=1`, the
+  corrected QRTR/GLINK transport, and periodic GLINK state output.
+- Current `userdata` starts with the 16 GiB HFSX iOS volume. The rest of the
+  109,156,577,280-byte partition remains beyond that volume.
+- The reboot command ended with a USB status-read protocol error after
+  `Rebooting`; Fastboot then disappeared. Treat the phone as booting until its
+  screen is checked. Do not issue another flash solely because host ADB/Fastboot
+  is initially absent.
+
+### Images
+
+- XNU diagnostic: `/home/nyra/veux-artifacts/41708298985/glink-state-freeze.img`
+  - 17,281,024 bytes
+  - SHA-256 `d2a5f34b56768521db30e7df521b20cb8675e2e04376eaf4ebac63470d407c09`
+  - CI run `41708298985`, kernel SHA-256
+    `4b4b4687f6f51d2b0cf5cb60e661fbe524599d2348b432cdadade3ac1dce8013`
+- iOS raw HFSX: `/home/nyra/.cache/iosxia-debug/veux-root-hfs.img`
+  - 17,179,869,184 bytes, case-sensitive HFSX volume `iOSRoot`
+  - SHA-256 `6b14eb9672501c0c3bf34955f09322ea070d3d03f8ba961d905934e00fb18139`
+- iOS Android-sparse image currently used for Fastboot:
+  `/home/nyra/.cache/iosxia-debug/veux-root-hfs.simg`
+  - SHA-256 `04ece2918c97d7838f2c8b580f2dab8db4bc1f44f2bee8fef173074c95c668a2`
+  - Flashed in 25 chunks with `fastboot -S 512M`; all writes returned `OKAY`.
+  - Fastboot warned that it skipped copying an AVB footer because the input was
+    sparse.
+- Full Ubuntu Touch `userdata`, not Android:
+  `/home/nyra/ubuntu-touch-veux/port/out/candidate_slot_b/userdata.img`
+  (Android sparse, logical size exactly 109,156,577,280 bytes, ext4 payload).
+  The original Android encrypted `userdata` backup is not present locally.
+
+### Proven modem/runtime progress
+
+- The iOS GUI and touch path work when using a normal/no-modem or correctly
+  delayed modem image. The SpringBoard-gating fix prevents modem loading on the
+  early Apple-logo frame.
+- Modem PAS is fixed through all segments: b35 zeroes/unmaps, `segments loaded`
+  and `auth_reset ret=0 res=0` are observed. The old b35 VA leak and kmem panic
+  are gone.
+- Runtime reaches `SMP2P READY`, GLINK `VERSION_ACK`, IPCRTR
+  `OPEN_ACK remote=1`, and modem RX intent delivery.
+- Latest useful runtime values:
+  - `OPEN name=IPCRTR rcid=2`
+  - `OPEN name=SSN_RTR_MODEM_A rcid=3`
+  - `OPEN_ACK IPCRTR remote=1`
+  - `modem RX intents=1 size0=0x80 id0=0`
+- The modem intent is large enough for the 52-byte QRTR HELLO. Intent size and
+  channel-open state are therefore not the blocker.
+- No confirmed `QRTR: HELLO`, `NEW_SERVER 0x45`, WLFW CAP, MSA_READY, FW_READY,
+  or working Wi-Fi has been observed yet.
+
+### Source/CI state
+
+- Branch: `veux-xnu-build`; latest handoff commit before this section:
+  `2e9e047` (`Record ordered XNU and iOS userdata restore`).
+- `0164-veux-gui-freeze-diagnostic.patch` freezes subsequent GUI frame copies
+  after the first SpringBoard/backboardd frame so kernel logs remain readable.
+- `0158-veux-modem-wlfw.patch` implements the Adrastea order
+  `IND_REGISTER -> MSA_INFO -> MSA_READY -> CAP`, handles indications, and no
+  longer holds the worker immediately after CAP. It deliberately does not send
+  unverified `WLAN_CFG`/CE data.
+- `0165-veux-glink-qrtr-tx.patch` fixed a real transport bug: QRTR packets were
+  previously written as bare FIFO data. They are now queued and wrapped in
+  `CMD_TX_DATA` using modem-provided RX intents. `OPEN_ACK` is authoritative for
+  channel readiness. The patch also logs OPEN state, intent size/ID, periodic
+  GLINK state, and the first unknown GLINK command.
+- Do not use Topaz CE descriptors, VMIDs, SMMU layout, or WCN3988 assumptions.
+  Exact Adrastea CE target/service/shadow tables are still unresolved.
+
+### Immediate next steps
+
+1. Inspect the frozen screen from the currently flashed `glink-state-freeze.img`
+   after boot settles. Record the latest lines beginning
+   `VEUX GLINK: poll=`, plus `queueing QRTR HELLO`, `QRTR TX sent`,
+   `QRTR: HELLO`, `unknown cmd`, and any WLFW line.
+2. Use the periodic state line to distinguish:
+   - polling stopped: no increasing `poll=` values;
+   - HELLO blocked on intent/FIFO: `hello=1` but `q>0`;
+   - HELLO sent but modem silent: `hello=1 q=0`, no `QRTR: HELLO`;
+   - modem response ignored/malformed: `unknown cmd` or no `processing packet`.
+3. Fix the QRTR HELLO/service-discovery path before adding more WLFW stages.
+4. After HELLO/service `0x45` works, validate CAP and then obtain the exact
+   Adrastea CE/SMMU configuration before implementing WLAN_CFG, HTC, WMI, scan,
+   or an Apple network interface.
+
+### Safety constraints
+
+- Preserve `boot_a`, bootloaders, recovery/rescue, modem, persist, fsg, fsc, and
+  partition tables. The approved working partition is `boot_b`; `userdata` is
+  now explicitly holding iOS and may only be overwritten with renewed user
+  approval.
+- Do not flash the Ubuntu Touch `userdata.img` while intending to keep iOS; it
+  overwrites the iOS volume with an ext4-backed Ubuntu data image.
+- The full 16 GiB HFSX image is not the entire raw `userdata` partition. It only
+  restores the iOS filesystem at the partition start.
