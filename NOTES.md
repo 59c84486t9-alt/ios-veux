@@ -7,10 +7,10 @@ before changing code or flashing.
   `/home/nyra/veux-artifacts/41355888099/normal-console.img` was restored to
   `boot_b`; the user confirmed that iOS reaches the GUI.
 - Current `boot_b` is
-  `/home/nyra/veux-artifacts/42027405282/modem-overlay.img`, flashed after all
-  CI gates and strict wrapper verification passed. The flash and reboot
-  returned `OKAY`; only `boot_b` was written. The user photo confirms the
-  overlay appears over the live GUI.
+  `/home/nyra/veux-artifacts/42036847296/modem-gui-gate.img`, flashed after
+  all CI gates and strict wrapper verification passed. The flash and reboot
+  returned `OKAY`; only `boot_b` was written. Runtime result of the GUI-gate
+  retry is pending.
 - The overlay holds the newest 14 filtered modem/GLINK/QRTR/WLFW/PDMAP lines
   in RAM and redraws them over the bottom of the live GUI after framebuffer
   swaps, so SpringBoard actions do not erase or scroll them away. This is
@@ -25,9 +25,10 @@ before changing code or flashing.
   latest modem/GLINK/QRTR lines. User reports the phone ran longer with no
   change after the initial photo: only IPCC mapping and modem-pool setup remain
   visible, with no PAS/SMP2P/GLINK progress. Do not ask the user for another
-  photo. Current investigation is the guarded GUI-trigger handoff; do not add
-  WLAN or QRTR stages until the modem worker visibly starts. Any further
-  `userdata` write still requires renewed explicit approval.
+  photo. The current image prints whether the guarded GUI-trigger handoff is
+  pending/open. Do not add WLAN or QRTR stages until the modem worker visibly
+  starts. Any further `userdata` write still requires renewed explicit
+  approval.
 - Proven modem path: PAS segments -> auth reset -> SMP2P READY -> GLINK
   VERSION_ACK -> IPCRTR OPEN_ACK. The modem supplies a usable RX intent
   (`size0=0x80`, `id0=0`).
@@ -6676,5 +6677,25 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `VEUX MODEM: GUI gate open ...`, distinguishing a missed start gate from a
   later modem/PAS failure. No WLAN/QRTR protocol stages are changed.
 - CI, wrapper verification, and any new `boot_b` flash are pending. The current
-  overlay image remains in `boot_b`; do not write `userdata` or any protected
-  partition.
+  initial overlay image was still in `boot_b` when this update was written;
+  do not write `userdata` or any protected partition.
+
+## >>> UPDATE 2026-11-05 (GUI gate retry flashed) <<<
+
+- CI run `42036847296` on commit `1b49568` passed XNU build, host console
+  bounds checks, kernel manifest, and Phase 2/3/4 modem gates.
+- Built `/home/nyra/veux-artifacts/42036847296/modem-gui-gate.img` from the CI
+  kernel and existing verified phone wrapper/ADT/DTB. Size is 17,297,408 bytes;
+  SHA-256 is
+  `887bb5ffa2005216862b8a36201442541efde2f6af463f9e5e0a2c0c665f4981`.
+  Wrapper verification passed 55/55 modem markers, source checks, exact phone
+  DTB SHA-256 `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`,
+  and byte-for-byte payload reconstruction.
+- Boot args remain `veux_modem_overlay=1`, `modem_after_gui=1`, and no
+  `veuxlog=1`. The new filtered lines are `VEUX MODEM: GUI gate pending ...`
+  and `VEUX MODEM: GUI gate open ...`; the modem still requires first valid
+  GUI present and an accepted `backboardd`/`SpringBoard` process.
+- Preflash Fastboot checks: serial `4078cac030c8`, product `veux`, slot B,
+  unlocked, `boot_b` size `0x8000000`. Flashed only `boot_b`; send/write and
+  reboot returned `OKAY`. No `userdata` write occurred. Runtime gate status is
+  pending; do not ask for a new photo.
