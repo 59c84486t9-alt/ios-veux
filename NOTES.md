@@ -9,8 +9,9 @@ before changing code or flashing.
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42042110498/gui-state-overlay.img`, flashed after
   strict CI and wrapper verification. Flash and reboot returned `OKAY`; only
-  `boot_b` was written. The latest photo shows the `backboardd` client ready,
-  first valid present, and `GUI gate open`; modem progress is now pending.
+  `boot_b` was written. The user now confirms a GUI boot. The latest screen
+  shows the earlier FDR gate-pending line, thermalmonitord/aggregated IOMFB
+  clients, and framebuffer swaps; it does not show a modem milestone.
 - The overlay holds the newest 14 filtered modem/GLINK/QRTR/WLFW/PDMAP lines
   in RAM and redraws them over the bottom of the live GUI after framebuffer
   swaps, so SpringBoard actions do not erase or scroll them away. This is
@@ -6786,3 +6787,23 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   was made after the GUI-state overlay boot. Next: let this boot run and read
   the retained modem/PAS/GLINK lines; do not request another photo or write
   `userdata`.
+
+
+## >>> UPDATE 2026-11-05 (GUI reached after restart) <<<
+
+- The user reports the latest restart reached the GUI. The attached overlay
+  shows the initial `GUI gate pending ... init=IOMFB_FDR_Loader
+  ready=IOMFB_FDR_Loader` event, then IOMFB clients ready for `thermalmonitord`
+  and `aggregated`, followed by framebuffer swaps through at least swap 8.
+  No `GUI gate open`, PAS, SMP2P, GLINK, QRTR, or WLFW line is visible in this
+  capture. Since this is a 14-line rolling view, it cannot establish whether
+  a later modem line was evicted after the shown swaps.
+- The broad `VEUX GUI` filter added in patch 0168 captures each framebuffer
+  swap, so frequent GUI presents can consume the retained ring and roll out
+  useful modem lines. Next diagnostic revision should retain only GUI client
+  init/ready, compact GUI state/exit summary, and first-present milestones;
+  exclude framebuffer-swap chatter. Keep the modem gate unchanged until the
+  current boot's later gate/modem text is known.
+- No further flash or partition write was made. The host sees no ADB or
+  Fastboot device, so no persistent ring pull is available. Do not request a
+  new photo; use text the user provides and preserve `userdata`.
