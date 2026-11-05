@@ -1,0 +1,181 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Keep a filtered modem log overlay above the live GUI
+
+Keep only VEUX MODEM/GLINK/QRTR/WLFW/PDMAP and selected IPCC/UFS lines in a
+small in-memory ring. Redraw that ring after GUI surface copies so SpringBoard
+can continue updating the rest of the framebuffer. The overlay is opt-in.
+
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -38,6 +38,7 @@
+ 
+ extern "C" void veux_fb_gui_handoff(void);
+ extern "C" void veux_modem_gui_ready(void);
++extern "C" void veux_fb_modem_log_draw(void);
+ extern "C" void veux_fb_normal_status_draw(void);
+ extern "C" void veux_fb_normal_status_clear(void);
+ extern "C" void veux_fb_touch_status_redraw(void);
+@@ -86,6 +87,8 @@
+ static volatile uint32_t veux_gui_last_selector = UINT32_MAX;
+ static volatile uint32_t veux_gui_swap_count;
+ static volatile uint32_t veux_gui_first_present;
++static bool veux_modem_overlay_checked;
++static bool veux_modem_overlay_enabled;
+ static volatile uint64_t veux_gui_selector_mask;
+ static char veux_gui_init_process[32] = "none";
+ static char veux_gui_ready_process[32] = "none";
+@@ -567,6 +570,13 @@
+ 			}
+ #if defined(ARM64_BOARD_CONFIG_VEUX)
+ 			__asm__ volatile("dsb sy" ::: "memory");
++			if (!veux_modem_overlay_checked) {
++				uint32_t overlay = 0;
++				veux_modem_overlay_enabled =
++				    PE_parse_boot_argn("veux_modem_overlay", &overlay, sizeof(overlay)) && overlay == 1;
++				veux_modem_overlay_checked = true;
++				if (veux_modem_overlay_enabled) IOLog("VEUX DISPLAY: modem overlay enabled\n");
++			}
+ 			if (!fConsolePaused) {
+ 				fConsolePaused = true;
+ 				veux_gui_first_present = 1;
+@@ -581,6 +591,7 @@
+ 					veux_fb_gui_handoff();
+ 				}
+ 			}
++			if (fConsolePaused && veux_modem_overlay_enabled) veux_fb_modem_log_draw();
+ #endif
+ 		}
+ 		s->release();
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1532,6 +1532,117 @@
+ }
+ 
+ 
++#define VEUX_MODEM_LOG_LINES 14u
++#define VEUX_MODEM_LOG_COLS 132u
++#define VEUX_MODEM_INPUT_COLS 192u
++
++static volatile uint32_t veux_modem_log_seq;
++static volatile uint32_t veux_modem_log_head;
++static volatile uint32_t veux_modem_log_count;
++static volatile char veux_modem_log_ring[VEUX_MODEM_LOG_LINES][VEUX_MODEM_LOG_COLS + 1u];
++static char veux_modem_line[VEUX_MODEM_INPUT_COLS + 1u];
++static uint32_t veux_modem_line_len;
++
++static bool
++veux_fb_is_modem_log_line(const char *line)
++{
++	static const char *const prefixes[] = {
++		"VEUX MODEM", "VEUX GLINK", "VEUX QRTR", "VEUX WLFW",
++		"VEUX PDMAP", "VEUX IPCC: pa=", "VEUX IPCC: mapped",
++		"VEUX UFS: cached modem_a",
++	};
++	for (unsigned i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); ++i) {
++		if (strncmp(line, prefixes[i], strlen(prefixes[i])) == 0) return true;
++	}
++	return false;
++}
++
++static void
++veux_fb_modem_log_capture(char c)
++{
++	if (c == '\r') return;
++	if (c == '\n') {
++		veux_modem_line[veux_modem_line_len] = '\0';
++		if (veux_fb_is_modem_log_line(veux_modem_line)) {
++			__atomic_add_fetch(&veux_modem_log_seq, 1u, __ATOMIC_ACQ_REL);
++			uint32_t head = veux_modem_log_head;
++			uint32_t n = 0;
++			while (n < VEUX_MODEM_LOG_COLS && veux_modem_line[n]) {
++				veux_modem_log_ring[head][n] = veux_modem_line[n];
++				++n;
++			}
++			veux_modem_log_ring[head][n] = '\0';
++			veux_modem_log_head = (head + 1u) % VEUX_MODEM_LOG_LINES;
++			if (veux_modem_log_count < VEUX_MODEM_LOG_LINES) ++veux_modem_log_count;
++			__atomic_add_fetch(&veux_modem_log_seq, 1u, __ATOMIC_RELEASE);
++		}
++		veux_modem_line_len = 0;
++		return;
++	}
++	if (veux_modem_line_len < VEUX_MODEM_INPUT_COLS) {
++		veux_modem_line[veux_modem_line_len++] =
++		    (c >= 0x20 && c <= 0x7e) ? c : '?';
++	}
++}
++
++static void
++veux_fb_modem_log_draw_text(volatile uint32_t *fb, uint32_t stride,
++    uint32_t x, uint32_t y, const char *text, uint32_t max_cols)
++{
++	for (uint32_t col = 0; col < max_cols && text[col]; ++col) {
++		unsigned char ch = (unsigned char)text[col];
++		if (ch < 0x20 || ch > 0x7e) ch = '?';
++		const unsigned char *glyph = iso_font + (uint32_t)ch * 16u;
++		for (uint32_t gy = 0; gy < 16u; ++gy) {
++			volatile uint32_t *row = fb + (y + gy) * stride + x + col * 8u;
++			for (uint32_t gx = 0; gx < 8u; ++gx) {
++				if (glyph[gy] & (1u << gx)) row[gx] = 0xffffffffu;
++			}
++		}
++	}
++}
++
++void
++veux_fb_modem_log_draw(void)
++{
++	if (!veux_fb_console_ready || !veux_fb_console_base) return;
++	char snapshot[VEUX_MODEM_LOG_LINES][VEUX_MODEM_LOG_COLS + 1u];
++	uint32_t head = 0, count = 0;
++	bool stable = false;
++	for (unsigned retry = 0; retry < 4; ++retry) {
++		uint32_t before = __atomic_load_n(&veux_modem_log_seq, __ATOMIC_ACQUIRE);
++		if (before & 1u) continue;
++		head = veux_modem_log_head;
++		count = veux_modem_log_count;
++		for (uint32_t line = 0; line < VEUX_MODEM_LOG_LINES; ++line) {
++			for (uint32_t col = 0; col <= VEUX_MODEM_LOG_COLS; ++col)
++				snapshot[line][col] = veux_modem_log_ring[line][col];
++		}
++		__atomic_thread_fence(__ATOMIC_ACQUIRE);
++		if (before == __atomic_load_n(&veux_modem_log_seq, __ATOMIC_ACQUIRE)) {
++			stable = true;
++			break;
++		}
++	}
++	if (!stable) return;
++	const uint32_t stride = veux_fb_console_stride / 4u;
++	const uint32_t x0 = 8u;
++	const uint32_t y0 = VEUX_FB_HEIGHT - ((VEUX_MODEM_LOG_LINES + 2u) * 16u + 12u);
++	const uint32_t height = (VEUX_MODEM_LOG_LINES + 2u) * 16u + 12u;
++	volatile uint32_t *fb = veux_fb_console_base;
++	for (uint32_t y = y0; y < y0 + height; ++y)
++		for (uint32_t x = 0; x < VEUX_FB_WIDTH; ++x) fb[y * stride + x] = 0xff000000u;
++	veux_fb_modem_log_draw_text(fb, stride, x0, y0 + 6u,
++	    "VEUX MODEM/GLINK LOG (filtered; newest 14)", VEUX_FB_WIDTH / 8u - 2u);
++	uint32_t first = (head + VEUX_MODEM_LOG_LINES - count) % VEUX_MODEM_LOG_LINES;
++	for (uint32_t i = 0; i < count; ++i) {
++		veux_fb_modem_log_draw_text(fb, stride, x0,
++		    y0 + 24u + i * 16u, snapshot[(first + i) % VEUX_MODEM_LOG_LINES],
++		    VEUX_MODEM_LOG_COLS);
++	}
++	__asm__ volatile("dsb sy" ::: "memory");
++}
++
+ void
+ veux_fb_console_putc(char c)
+ {
+@@ -1539,6 +1650,7 @@
+ 		return;
+ 	}
+ 	veux_panic_tail_capture(c);
++	veux_fb_modem_log_capture(c);
+ 	if (veux_gui_console_muted && !panic_active()) return;
+ 	const uint32_t cols = VEUX_FB_WIDTH / (8u * VEUX_FB_CONSOLE_SCALE);
+ 	const uint32_t rows = (800u - VEUX_FB_CONSOLE_TOP) / (16u * VEUX_FB_CONSOLE_SCALE);
+-- 
+2.49.0

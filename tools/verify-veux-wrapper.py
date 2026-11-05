@@ -98,11 +98,14 @@ if a.variants_manifest:
         raise SystemExit(f"payload arguments do not match the {a.variant} boot-argument manifest")
     if a.variant == "modem-normal":
         required_args = {"rootrw=1", "ufsrw=1", "veuxsandbox=1", "veux_gui=1",
+                         "veux_gui_noconsole=1", "veuxfbconsole=1", "veux_modem_overlay=1",
                          "modem=1", "modem_hold=0", "modem_boot_wait=0",
                          "modem_after_gui=1",
                          "modem_watch=86400"}
         if not required_args.issubset(payload_args.split()):
             raise SystemExit("modem-normal wrapper lacks required modem/iOS runtime arguments")
+        if {"veuxlog=1", "veux_gui_freeze=1"} & set(payload_args.split()):
+            raise SystemExit("modem-normal overlay wrapper must not write the userdata log ring or freeze the GUI")
 adt_blob = embedded_payload[adt_off:adt_off + adt_size]
 # Rebuild through the normal packer using the exact ADT carried by the payload.
 with tempfile.NamedTemporaryFile(prefix="veux-adt-", suffix=".tmp", dir=a.image.parent) as tmp:
@@ -161,6 +164,8 @@ if a.variant in ("modem-held", "modem-normal"):
         b"VEUX MODEM HOLD: wfe",
         b"VEUX MODEM FW:", b"VEUX PDMAP:",
         b"VEUX UFS: cached modem_a on LUN=%u first=0x%llx blocks=0x%llx\n",
+        b"VEUX MODEM/GLINK LOG (filtered; newest 14)",
+        b"VEUX DISPLAY: modem overlay enabled\n",
     )
     missing = [marker.decode("ascii") for marker in required if marker not in kernel]
     if missing:

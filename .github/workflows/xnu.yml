@@ -40,7 +40,7 @@ env:
   VEUX_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 rootrw=1 ufsrw=1 veuxsandbox=1 veuxiolog=backboardd,SpringBoard veuxgpipreflight=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128 veux_spawn_driver=1 veux_gui=1 veux_gui_noconsole=1 veuxvariant=normal"
   VEUX_HELD_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 veuxfb=1 veuxfbconsole=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128 veuxtouchprobe=1 veuxtouchprobehold=1 veuxvariant=held"
   VEUX_MODEM_HELD_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 modem=1 modem_watch=180 veuxfbconsole=1"
-  VEUX_MODEM_NORMAL_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 rootrw=1 ufsrw=1 veuxsandbox=1 veuxiolog=backboardd,SpringBoard veuxgpipreflight=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128 veux_spawn_driver=1 veux_gui=1 veux_gui_noconsole=1 modem=1 modem_hold=0 modem_boot_wait=0 modem_after_gui=1 modem_watch=86400 veuxvariant=modem-normal"
+  VEUX_MODEM_NORMAL_BOOT_ARGS: "debug=0xc serial=3 cpus=1 keepsyms=1 -enable_kprintf_spam -noprogress rd=ufsroot0 unentitled_ios_sim_launch=1 rootrw=1 ufsrw=1 veuxsandbox=1 veuxiolog=backboardd,SpringBoard veuxgpipreflight=1 ignition_level=1 launchd_unsecure_cache=1 wdt=-1 wdt_test=no_user_checkin launchd_verbose_coalition_logs=1 launchd_log_verbose_meta_limit=128 veux_spawn_driver=1 veux_gui=1 veux_gui_noconsole=1 veuxfbconsole=1 veux_modem_overlay=1 modem=1 modem_hold=0 modem_boot_wait=0 modem_after_gui=1 modem_watch=86400 veuxvariant=modem-normal"
 
 jobs:
   build:
@@ -80,13 +80,13 @@ jobs:
               *) echo "modem-held boot argument missing: $required" >&2; exit 1 ;;
             esac
           done
-          for required in modem=1 modem_hold=0 modem_boot_wait=0 modem_after_gui=1 modem_watch=86400 rootrw=1 ufsrw=1 veuxsandbox=1 veux_gui=1 veuxvariant=modem-normal; do
+          for required in modem=1 modem_hold=0 modem_boot_wait=0 modem_after_gui=1 modem_watch=86400 rootrw=1 ufsrw=1 veuxsandbox=1 veux_gui=1 veux_gui_noconsole=1 veuxfbconsole=1 veux_modem_overlay=1 veuxvariant=modem-normal; do
             case " $VEUX_MODEM_NORMAL_BOOT_ARGS " in
               *" $required "*) ;;
               *) echo "modem-normal boot argument missing: $required" >&2; exit 1 ;;
             esac
           done
-          for forbidden in veuxtouchprobe=1 veuxtouchprobehold=1 veuxtouchprobeactive=1 veuxlog=1; do
+          for forbidden in veuxtouchprobe=1 veuxtouchprobehold=1 veuxtouchprobeactive=1 veuxlog=1 veux_gui_freeze=1; do
             case " $VEUX_MODEM_NORMAL_BOOT_ARGS " in
               *" $forbidden "*) echo "unsafe modem-normal boot argument: $forbidden" >&2; exit 1 ;;
               *) ;;

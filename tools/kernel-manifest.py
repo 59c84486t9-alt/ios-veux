@@ -38,10 +38,11 @@ modem_forbidden_boot_args = {
 if any(arg.split("=", 1)[0] in modem_forbidden_boot_args for arg in modem_held_boot_args):
     raise SystemExit("modem-held boot args contain a forbidden write, GUI, or probe argument")
 if not {"modem=1", "modem_hold=0", "modem_boot_wait=0", "modem_after_gui=1", "modem_watch=86400", "rootrw=1", "ufsrw=1",
-        "veuxsandbox=1", "veux_gui=1", "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args):
+        "veuxsandbox=1", "veux_gui=1", "veux_gui_noconsole=1", "veuxfbconsole=1",
+        "veux_modem_overlay=1", "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args):
     raise SystemExit("modem-normal requires modem service, RW root, sandbox, GUI, and its variant marker")
 if {"modem_hold=1", "veuxtouchprobe=1", "veuxtouchprobehold=1",
-    "veuxtouchprobeactive=1", "veuxlog=1"} & modem_normal_boot_args:
+    "veuxtouchprobeactive=1", "veuxlog=1", "veux_gui_freeze=1"} & modem_normal_boot_args:
     raise SystemExit("modem-normal must not enable a diagnostic hold, probe, or logger")
 if not {"rootrw=1", "ufsrw=1", "veuxvariant=normal"}.issubset(boot_args):
     raise SystemExit("normal variant requires the explicit RW pair and veuxvariant=normal")
@@ -258,6 +259,7 @@ phase4_patch_names = (
     "0163-veux-modem-after-gui.patch",
     "0164-veux-gui-freeze-diagnostic.patch",
     "0165-veux-glink-qrtr-tx.patch",
+    "0166-veux-modem-log-overlay.patch",
 )
 phase4_patch_texts = {}
 phase4_status = {}
@@ -455,6 +457,13 @@ phase4_sources = {
         "veux_qrtr_send(Q_HELLO",
         "VEUX GLINK: poll=%u open=%u remote=%u intents=%u hello=%u",
         "VEUX GLINK: unknown cmd=%u ch=%u p=0x%x")),
+    "modem_log_overlay_filters_and_survives_gui_swaps": all(x in phase4_patch_texts["0166-veux-modem-log-overlay.patch"] for x in (
+        'PE_parse_boot_argn("veux_modem_overlay", &overlay, sizeof(overlay))',
+        "veux_fb_modem_log_draw()", "veux_fb_modem_log_capture(c)",
+        '"VEUX MODEM", "VEUX GLINK", "VEUX QRTR", "VEUX WLFW"',
+        '"VEUX PDMAP", "VEUX IPCC: pa=", "VEUX IPCC: mapped"',
+        '"VEUX UFS: cached modem_a"',
+        '"VEUX MODEM/GLINK LOG (filtered; newest 14)"')),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
     "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],
     "modem_a_scans_luns_0_to_5_and_caches_location": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
@@ -514,6 +523,9 @@ phase4_binary = {
         b"VEUX QRTR: processing packet\n",
         b"VEUX GLINK: sending VERSION\n",
         b"VEUX GLINK: poll loop entered\n")),
+    "filtered_modem_overlay_binary_markers": all(x in kernel for x in (
+        b"VEUX MODEM/GLINK LOG (filtered; newest 14)",
+        b"VEUX DISPLAY: modem overlay enabled\n")),
 }
 if not all(phase4_binary.values()):
     raise SystemExit("VEUX Phase-4 binary marker checks failed: " + repr(phase4_binary))
@@ -645,9 +657,9 @@ source_checks["all_runtime_boot_variants_are_manifested_and_safe"] = (
     and {"veuxtouchprobe=1", "veuxtouchprobehold=1", "veuxvariant=held"}.issubset(held_boot_args)
     and not ({"rootrw=1", "ufsrw=1", "veuxtouchprobeactive=1", "veuxlog=1"} & held_boot_args)
     and {"modem=1", "modem_hold=0", "modem_boot_wait=0", "modem_after_gui=1", "rootrw=1", "ufsrw=1", "veux_gui=1",
-         "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args)
+         "veux_gui_noconsole=1", "veuxfbconsole=1", "veux_modem_overlay=1", "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args)
     and not ({"modem_hold=1", "veuxtouchprobe=1", "veuxtouchprobehold=1",
-              "veuxtouchprobeactive=1", "veuxlog=1"} & modem_normal_boot_args)
+              "veuxtouchprobeactive=1", "veuxlog=1", "veux_gui_freeze=1"} & modem_normal_boot_args)
 )
 source_checks["active_touch_probe_remains_separate_from_read_only_held_path"] = (
     "veux_touch_active_probe" not in touch_probe
