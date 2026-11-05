@@ -7,20 +7,20 @@ before changing code or flashing.
   `/home/nyra/veux-artifacts/41355888099/normal-console.img` was restored to
   `boot_b`; the user confirmed that iOS reaches the GUI.
 - Current `boot_b` is
-  `/home/nyra/veux-artifacts/42060936294/gui-milestones.img`, built from green
-  CI run `42060936294` and flashed after strict wrapper verification. Flash,
-  slot selection, and reboot returned `OKAY`; only `boot_b` was written. The
-  phone has disconnected from Fastboot during reboot; GUI/runtime outcome is
-  pending.
+  `/home/nyra/veux-artifacts/42077052432/gui-gate-latched.img`, built from
+  green CI run `42077052432` and flashed after strict wrapper verification.
+  Flash, slot selection, and reboot returned `OKAY`; only `boot_b` was written.
+  Fastboot/ADB were not enumerated 10 seconds after reboot; GUI/runtime outcome
+  is pending.
 - This overlay retains the newest 14 modem/GLINK/QRTR/WLFW/PDMAP lines plus
   bounded GUI milestones, but excludes per-frame framebuffer swaps. It is
   per-boot screen history, not storage across reboots. Boot args omit
   `veuxlog=1`; no `userdata` write was made.
-- The latest capture shows `backboardd` IOMFB client ready before the first
+- The prior capture showed `backboardd` IOMFB client ready before the first
   valid present, followed by FDR Loader ready and a gate-pending line naming
-  FDR Loader. The gate currently stores only the latest process names, so later
-  FDR/auxiliary clients erase the accepted `backboardd` evidence before present.
-  Patch 0170 is prepared to latch accepted GUI evidence; its CI build is pending.
+  FDR Loader. Patch 0170 now latches accepted GUI evidence. The image flashed
+  to `boot_b` records the accepted process and waits for first valid present
+  before starting the modem. Runtime result is pending.
 - CI run `42027405282` passed the XNU build, host console bounds checks, kernel
   manifest, and Phase 2/3/4 modem gates. Wrapper verification passed 53/53
   modem markers, source checks, exact phone DTB, and byte-for-byte payload
@@ -6581,8 +6581,8 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 
 ### Source/CI state
 
-- Branch: `veux-xnu-build`; latest handoff commit before this section:
-  `2e9e047` (`Record ordered XNU and iOS userdata restore`).
+- Branch: `veux-xnu-build`; current source commit is `de1b14f`
+  (`Align GUI gate source policy with latched readiness`).
 - `0164-veux-gui-freeze-diagnostic.patch` freezes subsequent GUI frame copies
   after the first SpringBoard/backboardd frame so kernel logs remain readable.
 - `0158-veux-modem-wlfw.patch` implements the Adrastea order
@@ -6895,3 +6895,31 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   420609 buildtree, and all 12 gate-source assertions pass against that
   materialized source. A fresh strict CI run is pending; no image was produced
   and no device partition was written by either failed attempt.
+
+
+## >>> UPDATE 2026-11-05 (latched GUI gate image flashed) <<<
+
+- Patch 0170 fixes the GUI gate race shown in the user's photo: accepted
+  `backboardd`/SpringBoard init or ready evidence is latched atomically, so later
+  FDR/auxiliary clients cannot overwrite it. Modem startup still waits for the
+  first valid software present. The overlay reports the accepted client and
+  `GUI gate open accepted=1` when both conditions are met.
+- CI run [`42077052432`](https://github.com/59c84486t9-alt/ios-veux/actions/runs/42077052432)
+  passed XNU build, host checks, kernel feature manifest, and Phase 2/3/4 modem
+  gates. Kernel SHA-256:
+  `cf09ca59dd375c5ab5b00bda0f588115cb1a91462db5a319258ad547927c5936`. Earlier
+  failed attempts `42070015242` and `42074400914` exposed and corrected stale
+  binary/source assertions; both had successful XNU compiles.
+- Built `/home/nyra/veux-artifacts/42077052432/gui-gate-latched.img`, 17,297,408
+  bytes, SHA-256
+  `4f9dc5478ad41f8c42929e96629ff1e67d4fed4e1405390df73aca37e961e3c8`. Wrapper
+  verification passed 57/57 modem markers, source absence checks, exact CI
+  kernel and phone DTB, and byte-for-byte payload reconstruction.
+- Preflash checks confirmed serial `4078cac030c8`, product `veux`, slot `b`,
+  unlocked `yes`, and `boot_b` size `0x8000000`. Flashed only `boot_b`; send,
+  write, slot selection, and reboot returned `OKAY`. No `userdata` or protected
+  partition was written. Fastboot/ADB were absent 10 seconds after reboot.
+- Next: let the GUI settle and read the filtered overlay text. Check for
+  `GUI gate accepted process=backboardd` (or SpringBoard), `GUI gate open
+  accepted=1`, then PAS/auth reset/SMP2P and GLINK/QRTR progress. Do not add
+  WLAN_CFG/CE/HTC/WMI before QRTR HELLO and service `0x45`.
