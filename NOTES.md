@@ -6,20 +6,25 @@ before changing code or flashing.
 - The modem-disabled iOS baseline
   `/home/nyra/veux-artifacts/41355888099/normal-console.img` was restored to
   `boot_b`; the user confirmed that iOS reaches the GUI.
-- User confirmed the current `glink-state-persistent.img` boots to the iOS GUI.
-  It is still in `boot_b`; it enables the bounded UFS ring at the tail of
-  `userdata`. No further `userdata` writes are authorized.
-- The filtered on-screen modem/GLINK overlay is committed as `7ab42c9` and
-  pushed. CI run `42024259095` compiled XNU but failed the host console harness
-  because its extracted-source shim lacks a stub for the newly added capture
-  function. Fixing the harness now; do not flash the failed run's image.
-- Fastboot is currently connected as `4078cac030c8`, product `veux`, slot B,
-  unlocked, and `boot_b` is `0x8000000` bytes. Once a green build and wrapper
-  verification are ready, flash only `boot_b` and reboot. Keep all other
-  partitions untouched.
-- The overlay keeps the newest 14 filtered modem/GLINK/QRTR/WLFW/PDMAP lines
-  in RAM and redraws them after GUI swaps. It omits `veuxlog=1`, so it will not
-  write to `userdata`.
+- Current `boot_b` is
+  `/home/nyra/veux-artifacts/42027405282/modem-overlay.img`, flashed after all
+  CI gates and strict wrapper verification passed. The flash and reboot
+  returned `OKAY`; only `boot_b` was written. Visual confirmation of the new
+  overlay is pending.
+- The overlay holds the newest 14 filtered modem/GLINK/QRTR/WLFW/PDMAP lines
+  in RAM and redraws them over the bottom of the live GUI after framebuffer
+  swaps, so SpringBoard actions do not erase or scroll them away. This is
+  per-boot screen history, not storage across reboots. Boot args omit
+  `veuxlog=1`; no `userdata` write was made for this image.
+- CI run `42027405282` passed the XNU build, host console bounds checks, kernel
+  manifest, and Phase 2/3/4 modem gates. Wrapper verification passed 53/53
+  modem markers, source checks, exact phone DTB, and byte-for-byte payload
+  reconstruction. Wrapper SHA-256 is
+  `baff7b3b5fafe8501f215f24f3737fa6fada200c1fa8673fdaa8afc797a88256`.
+- Next: inspect the phone's bottom overlay while the GUI runs and record the
+  latest modem/GLINK/QRTR lines. Check specifically for `QRTR: HELLO` and
+  service `0x45`; do not immediately flash again if either is absent. Any
+  further `userdata` write still requires renewed explicit approval.
 - Proven modem path: PAS segments -> auth reset -> SMP2P READY -> GLINK
   VERSION_ACK -> IPCRTR OPEN_ACK. The modem supplies a usable RX intent
   (`size0=0x80`, `id0=0`).
@@ -6610,7 +6615,7 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - The full 16 GiB HFSX image is not the entire raw `userdata` partition. It only
   restores the iOS filesystem at the partition start.
 
-## >>> UPDATE 2026-11-05 (filtered modem overlay build) <<<
+## >>> UPDATE 2026-11-05 (filtered modem overlay flashed) <<<
 
 - Commit `7ab42c9` adds an opt-in framebuffer overlay. It retains only the
   newest 14 complete lines matching modem, GLINK, QRTR, WLFW, PDMAP, selected
@@ -6618,15 +6623,34 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   GUI after successful framebuffer copies. The GUI copy and touch paths remain
   active. Boot args add `veux_modem_overlay=1` and omit both `veuxlog=1` and
   `veux_gui_freeze=1`; this overlay does not write to `userdata`.
-- CI run `42024259095` built XNU successfully, then its host console bounds
+- Initial CI run `42024259095` built XNU successfully, then its host console bounds
   harness failed at compile time because the test shim did not declare the new
   capture helper. All later modem phase gates and artifact collection passed;
   kernel feature manifest was skipped due to the earlier failure. Added a
   no-op capture helper to the isolated host shim so its framebuffer bounds
   checks can continue; the shim has no device-memory side effects.
-- Do not flash any artifact from that failed run. Re-run the workflow and
-  require green gates plus strict modem-normal wrapper verification before
-  flashing only `boot_b`. Device serial `4078cac030c8` is currently in Fastboot
-  on unlocked product `veux`, slot B. `boot_b` capacity is `0x8000000` bytes.
-- The compile environment on the workstation has no `clang`, so the host C
-  harness cannot be run locally; CI's macOS runner supplies it.
+- The test shim now has a no-op capture helper, and the host harness passed
+  locally with the available C compiler (the compiler wrapper suppressed GCC's
+  false-positive bounds warnings for this Clang-targeted test). The corrected
+  workflow run `42027405282` on branch `veux-xnu-build`, commit `8290f0d`, passed
+  all checks.
+- Built `/home/nyra/veux-artifacts/42027405282/modem-overlay.img` from the CI
+  kernel, the already verified phone ADT, and the exact phone DTB. It is
+  17,297,408 bytes with SHA-256
+  `baff7b3b5fafe8501f215f24f3737fa6fada200c1fa8673fdaa8afc797a88256`.
+  Strict verification passed 53/53 modem markers, forbidden-source checks,
+  build ID, manifest, exact DTB hash
+  `08284b0f3b0d3810abda6d617598370099f36f0f54110668bfe89f6ee35b4e2e`, and
+  byte-for-byte payload reconstruction. Boot args include
+  `veux_modem_overlay=1`; they omit `veuxlog=1` and
+  `veux_gui_freeze=1`.
+- Immediately before flashing, serial `4078cac030c8` was present in Fastboot;
+  product `veux`, current slot B, unlocked, and `boot_b` capacity
+  `0x8000000` were confirmed. Flashed only `boot_b`: send and write both
+  returned `OKAY`. Reboot returned `OKAY`. No `userdata` or other partition
+  was written.
+- The overlay keeps its latest 14 filtered lines in volatile RAM for this boot
+  and redraws after GUI surface copies. It does not retain history across a
+  reboot. The phone screen has not yet been visually inspected after this
+  flash; wait for the user to report or share a screen photo before changing
+  the image again.
