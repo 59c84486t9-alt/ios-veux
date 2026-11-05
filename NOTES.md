@@ -9,8 +9,8 @@ before changing code or flashing.
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42027405282/modem-overlay.img`, flashed after all
   CI gates and strict wrapper verification passed. The flash and reboot
-  returned `OKAY`; only `boot_b` was written. Visual confirmation of the new
-  overlay is pending.
+  returned `OKAY`; only `boot_b` was written. The user photo confirms the
+  overlay appears over the live GUI.
 - The overlay holds the newest 14 filtered modem/GLINK/QRTR/WLFW/PDMAP lines
   in RAM and redraws them over the bottom of the live GUI after framebuffer
   swaps, so SpringBoard actions do not erase or scroll them away. This is
@@ -22,9 +22,12 @@ before changing code or flashing.
   reconstruction. Wrapper SHA-256 is
   `baff7b3b5fafe8501f215f24f3737fa6fada200c1fa8673fdaa8afc797a88256`.
 - Next: inspect the phone's bottom overlay while the GUI runs and record the
-  latest modem/GLINK/QRTR lines. Check specifically for `QRTR: HELLO` and
-  service `0x45`; do not immediately flash again if either is absent. Any
-  further `userdata` write still requires renewed explicit approval.
+  latest modem/GLINK/QRTR lines. Current photo shows IPCC mapping and modem
+  pool setup only; PAS/SMP2P/GLINK progress is not present in that snapshot.
+  Let this boot run longer and inspect again. Check specifically for
+  `QRTR: HELLO` and service `0x45`; do not immediately flash again if either is
+  absent. Any further `userdata` write still requires renewed explicit
+  approval.
 - Proven modem path: PAS segments -> auth reset -> SMP2P READY -> GLINK
   VERSION_ACK -> IPCRTR OPEN_ACK. The modem supplies a usable RX intent
   (`size0=0x80`, `id0=0`).
@@ -6651,6 +6654,8 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   was written.
 - The overlay keeps its latest 14 filtered lines in volatile RAM for this boot
   and redraws after GUI surface copies. It does not retain history across a
-  reboot. The phone screen has not yet been visually inspected after this
-  flash; wait for the user to report or share a screen photo before changing
-  the image again.
+  reboot. User photo confirms the GUI and overlay are both visible. The panel
+  contains four lines: IPCC page mapping, IPCC configuration, modem pool
+  allocation, and pool mapping at VA `0xfffffe000c4d0000`. No PAS, SMP2P, GLINK,
+  or QRTR progress appears in this snapshot. Let the modem worker continue and
+  inspect another photo before changing the image again.
