@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000008 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Retain VEUX GUI state in the modem overlay
+
+Capture the existing VEUX GUI client and exit-summary lines in the on-screen
+ring, and emit a compact state line that fits on the display. This keeps the
+modem start gate unchanged while making its upstream GUI blocker observable.
+
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -143,4 +143,8 @@ veux_gui_process_exit_summary(void)
+ 	    (unsigned long long)veux_gui_selector_mask,
+ 	    (unsigned int)veux_gui_swap_count, (unsigned int)veux_gui_first_present);
++	IOLog("VEUX GUI STATE: init=%s ready=%s sel=0x%llx swaps=%u present=%u\n",
++	    veux_gui_init_process, veux_gui_ready_process,
++	    (unsigned long long)veux_gui_selector_mask,
++	    (unsigned int)veux_gui_swap_count, (unsigned int)veux_gui_first_present);
+ }
+ #endif
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -1576,6 +1576,6 @@ veux_fb_is_modem_log_line(const char *line)
+ 	static const char *const prefixes[] = {
+ 		"VEUX MODEM", "VEUX GLINK", "VEUX QRTR", "VEUX WLFW",
+ 		"VEUX PDMAP", "VEUX IPCC: pa=", "VEUX IPCC: mapped",
+-		"VEUX UFS: cached modem_a",
++		"VEUX UFS: cached modem_a", "VEUX GUI",
+ 	};
+ 	for (unsigned i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); ++i) {
+ 		if (strncmp(line, prefixes[i], strlen(prefixes[i])) == 0) return true;
+-- 
+2.49.0
