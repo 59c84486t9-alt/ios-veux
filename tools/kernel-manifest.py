@@ -470,7 +470,9 @@ phase4_sources = {
         '"VEUX GUI"', '"VEUX GUI STATE: init=%s ready=%s sel=0x%llx swaps=%u present=%u\\n"')),
     "modem_overlay_retains_gui_milestones_without_swap_chatter": all(x in phase4_patch_texts["0169-veux-modem-overlay-gui-milestones-only.patch"] for x in (
         '"VEUX GUI STATE"', '"VEUX GUI SUMMARY"', '"VEUX GUI: IOMFB client initialized"',
-        '"VEUX GUI: IOMFB client ready"')) and '"VEUX GUI",' not in phase4_patch_texts["0169-veux-modem-overlay-gui-milestones-only.patch"],
+        '"VEUX GUI: IOMFB client ready"')) and not any(
+            line.startswith("+") and '"VEUX GUI",' in line
+            for line in phase4_patch_texts["0169-veux-modem-overlay-gui-milestones-only.patch"].splitlines()),
     "ipcc_clock_note_is_evidence_gated": "no IPCC clock ID or branch" in phase4_text and "Do not guess a GCC write" in phase4_text,
     "ipcc_mapping_diagnostic_source": "VEUX IPCC: mapped pa=0x%08x va=%p size=0x%x attr=IO\\n" in phase4_patch_texts["0161-veux-ipcc-mapping-diagnostic.patch"],
     "modem_a_scans_luns_0_to_5_and_caches_location": all(x in phase4_patch_texts["0162-veux-ufs-multilun.patch"] for x in (
