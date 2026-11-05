@@ -6807,3 +6807,24 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - No further flash or partition write was made. The host sees no ADB or
   Fastboot device, so no persistent ring pull is available. Do not request a
   new photo; use text the user provides and preserve `userdata`.
+
+## >>> UPDATE 2026-11-05 (GUI milestone-only overlay build queued) <<<
+
+- Patch 0169 now removes per-frame `VEUX GUI` capture from the rolling modem
+  overlay and retains only GUI state/summary, AppleCLCD registration, first
+  valid present, and IOMFB client init/ready milestones. The GUI gate logic is
+  unchanged. The first manifest attempt failed because its assertion counted a
+  deleted diff line; commit `e2f3c09` corrects the assertion to inspect added
+  lines only. Local repository validation and the targeted source assertion
+  pass.
+- CI run `42060936294` was dispatched from `e2f3c09` with the established
+  `13.5` / `DEVELOPMENT` / `VEUX` inputs. GitHub accepted it but it remains
+  queued with no runner or steps; the preceding two attempts for this commit
+  were canceled after 15 minutes in the queue, before any workflow step ran.
+  This is runner acquisition/capacity, not a compile or source failure.
+- Fastboot is currently connected as `4078cac030c8`. Read-only preflight
+  reports product `veux`, current slot `b`, unlocked `yes`, and
+  `partition-size:boot_b = 0x8000000`. No image from the new run exists yet and
+  no partition was written. Once CI and strict wrapper verification pass,
+  the user's earlier authorization permits writing `boot_b` only; preserve
+  `userdata` and every protected partition.
