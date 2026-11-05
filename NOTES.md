@@ -1,4 +1,4 @@
-## ACTIVE HANDOFF 2026-11-05
+## ACTIVE HANDOFF 2026-11-06
 
 Read the full `## CURRENT HANDOFF 2026-11-05` section near the end of this file
 before changing code or flashing.
@@ -7,31 +7,26 @@ before changing code or flashing.
   `/home/nyra/veux-artifacts/41355888099/normal-console.img` was restored to
   `boot_b`; the user confirmed that iOS reaches the GUI.
 - Current `boot_b` is
-  `/home/nyra/veux-artifacts/42077052432/gui-gate-latched.img`, built from
-  green CI run `42077052432` and flashed after strict wrapper verification.
-  The user's latest photos show repeated boots reaching `GUI gate open
-  accepted=1` and `PAS: boot wait complete`, but no GUI. GLINK reaches
-  `VERSION_ACK` and opens IPCRTR; QRTR HELLO and service `0x45` remain absent.
-  Fastboot and ADB are currently not enumerated on the host.
+  `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`, flashed after
+  strict wrapper verification. It uses `modem_defer=120` after the GUI gate.
+  Flash, slot B selection, and reboot returned `OKAY`. Thirty seconds after
+  reboot, neither Fastboot nor ADB enumerated; GUI/runtime result is pending.
 - This overlay retains the newest 14 modem/GLINK/QRTR/WLFW/PDMAP lines plus
   bounded GUI milestones, but excludes per-frame framebuffer swaps. It is
   per-boot screen history, not storage across reboots. Boot args omit
   `veuxlog=1`; no `userdata` write was made.
 - Patch 0170 latches accepted GUI evidence and waits for first valid present.
-  The latest runtime proves that gate opens, but PAS startup still happens too
-  early for a stable GUI. A new modem-normal wrapper is being prepared with
-  `modem_defer=120`, which delays PAS worker activity for two minutes after the
-  gate opens while XNU continues booting. This is a build change only so far;
-  no new image has been built or flashed.
-- CI run `42027405282` passed the XNU build, host console bounds checks, kernel
-  manifest, and Phase 2/3/4 modem gates. Wrapper verification passed 53/53
-  modem markers, source checks, exact phone DTB, and byte-for-byte payload
-  reconstruction. Wrapper SHA-256 is
-  `baff7b3b5fafe8501f215f24f3737fa6fada200c1fa8673fdaa8afc797a88256`.
-- Next: build and strictly verify the deferred-start wrapper, then flash only
-  `boot_b` when Fastboot reconnects. Do not ask for another photo. Keep
-  `userdata` untouched. Do not add WLAN_CFG/CE/HTC/WMI until QRTR HELLO and
-  service `0x45` are observed.
+  Latest captures show the gate opens, PAS completes its boot wait, and GLINK
+  reaches VERSION_ACK/IPCRTR open, but no GUI or QRTR HELLO/service `0x45`.
+- CI run `42125270101` passed the XNU build, manifest, and Phase 2/3/4 gates.
+  The deferred wrapper passed 57/57 modem markers, exact CI kernel and phone
+  DTB checks, and byte-for-byte payload reconstruction. Kernel SHA-256:
+  `0293f5b34e95cda8a71bc77819484fd0f8c7b6a0eb2857a7198ac36c3dcc4e12`;
+  wrapper SHA-256:
+  `18ebabe092ed30ef4a4455b12b408dfefcef63d9d0036ffcf661d4274bfb4ae2`.
+- Next: inspect runtime after the two-minute defer. Do not ask for another
+  photo. Keep `userdata` and all protected partitions untouched. Do not add
+  WLAN_CFG/CE/HTC/WMI until QRTR HELLO and service `0x45` are observed.
 - Proven modem path: PAS segments -> auth reset -> SMP2P READY -> GLINK
   VERSION_ACK -> IPCRTR OPEN_ACK. The modem supplies a usable RX intent
   (`size0=0x80`, `id0=0`).
@@ -6512,12 +6507,11 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   HFSX `iOSRoot` image to `userdata` completed earlier. The user later
   confirmed that the modem-disabled image boots the iOS GUI.
 - Current `boot_b` is
-  `/home/nyra/veux-artifacts/42060936294/gui-milestones.img`, based on green CI
-  run `42060936294`, with the filtered modem overlay and unchanged
-  `modem_after_gui=1` gate. The latest user capture shows `backboardd` ready,
-  then FDR Loader ready, followed by first present and `GUI gate pending` with
-  the latest names both FDR Loader. No modem/PAS progress is visible. This is a
-  stale-process-name gate bug, not a Wi-Fi/QRTR result.
+  `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`. It is built from
+  green CI run `42125270101` and uses `modem_defer=120`; the user has not yet
+  reported this boot's GUI or modem result. Fastboot/ADB were absent 30 seconds
+  after reboot. The previous image showed the GUI gate opening and GLINK
+  VERSION_ACK/IPCRTR open, but no QRTR HELLO/service `0x45`.
 - The logger writes a bounded 4 MiB + 4 KiB ring at the end of `userdata`, well
   beyond the 16 GiB HFSX volume. The user explicitly authorized this diagnostic
   write. No other userdata area was targeted.
@@ -6934,7 +6928,26 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   value to workflow, manifest, and strict wrapper requirements. This gives the
   GUI two minutes after the first valid present/gate before PAS begins, while
   the worker sleeps independently and kernel boot can continue.
-- Build/flash pending. Host `fastboot devices -l` and `adb devices -l` currently
-  return no device, so no partition write was attempted. Once Fastboot returns,
-  flash only the strictly verified wrapper to `boot_b`; preserve all other
-  partitions and do not write `userdata`.
+- Build and flash completed; see the 2026-11-06 update below. The only
+  partition written was `boot_b`; `userdata` and protected partitions were left
+  untouched.
+
+
+## >>> UPDATE 2026-11-06 (deferred modem wrapper flashed) <<<
+
+- CI run [`42125270101`](https://github.com/59c84486t9-alt/ios-veux/actions/runs/42125270101)
+  passed XNU build, repository/host checks, kernel manifest, and Phase 2/3/4
+  modem gates. Kernel SHA-256:
+  `0293f5b34e95cda8a71bc77819484fd0f8c7b6a0eb2857a7198ac36c3dcc4e12`.
+- Built `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`, 17,297,408
+  bytes, SHA-256
+  `18ebabe092ed30ef4a4455b12b408dfefcef63d9d0036ffcf661d4274bfb4ae2`.
+  The wrapper uses `modem_defer=120`. Strict verification passed 57/57 modem
+  markers, exact kernel/phone DTB checks, expected boot args, and byte-for-byte
+  payload reconstruction.
+- Fastboot preflight: serial `4078cac030c8`, product `veux`, current slot `b`,
+  unlocked `yes`, `boot_b` capacity `0x8000000`. Flashed only `boot_b`, selected
+  slot B, and rebooted; each operation returned `OKAY`. No `userdata` or
+  protected partition was written. Fastboot and ADB were absent 30 seconds
+  after reboot. Wait for the two-minute modem defer and inspect GUI/runtime;
+  next transport milestone remains QRTR HELLO and service `0x45`.
