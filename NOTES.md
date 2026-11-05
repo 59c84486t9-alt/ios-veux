@@ -6699,3 +6699,20 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   unlocked, `boot_b` size `0x8000000`. Flashed only `boot_b`; send/write and
   reboot returned `OKAY`. No `userdata` write occurred. Runtime gate status is
   pending; do not ask for a new photo.
+
+## >>> UPDATE 2026-11-05 (GUI gate retry runtime result) <<<
+
+- The latest user photo shows `present=1 init=IOMFB_FDR_Loader
+  ready=IOMFB_FDR_Loader stage=present`. The retry hook observed a valid
+  present, but neither client event came from the accepted `backboardd` or
+  `SpringBoard` process, so `GUI gate open` and modem startup were not reached.
+  The overlay has no PAS, modem, GLINK, or QRTR progress lines.
+- This matches the prior GUI traces: `IOMFB_FDR_Loader` can initialize and
+  become ready, but is an early FDR/display-loader client and is not evidence
+  that the GUI/window server is ready. Do not whitelist it or move modem start
+  ahead of the GUI gate; that risks restarting the earlier Apple-logo-stage
+  modem regression. The current image is providing the intended diagnostic.
+- No new image requested. No new flash or partition write performed. Keep
+  `userdata` and all protected partitions untouched. Next work should resolve
+  why the actual `backboardd`/`SpringBoard` display client is not reaching
+  ready/present; modem/PAS/GLINK debugging remains downstream of that event.
