@@ -22,12 +22,12 @@ before changing code or flashing.
   reconstruction. Wrapper SHA-256 is
   `baff7b3b5fafe8501f215f24f3737fa6fada200c1fa8673fdaa8afc797a88256`.
 - Next: inspect the phone's bottom overlay while the GUI runs and record the
-  latest modem/GLINK/QRTR lines. Current photo shows IPCC mapping and modem
-  pool setup only; PAS/SMP2P/GLINK progress is not present in that snapshot.
-  Let this boot run longer and inspect again. Check specifically for
-  `QRTR: HELLO` and service `0x45`; do not immediately flash again if either is
-  absent. Any further `userdata` write still requires renewed explicit
-  approval.
+  latest modem/GLINK/QRTR lines. User reports the phone ran longer with no
+  change after the initial photo: only IPCC mapping and modem-pool setup remain
+  visible, with no PAS/SMP2P/GLINK progress. Do not ask the user for another
+  photo. Current investigation is the guarded GUI-trigger handoff; do not add
+  WLAN or QRTR stages until the modem worker visibly starts. Any further
+  `userdata` write still requires renewed explicit approval.
 - Proven modem path: PAS segments -> auth reset -> SMP2P READY -> GLINK
   VERSION_ACK -> IPCRTR OPEN_ACK. The modem supplies a usable RX intent
   (`size0=0x80`, `id0=0`).
@@ -6657,5 +6657,24 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   reboot. User photo confirms the GUI and overlay are both visible. The panel
   contains four lines: IPCC page mapping, IPCC configuration, modem pool
   allocation, and pool mapping at VA `0xfffffe000c4d0000`. No PAS, SMP2P, GLINK,
-  or QRTR progress appears in this snapshot. Let the modem worker continue and
-  inspect another photo before changing the image again.
+  or QRTR progress appears. User says the phone ran longer with no change;
+  do not request another photo.
+
+## >>> UPDATE 2026-11-05 (modem GUI gate retry investigation) <<<
+
+- The current image's modem worker is deliberately gated on the first valid
+  GUI frame and accepts only `veux_gui_init_process` equal to `backboardd` or
+  `SpringBoard`. The hook is called only inside the one-time first-present
+  block. If that frame arrives before an accepted initializer name, a later
+  client-ready event cannot open the gate. This is a plausible explanation for
+  the unchanged four-line overlay, not yet confirmed by runtime process-name
+  evidence.
+- Patch 0167 adds a guarded retry after every later valid present and from the
+  IOMFB client-ready callback. It still requires a valid GUI frame plus an
+  accepted `backboardd`/`SpringBoard` init or ready process before starting the
+  worker. The filtered overlay will show `VEUX MODEM: GUI gate pending ...` or
+  `VEUX MODEM: GUI gate open ...`, distinguishing a missed start gate from a
+  later modem/PAS failure. No WLAN/QRTR protocol stages are changed.
+- CI, wrapper verification, and any new `boot_b` flash are pending. The current
+  overlay image remains in `boot_b`; do not write `userdata` or any protected
+  partition.

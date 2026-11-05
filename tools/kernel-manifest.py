@@ -512,6 +512,9 @@ phase4_binary = {
     "pas_boot_wait_handoff": b"VEUX MODEM PAS: boot wait complete; continuing to root mount\n" in kernel,
     "pas_deferred_worker_start": b"VEUX MODEM PAS: worker deferred for %u seconds\n" in kernel,
     "modem_gui_ready_hook": b"veux_modem_gui_ready" in kernel,
+    "modem_gui_gate_diagnostics": all(x in kernel for x in (
+        b"VEUX MODEM: GUI gate pending present=%u init=%s ready=%s stage=%s\n",
+        b"VEUX MODEM: GUI gate open init=%s ready=%s stage=%s\n")),
     "gui_freeze_diagnostic_bootarg": b"veux_gui_freeze" in kernel,
     "modem_pool_mapping_address": b"VEUX MODEM POOL: mapped at VA 0x%llx\n" in kernel,
     "glink_startup_diagnostics": all(x in kernel for x in (
@@ -788,11 +791,16 @@ source_checks["xpcproxy_driver_spawn_exception_is_bootarg_gated_entitlement_only
 )
 
 fb = (a.source_root / "iokit/Kernel/arm/SweetFramebuffer.cpp").read_text()
-source_checks["modem_worker_starts_after_first_gui_present"] = (
+source_checks["modem_worker_retries_gui_gate_until_client_ready"] = (
     "extern \"C\" void veux_modem_gui_ready(void);" in fb
-    and 'strcmp(veux_gui_init_process, "backboardd") == 0' in fb
-    and 'strcmp(veux_gui_init_process, "SpringBoard") == 0' in fb
-    and "veux_modem_gui_ready();" in fb.split("first valid software display present", 1)[1]
+    and "veux_gui_modem_gate_try(const char *stage)" in fb
+    and 'strcmp(veux_gui_ready_process, "backboardd") == 0' in fb
+    and 'strcmp(veux_gui_ready_process, "SpringBoard") == 0' in fb
+    and 'veux_gui_modem_gate_try("present");' in fb
+    and 'veux_gui_modem_gate_try("client-ready");' in fb
+    and "VEUX MODEM: GUI gate pending" in fb
+    and "VEUX MODEM: GUI gate open" in fb
+    and "veux_modem_gui_ready();" in fb
 )
 surface = (a.source_root / "iokit/Kernel/arm/SweetSurface.cpp").read_text()
 watchdog = (a.source_root / "iokit/Kernel/arm/SweetWatchdog.cpp").read_text()
