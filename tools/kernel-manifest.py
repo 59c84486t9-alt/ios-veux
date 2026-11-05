@@ -532,7 +532,7 @@ phase4_binary = {
     "modem_gui_ready_hook": b"veux_modem_gui_ready" in kernel,
     "modem_gui_gate_diagnostics": all(x in kernel for x in (
         b"VEUX MODEM: GUI gate pending present=%u init=%s ready=%s stage=%s\n",
-        b"VEUX MODEM: GUI gate open init=%s ready=%s stage=%s\n")),
+        b"VEUX MODEM: GUI gate open accepted=1 stage=%s\n")),
     "gui_freeze_diagnostic_bootarg": b"veux_gui_freeze" in kernel,
     "modem_pool_mapping_address": b"VEUX MODEM POOL: mapped at VA 0x%llx\n" in kernel,
     "glink_startup_diagnostics": all(x in kernel for x in (
