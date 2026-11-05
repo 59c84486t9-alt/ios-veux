@@ -101,6 +101,7 @@ if a.variants_manifest:
                          "veux_gui_noconsole=1", "veuxfbconsole=1", "veux_modem_overlay=1",
                          "modem=1", "modem_hold=0", "modem_boot_wait=0",
                          "modem_after_gui=1",
+                         "modem_defer=120",
                          "modem_watch=86400"}
         if not required_args.issubset(payload_args.split()):
             raise SystemExit("modem-normal wrapper lacks required modem/iOS runtime arguments")

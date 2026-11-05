@@ -37,7 +37,7 @@ modem_forbidden_boot_args = {
 }
 if any(arg.split("=", 1)[0] in modem_forbidden_boot_args for arg in modem_held_boot_args):
     raise SystemExit("modem-held boot args contain a forbidden write, GUI, or probe argument")
-if not {"modem=1", "modem_hold=0", "modem_boot_wait=0", "modem_after_gui=1", "modem_watch=86400", "rootrw=1", "ufsrw=1",
+if not {"modem=1", "modem_hold=0", "modem_boot_wait=0", "modem_after_gui=1", "modem_defer=120", "modem_watch=86400", "rootrw=1", "ufsrw=1",
         "veuxsandbox=1", "veux_gui=1", "veux_gui_noconsole=1", "veuxfbconsole=1",
         "veux_modem_overlay=1", "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args):
     raise SystemExit("modem-normal requires modem service, RW root, sandbox, GUI, and its variant marker")
@@ -678,7 +678,7 @@ source_checks["all_runtime_boot_variants_are_manifested_and_safe"] = (
     {"rootrw=1", "ufsrw=1", "veuxvariant=normal"}.issubset(boot_args)
     and {"veuxtouchprobe=1", "veuxtouchprobehold=1", "veuxvariant=held"}.issubset(held_boot_args)
     and not ({"rootrw=1", "ufsrw=1", "veuxtouchprobeactive=1", "veuxlog=1"} & held_boot_args)
-    and {"modem=1", "modem_hold=0", "modem_boot_wait=0", "modem_after_gui=1", "rootrw=1", "ufsrw=1", "veux_gui=1",
+    and {"modem=1", "modem_hold=0", "modem_boot_wait=0", "modem_after_gui=1", "modem_defer=120", "rootrw=1", "ufsrw=1", "veux_gui=1",
          "veux_gui_noconsole=1", "veuxfbconsole=1", "veux_modem_overlay=1", "veuxvariant=modem-normal"}.issubset(modem_normal_boot_args)
     and not ({"modem_hold=1", "veuxtouchprobe=1", "veuxtouchprobehold=1",
               "veuxtouchprobeactive=1", "veuxlog=1", "veux_gui_freeze=1"} & modem_normal_boot_args)

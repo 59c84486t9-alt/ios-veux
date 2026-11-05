@@ -9,31 +9,29 @@ before changing code or flashing.
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42077052432/gui-gate-latched.img`, built from
   green CI run `42077052432` and flashed after strict wrapper verification.
-  Flash, slot selection, and reboot returned `OKAY`; only `boot_b` was written.
-  Fastboot/ADB were not enumerated 10 seconds after reboot; GUI/runtime outcome
-  is pending.
+  The user's latest photos show repeated boots reaching `GUI gate open
+  accepted=1` and `PAS: boot wait complete`, but no GUI. GLINK reaches
+  `VERSION_ACK` and opens IPCRTR; QRTR HELLO and service `0x45` remain absent.
+  Fastboot and ADB are currently not enumerated on the host.
 - This overlay retains the newest 14 modem/GLINK/QRTR/WLFW/PDMAP lines plus
   bounded GUI milestones, but excludes per-frame framebuffer swaps. It is
   per-boot screen history, not storage across reboots. Boot args omit
   `veuxlog=1`; no `userdata` write was made.
-- The prior capture showed `backboardd` IOMFB client ready before the first
-  valid present, followed by FDR Loader ready and a gate-pending line naming
-  FDR Loader. Patch 0170 now latches accepted GUI evidence. The image flashed
-  to `boot_b` records the accepted process and waits for first valid present
-  before starting the modem. Runtime result is pending.
+- Patch 0170 latches accepted GUI evidence and waits for first valid present.
+  The latest runtime proves that gate opens, but PAS startup still happens too
+  early for a stable GUI. A new modem-normal wrapper is being prepared with
+  `modem_defer=120`, which delays PAS worker activity for two minutes after the
+  gate opens while XNU continues booting. This is a build change only so far;
+  no new image has been built or flashed.
 - CI run `42027405282` passed the XNU build, host console bounds checks, kernel
   manifest, and Phase 2/3/4 modem gates. Wrapper verification passed 53/53
   modem markers, source checks, exact phone DTB, and byte-for-byte payload
   reconstruction. Wrapper SHA-256 is
   `baff7b3b5fafe8501f215f24f3737fa6fada200c1fa8673fdaa8afc797a88256`.
-- Next: inspect the phone's bottom overlay while the GUI runs and record the
-  latest modem/GLINK/QRTR lines. User reports the phone ran longer with no
-  change after the initial photo: only IPCC mapping and modem-pool setup remain
-  visible, with no PAS/SMP2P/GLINK progress. Do not ask the user for another
-  photo. The current image prints whether the guarded GUI-trigger handoff is
-  pending/open. Do not add WLAN or QRTR stages until the modem worker visibly
-  starts. Any further `userdata` write still requires renewed explicit
-  approval.
+- Next: build and strictly verify the deferred-start wrapper, then flash only
+  `boot_b` when Fastboot reconnects. Do not ask for another photo. Keep
+  `userdata` untouched. Do not add WLAN_CFG/CE/HTC/WMI until QRTR HELLO and
+  service `0x45` are observed.
 - Proven modem path: PAS segments -> auth reset -> SMP2P READY -> GLINK
   VERSION_ACK -> IPCRTR OPEN_ACK. The modem supplies a usable RX intent
   (`size0=0x80`, `id0=0`).
@@ -6923,3 +6921,20 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `GUI gate accepted process=backboardd` (or SpringBoard), `GUI gate open
   accepted=1`, then PAS/auth reset/SMP2P and GLINK/QRTR progress. Do not add
   WLAN_CFG/CE/HTC/WMI before QRTR HELLO and service `0x45`.
+
+
+## >>> UPDATE 2026-11-05 (defer modem PAS after GUI gate) <<<
+
+- The user's latest captures from repeated boots show `GUI gate open
+  accepted=1`, `PAS: boot wait complete; continuing to root mount`, and GLINK
+  `VERSION_ACK` plus IPCRTR open, but the phone never reaches the GUI. There is
+  still no QRTR HELLO or service `0x45`.
+- The modem worker already supports `modem_defer` and sleeps before PAS startup.
+  Updated the modem-normal wrapper boot args to `modem_defer=120` and added the
+  value to workflow, manifest, and strict wrapper requirements. This gives the
+  GUI two minutes after the first valid present/gate before PAS begins, while
+  the worker sleeps independently and kernel boot can continue.
+- Build/flash pending. Host `fastboot devices -l` and `adb devices -l` currently
+  return no device, so no partition write was attempted. Once Fastboot returns,
+  flash only the strictly verified wrapper to `boot_b`; preserve all other
+  partitions and do not write `userdata`.
