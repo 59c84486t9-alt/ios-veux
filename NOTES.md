@@ -9,11 +9,11 @@ before changing code or flashing.
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`, flashed after
   strict wrapper verification. It uses `modem_defer=120` after the GUI gate.
-  Flash, slot B selection, and reboot returned `OKAY`. The user reports it
-  booted and now confirms the GUI works with this image. The latest capture
-  confirms backboardd accepted, first display present, gate open, and `worker
-  deferred for 120 seconds`; IOMFB client initialization continues.
-  Fastboot/ADB are not enumerated on the host.
+  Flash, slot B selection, and reboot returned `OKAY`. The user reports iOS
+  loads, then freezes on the lock screen. The capture confirms backboardd
+  accepted, first display present, gate open, and `worker deferred for 120
+  seconds`; IOMFB client initialization continues. Whether the freeze occurred
+  before or after the delay is unknown. Fastboot/ADB are not enumerated.
 - This overlay retains the newest 14 modem/GLINK/QRTR/WLFW/PDMAP lines plus
   bounded GUI milestones, but excludes per-frame framebuffer swaps. It is
   per-boot screen history, not storage across reboots. Boot args omit
@@ -6513,10 +6513,10 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   confirmed that the modem-disabled image boots the iOS GUI.
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`. It is built from
-  green CI run `42125270101` and uses `modem_defer=120`. The user confirms the
-  GUI works. The capture confirms the gate and defer while IOMFB clients
-  initialize. Fastboot/ADB are absent. The previous image showed GLINK
-  VERSION_ACK/IPCRTR open, but no QRTR HELLO/service `0x45`.
+  green CI run `42125270101` and uses `modem_defer=120`. The user reports iOS
+  loads then freezes on the lock screen. The capture confirms the gate and
+  defer while IOMFB clients initialize. Fastboot/ADB are absent. The previous
+  image showed GLINK VERSION_ACK/IPCRTR open, but no QRTR HELLO/service `0x45`.
 - The logger writes a bounded 4 MiB + 4 KiB ring at the end of `userdata`, well
   beyond the 16 GiB HFSX volume. The user explicitly authorized this diagnostic
   write. No other userdata area was targeted.
@@ -6981,3 +6981,15 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   SMP2P READY, GLINK/IPCRTR acknowledgements, then QRTR HELLO and service
   `0x45`. No WLAN_CFG/CE/HTC/WMI work until QRTR HELLO and service `0x45` are
   observed.
+
+
+## >>> UPDATE 2026-11-06 (lock-screen freeze reported) <<<
+
+- The user reports iOS loads and then freezes on the lock screen. The supplied
+  capture still shows `worker deferred for 120 seconds` after the GUI gate and
+  first display present; no post-defer PAS/auth-reset or QRTR lines are visible.
+  It is not known whether the freeze occurred before the two-minute delay ended.
+- ADB and Fastboot are not enumerated. No new flash or partition write was
+  made. Keep this boot long enough to distinguish a freeze before PAS begins
+  from one that coincides with modem startup. The next useful overlay evidence
+  is whether `auth_reset`, `SMP2P READY`, or GLINK polling appears.
