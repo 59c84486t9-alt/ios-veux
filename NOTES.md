@@ -6,16 +6,14 @@ before changing code or flashing.
 - The modem-disabled iOS baseline
   `/home/nyra/veux-artifacts/41355888099/normal-console.img` was restored to
   `boot_b`; the user confirmed that iOS reaches the GUI.
-- Current `boot_b` is
-  `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`, flashed after
-  strict wrapper verification. It uses `modem_defer=120` after the GUI gate.
-  Flash, slot B selection, and reboot returned `OKAY`. The user reports iOS
-  loads, then freezes 1–2 minutes later; the lock-screen clock stopped at 4:03
-  and had not advanced after eight hours. This matches the 120-second modem
-  defer expiring. The last capture shows `worker deferred for 120 seconds`
-  with no later PAS/QRTR lines. ADB/Fastboot are absent. The known-good
-  modem-disabled GUI image is verified and ready to restore to `boot_b` when
-  Fastboot reconnects.
+- Current `boot_b` is restored to the known-good modem-disabled image
+  `/home/nyra/veux-artifacts/41355888099/normal-console.img` (17,281,024 bytes,
+  SHA-256 `07653faf828cb681657a3d6f800714d6c099da77cb87e0b17191ff8b77f2d32f`).
+  Only `boot_b` was written. Product `veux`, slot `b`, unlocked `yes`, and
+  partition size `0x8000000` were confirmed before flash. Flash, slot selection,
+  and reboot returned `OKAY`; Fastboot/ADB are absent after reboot. Next verify
+  the baseline GUI remains responsive, then isolate modem startup before
+  another modem-enabled boot.
 - This overlay retains the newest 14 modem/GLINK/QRTR/WLFW/PDMAP lines plus
   bounded GUI milestones, but excludes per-frame framebuffer swaps. It is
   per-boot screen history, not storage across reboots. Boot args omit
@@ -6513,14 +6511,13 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - The ordered restore of diagnostic XNU to `boot_b` followed by the 16 GiB
   HFSX `iOSRoot` image to `userdata` completed earlier. The user later
   confirmed that the modem-disabled image boots the iOS GUI.
-- Current `boot_b` is
-  `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`. It is built from
-  green CI run `42125270101` and uses `modem_defer=120`. The user reports iOS
-  loads then freezes 1–2 minutes later on the lock screen at 4:03; the clock
-  remains stopped after eight hours. The timing matches the 120-second defer
-  expiring. The last capture confirms the gate and defer but no later
-  PAS/auth-reset or QRTR messages. Fastboot/ADB are absent. The previous image
-  showed GLINK VERSION_ACK/IPCRTR open, but no QRTR HELLO/service `0x45`.
+- Current `boot_b` is restored to
+  `/home/nyra/veux-artifacts/41355888099/normal-console.img`, the known-good
+  modem-disabled GUI baseline. The modem-enabled `42125270101` image used
+  `modem_defer=120`; the user reports iOS froze 1–2 minutes after boot at
+  4:03, consistent with the defer expiring. Flashing the baseline to `boot_b`,
+  selecting B, and reboot all returned `OKAY`. Fastboot/ADB are absent after
+  reboot. Wait for GUI confirmation before preparing a safer modem diagnostic.
 - The logger writes a bounded 4 MiB + 4 KiB ring at the end of `userdata`, well
   beyond the 16 GiB HFSX volume. The user explicitly authorized this diagnostic
   write. No other userdata area was targeted.
@@ -7027,3 +7024,17 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `07653faf828cb681657a3d6f800714d6c099da77cb87e0b17191ff8b77f2d32f`). When
   Fastboot returns, restore only `boot_b` from that image. Preserve userdata
   and all protected partitions while isolating modem startup.
+
+
+## >>> UPDATE 2026-11-06 (known-good GUI baseline restored) <<<
+
+- The user reported Fastboot available. Preflight confirmed serial
+  `4078cac030c8`, product `veux`, current slot `b`, unlocked `yes`, and
+  `boot_b` capacity `0x8000000`.
+- Flashed `/home/nyra/veux-artifacts/41355888099/normal-console.img` to
+  `boot_b`; image size 17,281,024 bytes, SHA-256
+  `07653faf828cb681657a3d6f800714d6c099da77cb87e0b17191ff8b77f2d32f`.
+  Flash, `set_active b`, and reboot all returned `OKAY`. No `userdata` or
+  protected partition was touched. Fastboot/ADB were absent immediately after
+  reboot. Await user runtime confirmation that the GUI is responsive; do not
+  re-enable modem startup until a safer trigger/diagnostic is prepared.
