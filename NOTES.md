@@ -18,9 +18,10 @@ before changing code or flashing.
   `/home/nyra/veux-artifacts/42202903236/modem-defer-sleep.img` (17,297,408
   bytes, SHA-256
   `019e993a9486c109ce3f82b6109f284533c12bc1664e90ef67e5ae4e616f8e0a`).
-  Fastboot/ADB currently show no device; when Fastboot returns, write only
-  `boot_b`, then observe the defer-complete marker and PAS startup. If the
-  freeze remains, the overlay should identify the next stage.
+  This image was subsequently flashed only to `boot_b` after preflight.
+  Fastboot/ADB and USB now show no device; wait for the phone to boot and check
+  whether the GUI and overlay return. Inspect the defer-complete marker and PAS
+  startup. If the freeze remains, the overlay should identify the next stage.
 - Current `boot_b` is restored to the known-good modem-disabled image
   `/home/nyra/veux-artifacts/41355888099/normal-console.img` (17,281,024 bytes,
   SHA-256 `07653faf828cb681657a3d6f800714d6c099da77cb87e0b17191ff8b77f2d32f`).
@@ -7108,3 +7109,18 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   `userdata` untouched. Runtime must confirm whether the timed wait prevents the
   freeze and record the first PAS/GLINK marker after `defer complete`. The
   underlying freeze cause remains unconfirmed until that runtime observation.
+
+
+## >>> UPDATE 2026-11-06 (timed modem defer image flashed) <<<
+
+- User said Fastboot was on. Preflight confirmed serial `4078cac030c8`, product
+  `veux`, active slot `b`, unlocked `yes`, and raw `boot_b` size `0x8000000`.
+  Image `/home/nyra/veux-artifacts/42202903236/modem-defer-sleep.img` matched
+  SHA-256 `019e993a9486c109ce3f82b6109f284533c12bc1664e90ef67e5ae4e616f8e0a` and
+  size 17,297,408 bytes.
+- Flashed only `boot_b`; Fastboot reported both `Sending` and `Writing` as
+  `OKAY`. The phone disappeared from USB/Fastboot before the follow-up reboot
+  command could connect; that command waited for a device and was stopped.
+  Fastboot, ADB, and USB enumeration currently show no phone. No `userdata` or
+  protected partition was written. Runtime boot result and the new defer/PAS
+  logs are pending.
