@@ -1,0 +1,20 @@
+From 0000000000000000000000000000000000000007 Mon Sep 17 00:00:00 2001
+From: Codex <codex@local>
+Subject: [PATCH] Use a timed thread wait for deferred modem startup
+
+diff --git a/osfmk/arm64/veux_modem_pas.c b/osfmk/arm64/veux_modem_pas.c
+--- a/osfmk/arm64/veux_modem_pas.c
++++ b/osfmk/arm64/veux_modem_pas.c
+@@ -131,10 +131,10 @@
+ static volatile uint32_t *smp_find(struct smp_hdr *h,const char *n){struct smp_ent *e=(void *)(h+1);for(uint32_t i=0;i<h->valid&&i<SMP2P_MAX;i++)if(!strncmp(e[i].name,n,16))return &e[i].value;return NULL;}
+ static void add_out(uint32_t item){struct smp_hdr *h=veux_smem_alloc(item,sizeof(*h)+SMP2P_MAX*sizeof(struct smp_ent));if(!h)return;if(!h->version){h->magic=SMP_MAGIC;h->local=0;h->remote=1;h->total=SMP2P_MAX;h->features[0]=1;h->valid=0;barrier();h->version=1;}volatile uint32_t *ipa=NULL;struct smp_ent *e=(void *)(h+1);for(uint32_t i=0;i<h->valid&&i<SMP2P_MAX;i++)if(!strncmp(e[i].name,"ipa",16))ipa=&e[i].value;if(!ipa&&h->valid<h->total){strlcpy(e[h->valid].name,"ipa",sizeof(e[h->valid].name));e[h->valid].value=0;barrier();h->valid++;}barrier();veux_ipcc_signal(2,2);}
+ void veux_modem_hold(void){printf("VEUX MODEM HOLD: wfe\n");for(;;)__asm__ volatile("dsb sy; wfe" ::: "memory");}
+-static int veux_modem_wait_chan;static bool veux_modem_started,veux_modem_gui_is_ready;
++static int veux_modem_wait_chan,veux_modem_defer_wait_chan;static bool veux_modem_started,veux_modem_gui_is_ready;
+ static void veux_modem_run(void){
+  veux_dt_crc_log("modem_worker_entry");
+- uint32_t watch=180,defer=0;PE_parse_boot_argn("modem_watch",&watch,sizeof(watch));PE_parse_boot_argn("modem_defer",&defer,sizeof(defer));if(defer){printf("VEUX MODEM PAS: worker deferred for %u seconds\n",defer);IOSleep(defer*1000);}
++ uint32_t watch=180,defer=0;PE_parse_boot_argn("modem_watch",&watch,sizeof(watch));PE_parse_boot_argn("modem_defer",&defer,sizeof(defer));if(defer){printf("VEUX MODEM PAS: worker deferred for %u seconds\n",defer);if(assert_wait_timeout(&veux_modem_defer_wait_chan,THREAD_UNINT,defer*1000,1000*NSEC_PER_USEC)==THREAD_WAITING)thread_block(THREAD_CONTINUE_NULL);printf("VEUX MODEM PAS: defer complete seconds=%u\n",defer);}
+  printf("VEUX MODEM PAS: pas_id=4 carveout=0x8b800000+0x10000000 smem=0x80900000 tcsr=0x00340000 hwlock=3\n");
+  smem=(uint8_t *)ml_io_map_wcomb(SMEM_PA,SMEM_SIZE);if(!smem){printf("VEUX MODEM PAS: SMEM map failed\n");veux_modem_hold();}printf("VEUX GLINK: mapped SMEM\n");tcsr=(volatile uint8_t *)ml_io_map(TCSR_PA,0x20000);if(!tcsr){printf("VEUX MODEM PAS: TCSR map failed\n");veux_modem_hold();}part=find_part(0,1);if(!part){printf("VEUX MODEM PAS: SMEM partition missing\n");veux_modem_hold();}
+  veux_dt_crc_log("before_modem_boot");printf("VEUX MODEM PAS: starting modem boot sequence\n");bool loaded=load_modem();thread_wakeup(&veux_modem_wait_chan);if(!loaded){veux_dt_crc_log("modem_boot_failed");printf("VEUX MODEM PAS: modem_boot failed\n");veux_modem_hold();}veux_dt_crc_log("after_modem_boot");add_out(ITEM_OUT);

@@ -496,7 +496,8 @@ phase4_sources = {
         "assert_wait_timeout(&veux_modem_wait_chan,THREAD_UNINT,wait*1000,1000*NSEC_PER_USEC)",
         "VEUX MODEM PAS: boot wait complete; continuing to root mount",
         'PE_parse_boot_argn("modem_defer",&defer,sizeof(defer))',
-        "IOSleep(defer*1000)")) and
+        "assert_wait_timeout(&veux_modem_defer_wait_chan,THREAD_UNINT,defer*1000,1000*NSEC_PER_USEC)",
+        "VEUX MODEM PAS: defer complete seconds=%u")) and
         "VEUX MODEM PAS: worker deferred for %u seconds" in phase4_text and
         'PE_parse_boot_argn("modem_after_gui",&after,sizeof(after))' in phase4_text and
         "veux_modem_gui_ready(void){veux_modem_gui_is_ready=true;veux_modem_start();}" in phase4_text,
@@ -529,6 +530,7 @@ phase4_binary = {
         b"VEUX MODEM PAS: unmapped b%02u\n")),
     "pas_boot_wait_handoff": b"VEUX MODEM PAS: boot wait complete; continuing to root mount\n" in kernel,
     "pas_deferred_worker_start": b"VEUX MODEM PAS: worker deferred for %u seconds\n" in kernel,
+    "pas_deferred_worker_wait_complete": b"VEUX MODEM PAS: defer complete seconds=%u\n" in kernel,
     "modem_gui_ready_hook": b"veux_modem_gui_ready" in kernel,
     "modem_gui_gate_diagnostics": all(x in kernel for x in (
         b"VEUX MODEM: GUI gate pending present=%u init=%s ready=%s stage=%s\n",

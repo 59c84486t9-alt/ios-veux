@@ -133,6 +133,7 @@ if a.variant in ("modem-held", "modem-normal"):
         b"VEUX MODEM PAS: unmapped b%02u\n",
         b"VEUX MODEM PAS: boot wait complete; continuing to root mount\n",
         b"VEUX MODEM PAS: worker deferred for %u seconds\n",
+        b"VEUX MODEM PAS: defer complete seconds=%u\n",
         b"veux_modem_gui_ready",
         b"VEUX MODEM PAS: zeroing %llu bytes for b%02u\n",
         b"VEUX MODEM POOL: mapped at VA 0x%llx\n",
