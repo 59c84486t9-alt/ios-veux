@@ -10,10 +10,12 @@ before changing code or flashing.
   `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`, flashed after
   strict wrapper verification. It uses `modem_defer=120` after the GUI gate.
   Flash, slot B selection, and reboot returned `OKAY`. The user reports iOS
-  loads, then freezes on the lock screen. The capture confirms backboardd
-  accepted, first display present, gate open, and `worker deferred for 120
-  seconds`; IOMFB client initialization continues. Whether the freeze occurred
-  before or after the delay is unknown. Fastboot/ADB are not enumerated.
+  loads, then freezes 1–2 minutes later; the lock-screen clock stopped at 4:03
+  and had not advanced after eight hours. This matches the 120-second modem
+  defer expiring. The last capture shows `worker deferred for 120 seconds`
+  with no later PAS/QRTR lines. ADB/Fastboot are absent. The known-good
+  modem-disabled GUI image is verified and ready to restore to `boot_b` when
+  Fastboot reconnects.
 - This overlay retains the newest 14 modem/GLINK/QRTR/WLFW/PDMAP lines plus
   bounded GUI milestones, but excludes per-frame framebuffer swaps. It is
   per-boot screen history, not storage across reboots. Boot args omit
@@ -6514,9 +6516,11 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
 - Current `boot_b` is
   `/home/nyra/veux-artifacts/42125270101/modem-deferred.img`. It is built from
   green CI run `42125270101` and uses `modem_defer=120`. The user reports iOS
-  loads then freezes on the lock screen. The capture confirms the gate and
-  defer while IOMFB clients initialize. Fastboot/ADB are absent. The previous
-  image showed GLINK VERSION_ACK/IPCRTR open, but no QRTR HELLO/service `0x45`.
+  loads then freezes 1–2 minutes later on the lock screen at 4:03; the clock
+  remains stopped after eight hours. The timing matches the 120-second defer
+  expiring. The last capture confirms the gate and defer but no later
+  PAS/auth-reset or QRTR messages. Fastboot/ADB are absent. The previous image
+  showed GLINK VERSION_ACK/IPCRTR open, but no QRTR HELLO/service `0x45`.
 - The logger writes a bounded 4 MiB + 4 KiB ring at the end of `userdata`, well
   beyond the 16 GiB HFSX volume. The user explicitly authorized this diagnostic
   write. No other userdata area was targeted.
@@ -6993,3 +6997,33 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   made. Keep this boot long enough to distinguish a freeze before PAS begins
   from one that coincides with modem startup. The next useful overlay evidence
   is whether `auth_reset`, `SMP2P READY`, or GLINK polling appears.
+
+
+## >>> UPDATE 2026-11-06 (eight-hour lock-screen hard freeze) <<<
+
+- The user reports the lock-screen clock has remained unchanged for over eight
+  hours. This is a confirmed hard UI freeze, not an ordinary wait for GUI
+  startup. The on-screen log still ends at `worker deferred for 120 seconds`,
+  with no post-defer PAS or QRTR progress visible.
+- ADB/Fastboot remain absent. The known-good modem-disabled GUI wrapper at
+  `/home/nyra/veux-artifacts/41355888099/normal-console.img` was verified at
+  17,281,024 bytes with SHA-256
+  `07653faf828cb681657a3d6f800714d6c099da77cb87e0b17191ff8b77f2d32f`.
+  Restore only `boot_b` from this baseline once Fastboot is available; preserve
+  `userdata` and all protected partitions. Then isolate modem startup before
+  another modem-enabled GUI boot.
+
+
+## >>> UPDATE 2026-11-06 (freeze timing matches modem defer) <<<
+
+- The user clarifies the lock-screen clock stops at 4:03 about 1–2 minutes
+  after boot, and had not advanced after eight hours. This timing matches
+  `modem_defer=120` expiring, making modem worker startup the leading suspected
+  trigger. The photo still has no post-defer PAS or QRTR lines, so the precise
+  failure point is unproven.
+- Host Fastboot/ADB are absent. A verified modem-disabled GUI baseline is ready
+  at `/home/nyra/veux-artifacts/41355888099/normal-console.img` (17,281,024
+  bytes, SHA-256
+  `07653faf828cb681657a3d6f800714d6c099da77cb87e0b17191ff8b77f2d32f`). When
+  Fastboot returns, restore only `boot_b` from that image. Preserve userdata
+  and all protected partitions while isolating modem startup.
