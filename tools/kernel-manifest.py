@@ -264,6 +264,7 @@ phase4_patch_names = (
     "0168-veux-gui-state-in-modem-overlay.patch",
     "0169-veux-modem-overlay-gui-milestones-only.patch",
     "0170-veux-latch-gui-gate-client.patch",
+    "0171-veux-modem-defer-blocking-wait.patch",
 )
 phase4_patch_texts = {}
 phase4_status = {}
@@ -309,7 +310,7 @@ modem_fw_entries = [
 modem_fw_ranges = sorted((offset, offset + size, name) for name, offset, size in modem_fw_entries)
 modem_fw_no_overlap = all(left[1] <= right[0] for left, right in zip(modem_fw_ranges, modem_fw_ranges[1:]))
 phase4_sources = {
-    "nine_unique_patch_files": all(phase4_patch_texts.values()),
+    "phase4_patch_files_present": all(phase4_patch_texts.values()),
     "patches_applied_without_skip": all(phase4_status.values()),
     "firmware_table_116_rows": phase4_patch_texts["0155-veux-modem-firmware.patch"].count("{ \"") == 116,
     "modem_bxx_table_has_33_unique_aligned_nonoverlapping_ranges": len(modem_fw_entries) == 33 and len({name for name, _, _ in modem_fw_entries}) == 33 and all(offset % 0x1000 == 0 and size > 0 for _, offset, size in modem_fw_entries) and modem_fw_no_overlap,
@@ -495,9 +496,11 @@ phase4_sources = {
         'PE_parse_boot_argn("modem_boot_wait",&wait,sizeof(wait))',
         "assert_wait_timeout(&veux_modem_wait_chan,THREAD_UNINT,wait*1000,1000*NSEC_PER_USEC)",
         "VEUX MODEM PAS: boot wait complete; continuing to root mount",
-        'PE_parse_boot_argn("modem_defer",&defer,sizeof(defer))',
-        "assert_wait_timeout(&veux_modem_defer_wait_chan,THREAD_UNINT,defer*1000,1000*NSEC_PER_USEC)",
-        "VEUX MODEM PAS: defer complete seconds=%u")) and
+        'PE_parse_boot_argn("modem_defer",&defer,sizeof(defer))')) and
+        all(x in phase4_patch_texts["0171-veux-modem-defer-blocking-wait.patch"] for x in (
+            "veux_modem_defer_wait_chan",
+            "assert_wait_timeout(&veux_modem_defer_wait_chan,THREAD_UNINT,defer*1000,1000*NSEC_PER_USEC)",
+            "VEUX MODEM PAS: defer complete seconds=%u")) and
         "VEUX MODEM PAS: worker deferred for %u seconds" in phase4_text and
         'PE_parse_boot_argn("modem_after_gui",&after,sizeof(after))' in phase4_text and
         "veux_modem_gui_ready(void){veux_modem_gui_is_ready=true;veux_modem_start();}" in phase4_text,

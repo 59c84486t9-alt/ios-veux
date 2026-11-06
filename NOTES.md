@@ -7071,3 +7071,12 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   Fastboot is available. No `userdata` or protected partition writes. Observe
   the defer-complete, PAS, auth-reset, SMP2P, and GLINK logs to determine the
   exact point of any remaining freeze.
+
+
+## >>> UPDATE 2026-11-06 (CI audit follow-up) <<<
+
+- CI run `42199596126` compiled the XNU kernel successfully and passed host
+  diagnostic bounds checks. Its manifest gate then failed because the Phase 4
+  audit did not include patch `0171` and still expected the old `IOSleep`
+  marker. Updating the audit to inspect the new patch directly; no build artifact
+  was produced and no device partition was written.
