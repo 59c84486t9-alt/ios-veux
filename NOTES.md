@@ -10,13 +10,17 @@ before changing code or flashing.
   work. Do not roll back those changes. User reports the modem-enabled system
   freezes near 1–2 minutes after boot; the stopped clock is consistent with the
   `modem_defer=120` boundary, but no post-defer log proves the failure point.
-- Added patch `0171` to replace `IOSleep(120000)` with XNU's timed thread wait
-  and print `VEUX MODEM PAS: defer complete seconds=120` before PAS setup. This
-  is a narrow timing-path correction and diagnostic; it does not remove or
-  revert modem, GLINK, QRTR, or GUI overlay code. Repository validation passes;
-  next run XNU CI, then inspect whether the defer marker and PAS milestones are
-  reached. If the freeze remains after the wait, the retained overlay should
-  narrow the failure to PAS startup.
+- Patch `0171` replaces `IOSleep(120000)` with XNU's timed thread wait and
+  prints `VEUX MODEM PAS: defer complete seconds=120` before PAS setup. This is
+  a narrow timing-path correction and diagnostic; modem, GLINK, QRTR, and GUI
+  overlay work remains intact. CI run `42202903236` built the kernel and passed
+  the manifest plus Phase 2/3/4 gates. The strictly verified image is ready at
+  `/home/nyra/veux-artifacts/42202903236/modem-defer-sleep.img` (17,297,408
+  bytes, SHA-256
+  `019e993a9486c109ce3f82b6109f284533c12bc1664e90ef67e5ae4e616f8e0a`).
+  Fastboot/ADB currently show no device; when Fastboot returns, write only
+  `boot_b`, then observe the defer-complete marker and PAS startup. If the
+  freeze remains, the overlay should identify the next stage.
 - Current `boot_b` is restored to the known-good modem-disabled image
   `/home/nyra/veux-artifacts/41355888099/normal-console.img` (17,281,024 bytes,
   SHA-256 `07653faf828cb681657a3d6f800714d6c099da77cb87e0b17191ff8b77f2d32f`).
@@ -7080,3 +7084,27 @@ Follow-up: added Git diff boundaries for every file in 0035, including `new file
   audit did not include patch `0171` and still expected the old `IOSleep`
   marker. Updating the audit to inspect the new patch directly; no build artifact
   was produced and no device partition was written.
+
+
+## >>> UPDATE 2026-11-06 (timed modem defer image built) <<<
+
+- Commit `7249bb7` adds patch `0171-veux-modem-defer-blocking-wait.patch`,
+  replacing the `IOSleep(defer*1000)` with an XNU timed thread wait and a
+  `defer complete` log. Commit `36e9ea6` updates the Phase 4 source audit to
+  include the new patch. The first CI kernel compiled but the audit failed
+  because it still looked for the old IOSleep source marker; the corrected audit
+  now checks the new patch directly.
+- CI run `42202903236` succeeded: XNU build, kernel feature manifest, Phase 2
+  IPCC gate, Phase 3 modem pool gate, and Phase 4 modem milestone gate all
+  passed. Kernel SHA-256: `d6ec807b53a5b20d310538c4892c8d4916d48f4fde1c44c6d637ebe9b0c1b7b4`.
+- Built `/home/nyra/veux-artifacts/42202903236/modem-defer-sleep.img`,
+  17,297,408 bytes, SHA-256
+  `019e993a9486c109ce3f82b6109f284533c12bc1664e90ef67e5ae4e616f8e0a`. Strict
+  verification passed 58/58 modem markers, kernel/DTB identity, expected boot
+  args, and byte-for-byte payload reconstruction. It preserves the existing
+  on-screen modem/GLINK overlay and adds the defer completion breadcrumb.
+- Fastboot and ADB currently enumerate no device, so no flash was attempted.
+  Once Fastboot returns, flash only `boot_b`; keep all protected partitions and
+  `userdata` untouched. Runtime must confirm whether the timed wait prevents the
+  freeze and record the first PAS/GLINK marker after `defer complete`. The
+  underlying freeze cause remains unconfirmed until that runtime observation.
